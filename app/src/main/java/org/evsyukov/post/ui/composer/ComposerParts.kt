@@ -155,7 +155,7 @@ private fun TargetChip(account: Account, network: Network, isSelected: Boolean, 
 fun statusText(render: ProfileRender): String {
     val name = networkName(render.network)
     val r = render.render
-    val warn = r.issue != null || r.manyPartsWarning
+    val warn = r.issue != null || r.manyPartsWarning || !render.mediaReady
     val body = when {
         r.issue != null -> stringResource(R.string.composer_status_issue, name)
         r.parts.size <= 1 -> stringResource(R.string.composer_status_count, name, r.parts.firstOrNull()?.count ?: 0, r.limit)
@@ -203,7 +203,8 @@ fun ComposerToolbar(
     spoilerShown: Boolean,
     language: String,
     hasPoll: Boolean,
-    onAttach: () -> Unit,
+    onPickMedia: () -> Unit,
+    onPickFiles: () -> Unit,
     onWrap: (String) -> Unit,
     onPrefix: (String) -> Unit,
     onLink: () -> Unit,
@@ -221,8 +222,17 @@ fun ComposerToolbar(
     var menu by remember { mutableStateOf(false) }
     Surface(tonalElevation = 3.dp, modifier = Modifier.fillMaxWidth().testTag(ComposerTags.TOOLBAR)) {
         Row(Modifier.padding(horizontal = 4.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onAttach, modifier = Modifier.testTag(ComposerTags.ATTACH)) {
-                Icon(Icons.Outlined.AttachFile, contentDescription = stringResource(R.string.composer_attach))
+            // R9: the photo picker for images and video, the document picker for any media file.
+            var attachMenu by remember { mutableStateOf(false) }
+            Box {
+                IconButton(onClick = { attachMenu = true }, modifier = Modifier.testTag(ComposerTags.ATTACH)) {
+                    Icon(Icons.Outlined.AttachFile, contentDescription = stringResource(R.string.composer_attach))
+                }
+                DropdownMenu(expanded = attachMenu, onDismissRequest = { attachMenu = false }) {
+                    val close = { attachMenu = false }
+                    MenuItem(R.string.media_attach_media, AttachmentTags.ATTACH_MEDIA, close, onPickMedia)
+                    MenuItem(R.string.media_attach_files, AttachmentTags.ATTACH_FILES, close, onPickFiles)
+                }
             }
             Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically) {
                 ToolButton(Icons.Outlined.FormatBold, R.string.composer_bold, ComposerTags.BOLD) { onWrap("**") }

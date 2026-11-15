@@ -15,6 +15,7 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextInputSelection
 import androidx.compose.ui.text.TextRange
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.rules.ActivityScenarioRule
 import kotlinx.coroutines.runBlocking
@@ -71,10 +72,14 @@ class ComposerHarness(private val compose: AndroidComposeTestRule<ActivityScenar
 
     fun defaultTargets(vararg ids: Long) = runBlocking { container.settings.setDefaultTargets(ids.toList()) }
 
+    /** The model of the composer [show] put on screen: the same instance the screen uses. */
+    lateinit var model: ComposerModel
+
     fun show(draftId: Long? = null) {
         compose.setContent {
             CompositionLocalProvider(LocalAppContainer provides container) {
                 PostTheme {
+                    model = viewModel(key = "composer-${draftId ?: "new"}") { ComposerModel(container, draftId) }
                     ComposerScreen(
                         draftId = draftId,
                         onOpenPosts = { postsOpened.incrementAndGet() },

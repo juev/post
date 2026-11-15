@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.pm.PackageManager
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -135,13 +136,14 @@ private sealed interface Sheet {
     data object Preview : Sheet
     data object OptionsList : Sheet
     data class AccountOptions(val accountId: Long) : Sheet
+    data class Attachment(val id: Long) : Sheet
 }
 
 /**
  * The start screen (screens.md, Composer): targets, the Markdown editor, the status line of counters and
  * the toolbar above the keyboard. [draftId] opens a saved draft; null starts a new one with the default
  * targets. [onExit] leaves the composer by the system back, after the R15 question when something is
- * unsaved. [onAttach] is the attach button, which the attachments step wires.
+ * unsaved.
  */
 @Composable
 fun ComposerScreen(
@@ -150,11 +152,10 @@ fun ComposerScreen(
     onOpenSchedule: () -> Unit,
     onOpenSettings: () -> Unit,
     onExit: () -> Unit = {},
-    onAttach: () -> Unit = {},
 ) {
     val container = LocalAppContainer.current
     val model: ComposerModel = viewModel(key = "composer-${draftId ?: "new"}") { ComposerModel(container, draftId) }
-    ComposerContent(model, onOpenPosts, onOpenSchedule, onOpenSettings, onExit, onAttach)
+    ComposerContent(model, onOpenPosts, onOpenSchedule, onOpenSettings, onExit)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -165,7 +166,6 @@ private fun ComposerContent(
     onOpenSchedule: () -> Unit,
     onOpenSettings: () -> Unit,
     onExit: () -> Unit,
-    onAttach: () -> Unit,
 ) {
     val container = LocalAppContainer.current
     val context = LocalContext.current
@@ -185,9 +185,19 @@ private fun ComposerContent(
     var sendLater by remember { mutableStateOf(false) }
 
     val unsaved by remember { derivedStateOf { model.hasUnsavedChanges() } }
-    val blockers by remember { derivedStateOf { model.currentBlockers() } }
+    // The accounts and settings come from flows, which a derived state does not observe; they key it instead.
+    val blockers by remember(accounts, settings) { derivedStateOf { model.currentBlockers() } }
 
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
+
+    // R9: picked files are copied into app storage right away, while the grant of the picker lasts.
+    fun attach(uris: List<android.net.Uri>) = model.attach(uris) { failed ->
+        if (failed > 0) scope.launch { snackbar.showSnackbar(resources.getQuantityString(R.plurals.media_import_failed, failed, failed)) }
+    }
+    val pickMedia = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia()) { attach(it) }
+    val pickFiles = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { attach(it) }
+    val media by remember(accounts, settings) { derivedStateOf { model.currentMedia() } }
+    val currentPiece by remember { derivedStateOf { model.currentPiece() } }
 
     // R32: the first send asks for notifications once; the send does not wait for the answer.
     fun askNotificationsOnce() {
@@ -315,6 +325,13 @@ private fun ComposerContent(
                     )
                 }
             }
+            AttachmentStrip(
+                attachments = model.attachmentsOf(currentPiece),
+                conflicted = conflictedIds(media),
+                adding = model.importing > 0,
+                fileOf = { container.attachmentImporter.file(it.path) },
+                onOpen = { sheet = Sheet.Attachment(it) },
+            )
             StatusLine(
                 renders = model.renders?.second,
                 hasTargets = model.targets.isNotEmpty(),
@@ -325,7 +342,10 @@ private fun ComposerContent(
                 spoilerShown = model.spoilerShown,
                 language = model.language,
                 hasPoll = model.poll != null,
-                onAttach = onAttach,
+                onPickMedia = {
+                    pickMedia.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
+                },
+                onPickFiles = { pickFiles.launch(arrayOf("image/*", "video/*", "audio/*")) },
                 onWrap = { marker ->
                     val sel = model.selection()
                     model.apply(MarkdownEdits.wrap(model.text.text.toString(), sel.start, sel.end, marker))
@@ -376,6 +396,10 @@ private fun ComposerContent(
             formattingRemoved = model.targets.isNotEmpty() && model.renders?.second.orEmpty().let { list ->
                 list.isNotEmpty() && list.none { it.render.profile.keepsFormatting }
             } && hasFormatting(model.text.text.toString()),
+            media = media,
+            chosenFixes = model.chosenFixes,
+            onFix = model::chooseFix,
+            onUndoFix = model::clearFix,
             onPreview = { sheet = Sheet.Preview },
             onDismiss = { sheet = null },
         )
@@ -385,6 +409,25 @@ private fun ComposerContent(
             onPick = { sheet = Sheet.AccountOptions(it) },
             onDismiss = { sheet = null },
         )
+        is Sheet.Attachment -> {
+            val attachment = model.attachments.firstOrNull { it.id == open.id }
+            if (attachment == null) {
+                sheet = null
+            } else {
+                AttachmentSheet(
+                    attachment = attachment,
+                    file = container.attachmentImporter.file(attachment.path),
+                    altLimits = media.map { AltLimit(it.network, it.rules.maxAltLength) },
+                    onAlt = { model.setAlt(attachment.id, it) },
+                    onFocus = { x, y -> model.setFocus(attachment.id, x, y) },
+                    onRemove = {
+                        sheet = null
+                        scope.launch { model.removeAttachment(attachment.id) }
+                    },
+                    onDismiss = { sheet = null },
+                )
+            }
+        }
         is Sheet.AccountOptions -> {
             val account = accounts.orEmpty().firstOrNull { it.id == open.accountId }
             if (account == null) {
@@ -442,7 +485,7 @@ private fun ComposerContent(
                 TextButton(
                     onClick = {
                         clearDialog = false
-                        scope.launch { model.startNew() }
+                        scope.launch { model.clearDraft() }
                     },
                     modifier = Modifier.testTag(ComposerTags.CLEAR_CONFIRM),
                 ) { Text(stringResource(R.string.composer_clear)) }

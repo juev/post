@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Attach menu (R9) -->
+    <string name="media_attach_media">Photos and videos</string>
+    <string name="media_attach_files">Files</string>
+    <string name="media_adding">Adding files…</string>
+    <plurals name="media_import_failed">
+        <item quantity="one">Could not add %d file</item>
+        <item quantity="other">Could not add %d files</item>
+    </plurals>
+
+    <!-- Attachment strip (screens.md) -->
+    <string name="media_strip">Attachments</string>
+    <string name="media_item_image">Image %1$d</string>
+    <string name="media_item_gif">GIF %1$d</string>
+    <string name="media_item_video">Video %1$d</string>
+    <string name="media_item_audio">Audio %1$d</string>
+    <string name="media_no_alt">No alt text</string>
+    <string name="media_has_conflict">Needs a fix for a network</string>
+    <string name="media_edit">Edit attachment</string>
+
+    <!-- Attachment sheet -->
+    <string name="media_sheet_title">Attachment</string>
+    <string name="media_alt_text">Alt text</string>
+    <string name="media_alt_hint">Describe the image for people who cannot see it</string>
+    <string name="media_alt_counter">%1$s %2$d/%3$d</string>
+    <string name="media_alt_over">Too long for %1$s (limit: %2$d)</string>
+    <string name="media_focus_hint">Tap the image to set the focus point Mastodon crops thumbnails around</string>
+    <string name="media_focus_point">Focus point %1$d%%, %2$d%%</string>
+    <string name="media_preview">Preview of the attachment</string>
+    <string name="media_remove">Remove attachment</string>
+    <string name="media_audio_file">Audio file</string>
+
+    <!-- Details sheet: conflicts and fixes (media.md) -->
+    <string name="media_section">Attachments for %1$s</string>
+    <string name="media_conflict_too_many_files">More files than one post takes</string>
+    <string name="media_conflict_unsupported_type">A file type this network does not take</string>
+    <string name="media_conflict_mixed_types">Video or audio together with images</string>
+    <string name="media_conflict_video_too_long">The video is longer than allowed</string>
+    <string name="media_conflict_video_quota">The daily video limit is used up</string>
+    <string name="media_conflict_poll_with_media">A poll cannot go with media</string>
+    <string name="media_conflict_cannot_fit">A file cannot be made to fit the limit</string>
+    <string name="media_conflict_alt_too_long">Alt text is longer than allowed</string>
+    <plurals name="media_conflict_files">
+        <item quantity="one">%1$s (%2$d file)</item>
+        <item quantity="other">%1$s (%2$d files)</item>
+    </plurals>
+    <string name="media_fix_move_to_reply">Move to a reply</string>
+    <string name="media_fix_remove_files">Remove the extra files here</string>
+    <string name="media_fix_remove_account">Remove the account</string>
+    <string name="media_fix_send_without_file">Send without the file</string>
+    <string name="media_fix_move_video_to_reply">Move the video to a reply</string>
+    <string name="media_fix_remove_video">Remove the file here</string>
+    <string name="media_fix_remove_images">Remove the images here</string>
+    <string name="media_fix_remove_poll">Remove the poll</string>
+    <string name="media_fix_remove_media">Remove the media here</string>
+    <string name="media_fix_move_media_to_reply">Move the media to a reply</string>
+    <string name="media_fix_send_later">Send later</string>
+    <string name="media_resolved">%1$s: %2$s</string>
+    <string name="media_fix_undo">Undo</string>
+    <plurals name="media_converted">
+        <item quantity="one">%d file is converted to fit</item>
+        <item quantity="other">%d files are converted to fit</item>
+    </plurals>
+    <plurals name="media_alt_missing">
+        <item quantity="one">%d attachment has no alt text</item>
+        <item quantity="other">%d attachments have no alt text</item>
+    </plurals>
+    <string name="media_alt_too_long_blocker">Alt text is over the limit of a selected Mastodon server (%1$d), which rejects it</string>
+    <plurals name="media_preview_part">
+        <item quantity="one">%d attachment</item>
+        <item quantity="other">%d attachments</item>
+    </plurals>
+</resources>
