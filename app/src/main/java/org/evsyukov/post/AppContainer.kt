@@ -29,6 +29,7 @@ import org.evsyukov.post.data.secrets.SecretStore
 import org.evsyukov.post.data.settings.AppSettings
 import org.evsyukov.post.oauth.FilePendingSignInStore
 import org.evsyukov.post.oauth.MastodonSignInFlow
+import org.evsyukov.post.oauth.PendingSignInStore
 import java.io.File
 import java.util.concurrent.TimeUnit
 
@@ -87,15 +88,12 @@ class AppContainer(context: Context) {
 
     val blueskySignIn: BlueskySignIn by lazy { BlueskySignIn(accounts, http, serverPolicy) }
 
-    val mastodonSignIn: MastodonSignIn by lazy {
-        MastodonSignIn(
-            accounts,
-            mastodonApps,
-            FilePendingSignInStore(File(this.context.noBackupFilesDir, "mastodon-sign-in.json")),
-            http,
-            serverPolicy,
-        )
+    /** The Mastodon sign-in waiting for its redirect; on disk, so it survives the process (N4). */
+    val pendingSignIns: PendingSignInStore by lazy {
+        FilePendingSignInStore(File(this.context.noBackupFilesDir, "mastodon-sign-in.json"))
     }
+
+    val mastodonSignIn: MastodonSignIn by lazy { MastodonSignIn(accounts, mastodonApps, pendingSignIns, http, serverPolicy) }
 
     /** The Mastodon sign-in in progress; it outlives screens and activities. */
     val mastodonSignInFlow: MastodonSignInFlow by lazy { MastodonSignInFlow(mastodonSignIn, scope) }
