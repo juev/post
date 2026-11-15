@@ -85,7 +85,9 @@ fun movedOrder(accounts: List<Account>, id: Long, up: Boolean): List<Long>? {
 @Composable
 fun AccountsScreen(onBack: () -> Unit, onOpenAccount: (Long) -> Unit, onAdd: (Network) -> Unit) {
     val container = LocalAppContainer.current
-    val accounts by container.accounts.observe().collectAsStateWithLifecycle(initialValue = null)
+    // One flow for the screen: a new one on every recomposition would restart the query each time.
+    val source = remember(container) { container.accounts.observe() }
+    val accounts by source.collectAsStateWithLifecycle(initialValue = null)
     val scope = rememberCoroutineScope()
     AccountsContent(
         accounts = accounts,
