@@ -390,5 +390,11 @@ data class DraftInput(
 /** No post has this id; it may have been sent or deleted. */
 class PostNotFound(val id: Long) : Exception("no post $id")
 
+/**
+ * The post can no longer be changed: it is not a draft, or its first delivery has started (scheduling.md Q2).
+ * An [IllegalStateException], so callers that treat any state conflict alike keep working.
+ */
+class PostNotEditable(val id: Long, message: String) : IllegalStateException(message)
+
 /** No delivery has this id. */
 class DeliveryNotFound(val id: Long) : Exception("no delivery $id")

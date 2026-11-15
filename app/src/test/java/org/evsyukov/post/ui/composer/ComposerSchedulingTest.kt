@@ -3,15 +3,20 @@ package org.evsyukov.post.ui.composer
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
+import androidx.lifecycle.viewModelScope
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.evsyukov.post.core.schedule.WeeklySchedule
 import org.evsyukov.post.core.schedule.freeSlots
 import org.evsyukov.post.data.db.PostState
+import org.evsyukov.post.data.posts.DeliveryPlan
 import org.evsyukov.post.data.posts.DraftInput
+import org.evsyukov.post.data.posts.Post
 import org.evsyukov.post.data.posts.Schedule
 import org.evsyukov.post.ui.schedule.SendLaterTags
 import org.junit.After
@@ -23,6 +28,7 @@ import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalTime
 import java.time.ZoneId
+import java.util.concurrent.atomic.AtomicReference
 
 /** The composer's part in scheduling: the Send later sheet (R24), the late badge (Q7) and editing a queued post (R25, Q2). */
 @RunWith(AndroidJUnit4::class)
@@ -121,5 +127,103 @@ class ComposerSchedulingTest {
         assertThat(post.state).isEqualTo(PostState.QUEUED)
         assertThat(post.schedule).isEqualTo(Schedule.Slot(slot))
         assertThat(h.triggers.get()).isEqualTo(0)
+    }
+
+    // Q2: a queued post can be edited only until its first delivery starts. When it starts (or the post is
+    // deleted) while the composer has it open, a save must neither crash nor lose the edits.
+
+    private val tomorrowAtNine = java.time.LocalDateTime.now().plusDays(1).withHour(9).withMinute(0).withSecond(0).withNano(0)
+
+    private fun queuedAndOpened(alice: Long): Long {
+        val id = runBlocking {
+            h.container.posts.saveAndQueue(DraftInput(text = "Old text", targets = listOf(alice)), Schedule.Slot(tomorrowAtNine))
+        }
+        h.show(draftId = id)
+        h.waitUntil { h.text() == "Old text" }
+        h.type(" and more")
+        return id
+    }
+
+    private fun startSending(id: Long) = runBlocking {
+        val delivery = h.container.posts.get(id)!!.deliveries.single()
+        h.container.posts.startDelivery(delivery.id, DeliveryPlan(emptyList()))
+    }
+
+    private fun drafts(): List<Post> = runBlocking { h.container.posts.observeDrafts().first() }
+
+    private fun shown(text: String) = compose.onAllNodes(hasText(text)).fetchSemanticsNodes().isNotEmpty()
+
+    @Test
+    fun savingAQueuedPostThatStartedSendingKeepsTheEditsHereAndLeavesThePostAlone() {
+        val alice = h.mastodon("alice")
+        val id = queuedAndOpened(alice)
+        startSending(id)
+
+        h.click(ComposerTags.SEND)
+
+        h.waitUntil { shown(h.string(org.evsyukov.post.R.string.schedule_edit_not_saved)) }
+        assertThat(h.exits.get()).isEqualTo(0)
+        assertThat(h.text()).isEqualTo("Old text and more")
+        assertThat(runBlocking { h.container.posts.get(id) }!!.text).isEqualTo("Old text")
+        // The composer let go of the post: the edits are a new post now, and Send sends them as one.
+        assertThat(h.model.draftId).isNull()
+        assertThat(h.model.editingQueued).isFalse()
+        assertThat(h.model.hasUnsavedChanges()).isTrue()
+    }
+
+    @Test
+    fun sendLaterOfAQueuedPostThatStartedSendingDoesNotQueueItAgain() {
+        val alice = h.mastodon("alice")
+        val id = queuedAndOpened(alice)
+        startSending(id)
+
+        val result = AtomicReference<ComposerModel.SendResult?>(null)
+        h.model.viewModelScope.launch { result.set(h.model.send(Schedule.Explicit(Instant.now().plusSeconds(7200)))) }
+
+        // The send renders off the main thread; the main clock has to move for its continuations to run.
+        val end = System.currentTimeMillis() + 10_000
+        while (result.get() == null) {
+            check(System.currentTimeMillis() < end) { "the send did not finish in 10 s" }
+            Thread.sleep(10)
+            compose.mainClock.advanceTimeBy(200)
+            compose.waitForIdle()
+        }
+        assertThat(result.get()).isEqualTo(ComposerModel.SendResult.NoLongerEditable)
+        val post = runBlocking { h.container.posts.get(id) }!!
+        assertThat(post.text).isEqualTo("Old text")
+        assertThat(post.schedule).isEqualTo(Schedule.Slot(tomorrowAtNine))
+        assertThat(h.text()).isEqualTo("Old text and more")
+    }
+
+    @Test
+    fun saveDraftOfAQueuedPostThatStartedSendingSavesTheEditsAsANewDraft() {
+        val alice = h.mastodon("alice")
+        val id = queuedAndOpened(alice)
+        startSending(id)
+
+        h.menu(ComposerTags.MENU_SAVE)
+
+        h.waitUntil { drafts().isNotEmpty() }
+        val draft = drafts().single()
+        assertThat(draft.id).isNotEqualTo(id)
+        assertThat(draft.text).isEqualTo("Old text and more")
+        assertThat(draft.targets).containsExactly(alice)
+        assertThat(runBlocking { h.container.posts.get(id) }!!.text).isEqualTo("Old text")
+        h.waitUntil { shown(h.string(org.evsyukov.post.R.string.schedule_edit_kept_as_draft)) }
+        assertThat(h.model.hasUnsavedChanges()).isFalse()
+    }
+
+    @Test
+    fun keepDraftOnLeaveAfterTheQueuedPostWasDeletedSavesTheEditsAndLeaves() {
+        val alice = h.mastodon("alice")
+        val id = queuedAndOpened(alice)
+        runBlocking { h.container.posts.delete(id) }
+
+        h.click(ComposerTags.SETTINGS)
+        h.waitFor(ComposerTags.LEAVE_KEEP)
+        h.click(ComposerTags.LEAVE_KEEP)
+
+        h.waitUntil { h.settingsOpened.get() == 1 }
+        assertThat(drafts().single().text).isEqualTo("Old text and more")
     }
 }
