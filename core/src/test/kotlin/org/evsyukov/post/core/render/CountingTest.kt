@@ -31,6 +31,10 @@ class CountingTest {
         assertThat(count(Counting.PLEROMA, "see $longUrl")).isEqualTo(4 + longUrl.length)
         assertThat(count(Counting.PLEROMA, "hi @alice@example.com")).isEqualTo(3 + "@alice@example.com".length)
         assertThat(count(Counting.PLEROMA, "text", spoiler = "CW")).isEqualTo(6)
+        // `status <> summary`: the text comes first, so a combining mark that opens the warning joins the
+        // last letter of the text into one grapheme (the other order would count 2).
+        assertThat(count(Counting.PLEROMA, "e", spoiler = "\u0301")).isEqualTo(1)
+        assertThat(count(Counting.PLEROMA, "\u0301", spoiler = "e")).isEqualTo(2)
     }
 
     @Test

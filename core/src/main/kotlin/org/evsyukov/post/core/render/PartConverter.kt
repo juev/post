@@ -69,9 +69,15 @@ internal class PartConverter(
                 var end = raw.length
                 while (end > start && raw[end - 1].isWhitespace()) end--
                 body = raw.substring(start, end)
-                links = bluesky.links
-                    .filter { it.start >= start && it.end <= end }
-                    .map { LinkSpan(it.start - start, it.end - start, it.url) }
+                // A link keeps its facet on its text without the whitespace at its ends, which the part may
+                // have dropped (T10); a link of only whitespace became its URL, so it is never empty here.
+                links = bluesky.links.mapNotNull { link ->
+                    var linkStart = maxOf(link.start, start)
+                    var linkEnd = minOf(link.end, end)
+                    while (linkStart < linkEnd && raw[linkStart].isWhitespace()) linkStart++
+                    while (linkEnd > linkStart && raw[linkEnd - 1].isWhitespace()) linkEnd--
+                    if (linkStart < linkEnd) LinkSpan(linkStart - start, linkEnd - start, link.url) else null
+                }
             }
         }
         val text = withLabel(body, label, fragment.endsWithCodeBlock)

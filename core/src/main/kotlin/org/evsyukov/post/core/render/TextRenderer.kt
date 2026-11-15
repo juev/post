@@ -11,19 +11,19 @@ import org.evsyukov.post.core.thread.pieces
  * counted (threads.md T1–T17, formatting.md F8–F12).
  *
  * 1. Manual breaks split the draft into pieces (T13); everything below runs inside each piece.
- * 2. A piece that fits the limit once converted is one part (T2). Otherwise the splitter
- *    ([org.evsyukov.post.core.thread.ThreadSplitter]) finds the smallest number of parts by an estimate of
- *    the converted length and balances them (T4–T9), breaking only where the Markdown allows (T5).
- * 3. Every part is then converted and counted exactly. When one is over the limit, its piece is split again
- *    with the budget tightened by the excess; after [MAX_TIGHTENING] tries, or when the estimate finds a
- *    run that fits nowhere, the piece is split greedily by exact counts alone. So no part ever exceeds the
- *    character limit or the byte limit, and a run that does not fit even alone is a
- *    [TextIssue.TooLongToSplit] (T9, T17), never cut.
- * 4. With "Number thread parts" on and two or more parts, ` i/n` ends every part (T11), counting media-only
+ * 2. A piece that fits the limit once converted is one part (T2). Otherwise the number of parts is the
+ *    smallest that fits by exact counts (T6), and the splitter ([org.evsyukov.post.core.thread.ThreadSplitter])
+ *    balances that many parts over an estimate of the converted length (T4–T9), breaking only where the
+ *    Markdown allows (T5). Every part it chooses is converted and counted exactly, and a part over the
+ *    limit is ruled out before it runs again ([PieceModel.plan]). So no part ever exceeds the character
+ *    limit or the byte limit, and a run that does not fit even alone is a [TextIssue.TooLongToSplit] (T9,
+ *    T17), never cut.
+ * 3. With "Number thread parts" on and two or more parts, ` i/n` ends every part (T11), counting media-only
  *    replies too (media.md A11). The width of the number is reserved before splitting, and the split
  *    repeats with a wider reserve until the number of digits is stable.
  *
- * The content warning goes with every Mastodon part and counts in it (N3). Bluesky has none.
+ * The content warning goes with every Mastodon part and counts in it (N3). Bluesky has none. When the
+ * warning leaves no room, for the text or for a part number, the result is [TextIssue.SpoilerTooLong].
  */
 object TextRenderer {
     /** More parts than this for one account are refused (T16). */
@@ -31,9 +31,6 @@ object TextRenderer {
 
     /** From this many parts the composer warns (T16). */
     const val WARN_PARTS = 10
-
-    /** Tightened retries of a piece before it is split by exact counts alone. */
-    const val MAX_TIGHTENING = 4
 
     /**
      * The parts of [draft] for an account with [profile].
@@ -73,37 +70,33 @@ object TextRenderer {
 
         val models = allPieces.filter { !it.isEmpty }
             .associate { it.index to PieceModel(it, draft.source, profile, segmenter, converter, draft.locale) }
-        val states = models.mapValues { PieceState() }
+        val paddings = HashMap<Int, Int>()
         var digits = 0
         var rounds = 0
         while (true) {
             check(++rounds <= MAX_ROUNDS) { "The split did not settle" }
             val plans = HashMap<Int, List<Int>>()
-            var replan = false
             for ((index, model) in models) {
-                val state = states.getValue(index)
-                when (val plan = state.plan(model, digits, spoilerUnits)) {
+                val padding = paddings[index] ?: 0
+                when (val plan = model.plan(digits, spoilerUnits, padding)) {
                     is SplitPlan.Parts -> plans[index] = plan.ends
                     is SplitPlan.TooLong -> {
-                        if (!state.exactOnly) {
-                            state.exactOnly = true
-                            replan = true
+                        val label = widestLabel(digits)?.let { it + " ".repeat(padding) }
+                        // T9: the run is too long, unless it is the content warning that leaves it no room.
+                        val issue = if (spoilerUnits > 0 && model.fitsWithoutSpoiler(plan.from, plan.from + 1, label, spoilerUnits)) {
+                            TextIssue.SpoilerTooLong(spoilerUnits)
                         } else {
                             val piece = model.piece
-                            return result(
-                                emptyList(),
-                                TextIssue.TooLongToSplit(
-                                    piece.index,
-                                    piece.start + model.startOf(plan.from),
-                                    piece.start + model.endOf(plan.from + 1),
-                                ),
-                                0,
+                            TextIssue.TooLongToSplit(
+                                piece.index,
+                                piece.start + model.startOf(plan.from),
+                                piece.start + model.endOf(plan.from + 1),
                             )
                         }
+                        return result(emptyList(), issue, 0)
                     }
                 }
             }
-            if (replan) continue
 
             var total = allPieces.sumOf { piece ->
                 val textParts = plans[piece.index]?.size ?: if (piece.index in mediaOnlyParts) 1 else 0
@@ -119,10 +112,13 @@ object TextRenderer {
             }
 
             val parts = ArrayList<TextPart>(total)
-            val over = HashMap<Int, ConvertedPart>()
+            val over = HashSet<Int>()
+            var bareOver = false
             fun label(): String? = if (numbered) "${parts.size + 1}/$total" else null
             fun bare(piece: Int, at: Int, reply: Boolean) {
-                parts += converter.bare(label()).toTextPart(piece, at, at, reply)
+                val part = converter.bare(label())
+                if (!part.fits(profile)) bareOver = true
+                parts += part.toTextPart(piece, at, at, reply)
             }
             for (piece in allPieces) {
                 val replies = mediaOnlyParts[piece.index] ?: 0
@@ -138,14 +134,7 @@ object TextRenderer {
                 var from = 0
                 ends.forEachIndexed { k, to ->
                     val converted = model.exact(from, to, label())
-                    if (!converted.fits(profile)) {
-                        val worst = over[piece.index]
-                        if (worst == null || converted.overshoot(profile) > worst.overshoot(profile) ||
-                            converted.byteOvershoot(profile) > worst.byteOvershoot(profile)
-                        ) {
-                            over[piece.index] = converted
-                        }
-                    }
+                    if (!converted.fits(profile)) over += piece.index
                     val start = piece.start + model.startOf(from)
                     val end = piece.start + model.endOf(to)
                     parts += converted.toTextPart(piece.index, start, end, reply = false)
@@ -153,17 +142,22 @@ object TextRenderer {
                     from = to
                 }
             }
+            if (parts.isEmpty()) bare(allPieces.firstOrNull()?.index ?: 0, allPieces.firstOrNull()?.start ?: 0, reply = false)
+            // A part without text holds only its number and the content warning: when that does not fit,
+            // the warning leaves no room for the number.
+            if (bareOver) return result(emptyList(), TextIssue.SpoilerTooLong(spoilerUnits), total)
             if (over.isNotEmpty()) {
-                for ((index, part) in over) states.getValue(index).tighten(part, profile)
+                // The plan fits with the widest number, so a real number never overflows it; were it to count
+                // wider than its digits, the plan is made again with the number padded.
+                for (index in over) paddings[index] = (paddings[index] ?: 0) + 1
                 continue
             }
-            if (parts.isEmpty()) bare(allPieces.firstOrNull()?.index ?: 0, allPieces.firstOrNull()?.start ?: 0, reply = false)
             return result(parts, null, parts.size)
         }
     }
 
-    /** A bound on the rounds of the loop: digits grow at most twice, and each piece tightens a few times. */
-    private const val MAX_ROUNDS = 10_000
+    /** A bound on the rounds of the loop: digits grow at most twice, and padding grows a little. */
+    private const val MAX_ROUNDS = 1_000
 
     private fun ConvertedPart.toTextPart(piece: Int, start: Int, end: Int, reply: Boolean) = TextPart(
         piece = piece,
@@ -177,42 +171,4 @@ object TextRenderer {
         tags = tags,
         mediaReply = reply,
     )
-
-    /** How a piece is split this round: the slack taken off the estimate, and whether only exact checks remain. */
-    private class PieceState {
-        var slack = 0
-        var byteSlack = 0
-        var tightenings = 0
-        var exactOnly = false
-
-        /** Spaces added to the widest number label of exact checks, in case a number still overflows. */
-        var padding = 0
-        private var cachedKey: List<Int>? = null
-        private var cached: SplitPlan? = null
-
-        fun plan(model: PieceModel, digits: Int, spoilerUnits: Int): SplitPlan {
-            val key = listOf(digits, slack, byteSlack, if (exactOnly) 1 else 0, padding)
-            if (key != cachedKey) {
-                cached = model.plan(digits, spoilerUnits, slack, byteSlack, exactOnly, padding)
-                cachedKey = key
-            }
-            return cached!!
-        }
-
-        fun tighten(part: ConvertedPart, profile: TextProfile) {
-            if (exactOnly) {
-                // Exact checks use the widest number, so this is a number that counts wider than its digits.
-                padding += maxOf(1, part.overshoot(profile), part.byteOvershoot(profile))
-                return
-            }
-            if (++tightenings > MAX_TIGHTENING) {
-                exactOnly = true
-                return
-            }
-            val over = part.overshoot(profile)
-            val overBytes = part.byteOvershoot(profile)
-            if (over > 0) slack += over
-            if (overBytes > 0) byteSlack += overBytes
-        }
-    }
 }
