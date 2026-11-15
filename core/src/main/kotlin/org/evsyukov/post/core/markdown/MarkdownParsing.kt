@@ -70,15 +70,25 @@ private const val MAX_INLINE_NESTING = 32
  * as typed, without its trailing `*`, `_` and `~`; -1 when none starts there.
  */
 internal fun protectedEntityEnd(text: String, start: Int): Int {
-    val end = when (text[start]) {
-        'h', 'H' -> TextEntities.urlEndAt(text, start)
-        '@' -> maxOf(TextEntities.mastodonMentionEndAt(text, start), TextEntities.blueskyMentionEndAt(text, start))
-        '#', '＃' -> TextEntities.hashtagEndAt(text, start)
-        else -> -1
+    var end = entityEndAt(text, start)
+    while (end > start + 1) {
+        var trimmed = end
+        while (trimmed > start + 1 && text[trimmed - 1].let { it == '*' || it == '_' || it == '~' }) trimmed--
+        if (trimmed == end) break
+        // Without the markers it gave up, the entity may end earlier still, as it would before a space:
+        // in `*https://example.com/a*.**` the URL is `https://example.com/a`, and the `*` closes the italic.
+        val shorter = entityEndAt(text.substring(0, trimmed), start)
+        end = if (shorter in start + 2..trimmed) shorter else trimmed
+        if (end == trimmed) break
     }
-    var trimmed = end
-    while (trimmed > start + 1 && text[trimmed - 1].let { it == '*' || it == '_' || it == '~' }) trimmed--
-    return if (trimmed > start + 1) trimmed else -1
+    return if (end > start + 1) end else -1
+}
+
+private fun entityEndAt(text: String, start: Int): Int = when (text[start]) {
+    'h', 'H' -> TextEntities.urlEndAt(text, start)
+    '@' -> maxOf(TextEntities.mastodonMentionEndAt(text, start), TextEntities.blueskyMentionEndAt(text, start))
+    '#', '＃' -> TextEntities.hashtagEndAt(text, start)
+    else -> -1
 }
 
 /** Starts an entity of [protectedEntityEnd] at its first character and returns it as one [Text] node. */
