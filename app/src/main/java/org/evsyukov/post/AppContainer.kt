@@ -25,6 +25,7 @@ import org.evsyukov.post.data.posts.RoomPostsRepository
 import org.evsyukov.post.data.schedule.RoomScheduleRepository
 import org.evsyukov.post.data.schedule.ScheduleRepository
 import org.evsyukov.post.data.secrets.KeystoreTokenCipher
+import org.evsyukov.post.data.secrets.TokenCipher
 import org.evsyukov.post.data.secrets.SecretStore
 import org.evsyukov.post.data.settings.AppSettings
 import org.evsyukov.post.oauth.FilePendingSignInStore
@@ -38,7 +39,11 @@ import java.util.concurrent.TimeUnit
  * receivers take it from the application; screens get what they need from it as parameters. Everything
  * that touches the disk is built on first use, so starting the process stays cheap.
  */
-class AppContainer(context: Context) {
+class AppContainer(
+    context: Context,
+    // Tests on the JVM pass a stand-in: Robolectric has no Android Keystore.
+    private val cipher: () -> TokenCipher = { KeystoreTokenCipher() },
+) {
     val context: Context = context.applicationContext
 
     /** Work that outlives a screen, such as saving a post the user has left. */
@@ -63,7 +68,7 @@ class AppContainer(context: Context) {
     val settings: AppSettings by lazy { AppSettings.create(this.context, CoroutineScope(SupervisorJob() + Dispatchers.IO)) }
 
     /** Tokens and client secrets are sealed with a key in the Android Keystore (R4). */
-    val secrets: SecretStore by lazy { SecretStore(KeystoreTokenCipher()) }
+    val secrets: SecretStore by lazy { SecretStore(cipher()) }
 
     val attachmentFiles: AttachmentFiles by lazy { FilesDirAttachmentFiles(this.context.filesDir) }
 

@@ -82,6 +82,11 @@ fun AddMastodonScreen(accountId: Long?, initialAddress: String, onBack: () -> Un
     val launcher = LocalBrowserLauncher.current
     val state by flow.state.collectAsStateWithLifecycle()
     var address by rememberSaveable { mutableStateOf(initialAddress) }
+    // A new visit starts clean: the outcome of an earlier attempt is not shown again.
+    rememberSaveable {
+        flow.reset()
+        true
+    }
     LaunchedEffect(state) {
         when (val current = state) {
             is MastodonFlowState.OpenBrowser ->
