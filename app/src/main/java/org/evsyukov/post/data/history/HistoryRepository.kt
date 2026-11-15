@@ -1,5 +1,6 @@
 package org.evsyukov.post.data.history
 
+import androidx.room.withTransaction
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.Serializable
@@ -11,6 +12,7 @@ import org.evsyukov.post.data.db.PostDatabase
 import org.evsyukov.post.data.posts.PostOptions
 import org.evsyukov.post.data.posts.PublishedPart
 import org.evsyukov.post.data.settings.HistoryRetention
+import java.time.Duration
 import java.time.Instant
 
 /**
@@ -50,14 +52,20 @@ interface HistoryRepository {
      */
     suspend fun insert(postId: Long?, sentAt: Instant, text: String, options: PostOptions, items: List<HistoryItem>): Long?
 
+    /** Deletes the record, and the sent post it points to (R37: the app then has no ids to act on). */
     suspend fun delete(id: Long): Boolean
 
-    /** Deletes the records whose expiry is not after [now]; returns how many went. */
+    /**
+     * Deletes the records older than the retention period of the settings at [now] (screens.md, Sent),
+     * with the sent posts they point to, and returns how many records went. The expiry of every record
+     * follows the setting as it is now: a shorter period applies to records already kept, and with
+     * history off every record goes. Call it at start, periodically and after the setting changes.
+     */
     suspend fun purgeExpired(now: Instant): Int
 }
 
 class RoomHistoryRepository(
-    db: PostDatabase,
+    private val db: PostDatabase,
     private val retention: suspend () -> HistoryRetention,
 ) : HistoryRepository {
     private val dao = db.historyDao()
@@ -77,9 +85,25 @@ class RoomHistoryRepository(
         return dao.insert(historyEntity(postId, sentAt, text, encodeOptions(options), items, expiresAt))
     }
 
-    override suspend fun delete(id: Long): Boolean = dao.delete(id) > 0
+    override suspend fun delete(id: Long): Boolean = db.withTransaction {
+        val deleted = dao.delete(id) > 0
+        db.postDao().deleteUnrecordedSent()
+        deleted
+    }
 
-    override suspend fun purgeExpired(now: Instant): Int = dao.deleteExpired(now.toEpochMilli())
+    override suspend fun purgeExpired(now: Instant): Int {
+        val days = retention().days
+        return db.withTransaction {
+            val count = if (days == null) {
+                dao.deleteAll()
+            } else {
+                dao.alignExpiry(Duration.ofDays(days).toMillis())
+                dao.deleteExpired(now.toEpochMilli())
+            }
+            db.postDao().deleteUnrecordedSent()
+            count
+        }
+    }
 }
 
 private val itemsSerializer = ListSerializer(HistoryItem.serializer())

@@ -14,6 +14,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStoreFile
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.builtins.ListSerializer
@@ -24,6 +25,7 @@ import org.evsyukov.post.core.media.ConflictKind
 import org.evsyukov.post.core.media.FixKind
 import org.evsyukov.post.core.schedule.LateThreshold
 import java.io.File
+import java.io.IOException
 import java.time.Duration
 import java.time.Instant
 
@@ -102,8 +104,13 @@ class AppSettings(scope: CoroutineScope, produceFile: () -> File) {
         produceFile = produceFile,
     )
 
-    /** The settings as stored; the first value comes once the file is read. */
-    val settings: Flow<Settings> = store.data.map { it.toSettings() }
+    /**
+     * The settings as stored; the first value comes once the file is read. When the file cannot be read
+     * at all, the flow gives the defaults and ends, as for a damaged file.
+     */
+    val settings: Flow<Settings> = store.data
+        .catch { e -> if (e is IOException) emit(emptyPreferences()) else throw e }
+        .map { it.toSettings() }
 
     /** The stored settings now; background work reads this rather than a default value. */
     suspend fun current(): Settings = settings.first()

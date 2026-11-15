@@ -21,7 +21,8 @@ enum class PostKind { NEW, EDIT, DELETE }
  * - QUEUED: waits for its send time; no delivery has started.
  * - SENDING: a delivery has started; the post can no longer move (scheduling.md S9).
  * - HELD: missed its time and waits for the user (Q5).
- * - SENT: every delivery succeeded (R28).
+ * - SENT: every delivery succeeded (R28). The row, with the ids in its deliveries, stays only while a
+ *   history record points to it: with history off, or once the record goes, so does the post (R31, R37).
  * - FAILED: nothing is pending and at least one delivery failed.
  */
 enum class PostState { DRAFT, QUEUED, SENDING, HELD, SENT, FAILED }

@@ -10,6 +10,7 @@ import java.time.Duration
 import java.time.Instant
 import java.time.ZoneId
 import java.time.ZoneOffset
+import java.util.Collections
 
 /**
  * A stand-in for the Keystore cipher on the JVM: a marker, then the bytes reversed and XOR-ed, so no
@@ -28,6 +29,22 @@ class FakeCipher : TokenCipher {
 
     private companion object {
         val MARKER = byteArrayOf(0x7F, 0x13, 0x37)
+    }
+}
+
+/** A [FakeCipher] that remembers the thread of every call. */
+class ThreadRecordingCipher : TokenCipher {
+    private val inner = FakeCipher()
+    val threads: MutableList<Thread> = Collections.synchronizedList(mutableListOf())
+
+    override fun encrypt(plain: ByteArray): ByteArray {
+        threads += Thread.currentThread()
+        return inner.encrypt(plain)
+    }
+
+    override fun decrypt(sealed: ByteArray): ByteArray {
+        threads += Thread.currentThread()
+        return inner.decrypt(sealed)
     }
 }
 

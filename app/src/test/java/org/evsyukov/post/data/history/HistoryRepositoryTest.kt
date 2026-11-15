@@ -112,4 +112,34 @@ class HistoryRepositoryTest {
         assertThat(repo.get(kept)).isNotNull()
         assertThat(repo.purgeExpired(now)).isEqualTo(0)
     }
+
+    @Test
+    fun aChangedRetentionAppliesToTheRecordsAlreadyKept() = runBlocking<Unit> {
+        retention = HistoryRetention.DAYS_90
+        val old = repo.insert(null, sentAt, "old", PostOptions(), emptyList())!!
+        val recent = repo.insert(null, sentAt.plus(Duration.ofDays(5)), "recent", PostOptions(), emptyList())!!
+
+        // screens.md, Sent: records older than the retention period are deleted, whatever it was before.
+        retention = HistoryRetention.DAYS_7
+        assertThat(repo.purgeExpired(sentAt.plus(Duration.ofDays(8)))).isEqualTo(1)
+        assertThat(repo.get(old)).isNull()
+        assertThat(repo.get(recent)!!.expiresAt).isEqualTo(sentAt.plus(Duration.ofDays(12)))
+
+        // A longer period keeps a record longer than it was first set to.
+        retention = HistoryRetention.DAYS_30
+        assertThat(repo.purgeExpired(sentAt.plus(Duration.ofDays(13)))).isEqualTo(0)
+        assertThat(repo.get(recent)!!.expiresAt).isEqualTo(sentAt.plus(Duration.ofDays(35)))
+    }
+
+    @Test
+    fun turningHistoryOffDeletesEveryRecordAtTheNextPurge() = runBlocking<Unit> {
+        repo.insert(null, sentAt, "one", PostOptions(), emptyList())
+        repo.insert(null, sentAt.plusSeconds(60), "two", PostOptions(), emptyList())
+
+        retention = HistoryRetention.OFF
+
+        // R37: with history off the app keeps no ids.
+        assertThat(repo.purgeExpired(sentAt.plusSeconds(120))).isEqualTo(2)
+        assertThat(repo.observe().first()).isEmpty()
+    }
 }

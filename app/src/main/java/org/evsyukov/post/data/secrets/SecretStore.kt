@@ -39,7 +39,11 @@ data class MastodonClientSecret(val value: String) {
  */
 class SecretUnreadable(message: String, cause: Throwable? = null) : Exception(message, cause)
 
-/** Seals secrets into the bytes stored in BLOB columns, and opens them again. */
+/**
+ * Seals secrets into the bytes stored in BLOB columns, and opens them again. The calls block: with the
+ * Keystore cipher each one goes over binder, and the first one makes the key. The repositories call it
+ * off the caller's thread.
+ */
 class SecretStore(private val cipher: TokenCipher) {
     fun seal(secret: AccountSecret): ByteArray = seal(AccountSecret.serializer(), secret)
 

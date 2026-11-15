@@ -31,6 +31,9 @@ interface AccountDao {
     @Query("SELECT * FROM accounts ORDER BY network, position, id")
     fun observeAll(): Flow<List<AccountEntity>>
 
+    @Query("SELECT * FROM accounts ORDER BY network, position, id")
+    suspend fun all(): List<AccountEntity>
+
     @Query("SELECT * FROM accounts WHERE id = :id")
     suspend fun get(id: Long): AccountEntity?
 
@@ -192,6 +195,13 @@ interface PostDao {
 
     @Query("DELETE FROM posts WHERE id = :id")
     suspend fun delete(id: Long): Int
+
+    /**
+     * Sent posts that no history record points to go, with their deliveries and the server ids in them
+     * (R31, R37). Their attachments went when they were sent.
+     */
+    @Query("DELETE FROM posts WHERE state = 'SENT' AND id NOT IN (SELECT postId FROM history WHERE postId IS NOT NULL)")
+    suspend fun deleteUnrecordedSent(): Int
 }
 
 @Dao
@@ -281,7 +291,13 @@ interface DeliveryDao {
     )
     suspend fun fail(id: Long, state: DeliveryState, error: String, nextAttemptAt: Long?): Int
 
-    @Query("UPDATE deliveries SET state = 'WAITING', nextAttemptAt = NULL WHERE postId = :postId AND state = 'FAILED'")
+    /** Failed deliveries wait again, except those of removed accounts: they have nothing to send with (R1). */
+    @Query(
+        """
+        UPDATE deliveries SET state = 'WAITING', nextAttemptAt = NULL
+        WHERE postId = :postId AND state = 'FAILED' AND accountId IN (SELECT id FROM accounts)
+        """,
+    )
     suspend fun retryFailed(postId: Long): Int
 
     /** Deliveries the process left in SENDING when it died go back to waiting (R27, R30). */
@@ -327,6 +343,13 @@ interface HistoryDao {
 
     @Query("DELETE FROM history WHERE expiresAt <= :now")
     suspend fun deleteExpired(now: Long): Int
+
+    /** Every record expires [periodMillis] after it was sent, as the retention setting now says. */
+    @Query("UPDATE history SET expiresAt = sentAt + :periodMillis")
+    suspend fun alignExpiry(periodMillis: Long): Int
+
+    @Query("DELETE FROM history")
+    suspend fun deleteAll(): Int
 }
 
 @Dao

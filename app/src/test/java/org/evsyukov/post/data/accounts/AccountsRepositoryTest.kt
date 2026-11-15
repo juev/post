@@ -1,5 +1,6 @@
 package org.evsyukov.post.data.accounts
 
+import android.database.sqlite.SQLiteException
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.flow.first
@@ -11,6 +12,7 @@ import org.evsyukov.post.core.media.Network
 import org.evsyukov.post.data.FakeCipher
 import org.evsyukov.post.data.MutableClock
 import org.evsyukov.post.data.RecordingFiles
+import org.evsyukov.post.data.ThreadRecordingCipher
 import org.evsyukov.post.data.containsBytes
 import org.evsyukov.post.data.db.AccountState
 import org.evsyukov.post.data.db.DeliveryState
@@ -71,6 +73,20 @@ class AccountsRepositoryTest {
         assertThrows(AccountNotFound::class.java) { runBlocking { repo.reorder(listOf(a, 999)) } }
         // The failed reorder changed nothing.
         assertThat(repo.observe().first().map { it.id }).containsExactly(c, a, b).inOrder()
+    }
+
+    @Test
+    fun aPartialReorderPutsTheOtherAccountsOfTheNetworkAfterItAndNoTwoShareAPlace() = runBlocking<Unit> {
+        val a = repo.add(mastodon("a", "1"), MastodonSecret("t"))
+        val b = repo.add(mastodon("b", "2"), MastodonSecret("t"))
+        val c = repo.add(mastodon("c", "3"), MastodonSecret("t"))
+        val sky = repo.add(bluesky("me.bsky.social", "did:plc:me"), BlueskySecret("a", "r"))
+
+        repo.reorder(listOf(c, b))
+
+        val accounts = repo.observe().first()
+        assertThat(accounts.map { it.id }).containsExactly(sky, c, b, a).inOrder()
+        assertThat(accounts.map { it.position }).containsExactly(0, 0, 1, 2).inOrder()
     }
 
     @Test
@@ -240,6 +256,44 @@ class AccountsRepositoryTest {
         assertThat(repo.readSecret(kept)).isEqualTo(BlueskySecret("a", "r"))
         assertThat(repo.observe().first().map { it.id }).containsExactly(kept)
         assertThat(repo.remove(removed)).isFalse()
+    }
+
+    @Test
+    fun aRemovalThatFailsHalfwayChangesNothing() = runBlocking<Unit> {
+        val removed = repo.add(mastodon("me", "1"), MastodonSecret("kept-token"))
+        val kept = repo.add(bluesky("me.bsky.social", "did:plc:me"), BlueskySecret("a", "r"))
+        val post = queued(listOf(removed, kept))
+        // The account row refuses to go, after the deliveries have already been failed.
+        db.openHelper.writableDatabase.execSQL(
+            "CREATE TEMP TRIGGER refuse_removal BEFORE DELETE ON accounts BEGIN SELECT RAISE(ABORT, 'refused'); END",
+        )
+
+        assertThrows(SQLiteException::class.java) { runBlocking { repo.remove(removed) } }
+
+        // R1 runs in one transaction: the deliveries and the post are as they were, the account stays.
+        val after = posts.get(post)!!
+        assertThat(after.deliveries.map { it.state }).containsExactly(DeliveryState.WAITING, DeliveryState.WAITING)
+        assertThat(after.deliveries.map { it.error }).containsExactly(null, null)
+        assertThat(after.state).isEqualTo(PostState.QUEUED)
+        assertThat(repo.readSecret(removed)).isEqualTo(MastodonSecret("kept-token"))
+    }
+
+    @Test
+    fun theCipherNeverRunsOnTheCallersThread() = runBlocking<Unit> {
+        val cipher = ThreadRecordingCipher()
+        val accounts = RoomAccountsRepository(db, SecretStore(cipher), clock)
+        val apps = RoomMastodonAppsRepository(db, SecretStore(cipher))
+        val caller = Thread.currentThread()
+
+        val id = accounts.add(mastodon("me", "1"), MastodonSecret("t"))
+        accounts.updateSecret(id, MastodonSecret("t2"))
+        accounts.readSecret(id)
+        apps.put(MastodonApp("https://mastodon.social", "client", "secret", "org.evsyukov.post://oauth/mastodon", "profile", clock.now))
+        apps.get("https://mastodon.social")
+
+        // The Keystore goes over binder: a call from the main thread must not block it.
+        assertThat(cipher.threads).hasSize(5)
+        assertThat(cipher.threads).doesNotContain(caller)
     }
 
     private suspend fun queued(targets: List<Long>): Long {

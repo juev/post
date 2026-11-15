@@ -502,6 +502,28 @@ class PostsRepositoryTest {
     }
 
     @Test
+    fun retryLeavesTheDeliveryOfARemovedAccountFailed() = runBlocking<Unit> {
+        val id = queued("hello", listOf(alice, bob))
+        val toAlice = repo.get(id)!!.deliveries.first { it.accountId == alice }.id
+        repo.startDelivery(toAlice, DeliveryPlan(emptyList()))
+        repo.deliveryFailed(toAlice, "422", retryAt = null)
+        accounts.remove(bob)
+        val onlyBob = queued("only bob", listOf(carol))
+        accounts.remove(carol)
+
+        // Alice's delivery waits again; Bob's has no account to send with and keeps its reason (R1).
+        assertThat(repo.retryFailed(id)).isEqualTo(1)
+        val post = repo.get(id)!!
+        assertThat(post.deliveries.first { it.accountId == alice }.state).isEqualTo(DeliveryState.WAITING)
+        assertThat(post.deliveries.first { it.accountId == bob }.state).isEqualTo(DeliveryState.FAILED)
+        assertThat(post.deliveries.first { it.accountId == bob }.error).isEqualTo("account removed")
+
+        assertThat(repo.retryFailed(onlyBob)).isEqualTo(0)
+        assertThat(repo.get(onlyBob)!!.state).isEqualTo(PostState.FAILED)
+        assertThat(repo.get(onlyBob)!!.deliveries.single().state).isEqualTo(DeliveryState.FAILED)
+    }
+
+    @Test
     fun deliveryChangesNeedASendingDelivery() = runBlocking<Unit> {
         val id = queued("hello", listOf(alice))
         val delivery = repo.get(id)!!.deliveries.single().id
@@ -566,15 +588,45 @@ class PostsRepositoryTest {
     }
 
     @Test
-    fun withHistoryOffASentPostLeavesNoRecord() = runBlocking<Unit> {
+    fun withHistoryOffASentPostLeavesNoRecordAndNoIds() = runBlocking<Unit> {
         retention = HistoryRetention.OFF
         val id = queued("hello", listOf(alice))
-        deliverAll(id)
+        for (delivery in repo.get(id)!!.deliveries) {
+            repo.startDelivery(delivery.id, DeliveryPlan(listOf(PlannedPart("hello"))))
+            repo.deliverySucceeded(delivery.id, DeliveryProgress(listOf(PartProgress(0, published = PublishedPart(id = "status-110")))))
+        }
 
         assertThat(repo.markSent(id, listOf(HistoryItem(alice, Network.MASTODON, "https://mastodon.social", "alice", emptyList())))).isNull()
 
-        assertThat(repo.get(id)!!.state).isEqualTo(PostState.SENT)
+        // R37: with history off the app keeps no ids, so the post and its deliveries go as well.
         assertThat(history.observe().first()).isEmpty()
+        assertThat(repo.get(id)).isNull()
+        assertThat(db.rows("SELECT COUNT(*) FROM posts").single().single()).isEqualTo(0L)
+        assertThat(db.rows("SELECT COUNT(*) FROM deliveries").single().single()).isEqualTo(0L)
+    }
+
+    @Test
+    fun aSentPostStaysWhileItsRecordDoesAndLeavesWithIt() = runBlocking<Unit> {
+        retention = HistoryRetention.DAYS_7
+        val purged = queued("purged", listOf(alice))
+        deliverAll(purged)
+        val purgedRecord = repo.markSent(purged, emptyList())!!
+        val deleted = queued("deleted", listOf(bob))
+        deliverAll(deleted)
+        val deletedRecord = repo.markSent(deleted, emptyList())!!
+
+        assertThat(repo.get(purged)!!.state).isEqualTo(PostState.SENT)
+        assertThat(repo.get(deleted)!!.state).isEqualTo(PostState.SENT)
+
+        // The user deletes one record from the Sent tab; the other expires.
+        assertThat(history.delete(deletedRecord)).isTrue()
+        assertThat(repo.get(deleted)).isNull()
+        assertThat(repo.get(purged)).isNotNull()
+
+        assertThat(history.purgeExpired(clock.now.plus(Duration.ofDays(7)))).isEqualTo(1)
+        assertThat(history.get(purgedRecord)).isNull()
+        assertThat(repo.get(purged)).isNull()
+        assertThat(db.rows("SELECT COUNT(*) FROM deliveries").single().single()).isEqualTo(0L)
     }
 
     @Test
@@ -607,6 +659,10 @@ class PostsRepositoryTest {
         deliverAll(rest)
         assertThat(repo.markSent(rest, emptyList())).isNull()
         assertThat(history.get(record)).isNull()
+
+        // No record points to an edit or a deletion once it is sent: they leave with their deliveries.
+        assertThat(listOf(edit, partial, rest).map { repo.get(it) }).containsExactly(null, null, null)
+        assertThat(db.rows("SELECT COUNT(*) FROM deliveries").single().single()).isEqualTo(0L)
     }
 
     @Test
