@@ -195,7 +195,9 @@ fun ShareSheet(
                 StatusRow(check, hasTargets = model.targets.orEmpty().isNotEmpty())
                 check?.let { current ->
                     Changes(current)
-                    Problems(current.blockers, accounts.orEmpty())
+                    // R22: a media conflict names the selected accounts of its network, never the unselected ones.
+                    val selected = model.targets.orEmpty().toSet()
+                    Problems(current.blockers, accounts.orEmpty().filter { it.id in selected })
                 }
                 HorizontalDivider(Modifier.padding(top = 8.dp))
                 val canSend = !model.busy && check?.blockers?.isEmpty() == true
