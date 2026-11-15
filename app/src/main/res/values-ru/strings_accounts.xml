@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Settings root (screens.md, Settings) -->
+    <string name="settings_accounts">Аккаунты</string>
+    <string name="settings_accounts_summary">Аккаунты Mastodon и Bluesky</string>
+    <string name="settings_defaults">По умолчанию</string>
+    <string name="settings_defaults_summary">Адресаты, действие «Поделиться», исправления медиа</string>
+    <string name="settings_sending">Отправка</string>
+    <string name="settings_sending_summary">Уведомления, история, треды, видео</string>
+    <string name="settings_schedule_summary">Недельные слоты для «Отправить позже»</string>
+    <string name="settings_about">О приложении</string>
+    <string name="settings_about_summary">Версия, исходный код, приватность</string>
+    <string name="settings_placeholder">Этот раздел появится в этой версии.</string>
+
+    <!-- Accounts list -->
+    <string name="network_mastodon">Mastodon</string>
+    <string name="network_bluesky">Bluesky</string>
+    <string name="accounts_empty">Аккаунтов пока нет. Добавьте аккаунт Mastodon или Bluesky, чтобы публиковать.</string>
+    <string name="accounts_add">Добавить аккаунт</string>
+    <string name="accounts_choose_network">Какая сеть?</string>
+    <string name="accounts_needs_sign_in">Нужен вход</string>
+    <string name="account_menu">Действия с %1$s</string>
+    <string name="account_move_up">Выше</string>
+    <string name="account_move_down">Ниже</string>
+    <string name="account_avatar">Аватар</string>
+    <string name="cancel">Отмена</string>
+
+    <!-- Add Mastodon account -->
+    <string name="add_mastodon_title">Аккаунт Mastodon</string>
+    <string name="sign_in_again_title">Повторный вход</string>
+    <string name="add_mastodon_instance">Сервер</string>
+    <string name="add_mastodon_instance_hint">mastodon.social или @you@mastodon.social</string>
+    <string name="add_mastodon_explain">Post откроет страницу входа вашего сервера в браузере. Пароль остаётся на сервере.</string>
+    <string name="add_mastodon_continue">Продолжить в браузере</string>
+    <string name="add_mastodon_in_browser">Войдите на странице, которую открыл браузер, и вернитесь сюда.</string>
+    <string name="signing_in">Вход…</string>
+    <string name="try_again">Повторить</string>
+
+    <!-- Add Bluesky account -->
+    <string name="add_bluesky_title">Аккаунт Bluesky</string>
+    <string name="add_bluesky_handle">Хэндл</string>
+    <string name="add_bluesky_handle_hint">you.bsky.social</string>
+    <string name="add_bluesky_password">Пароль приложения</string>
+    <string name="add_bluesky_password_hint">Используйте пароль приложения, а не пароль аккаунта. Пароль приложения позволяет публиковать, но не менять аккаунт, и его можно отозвать в любой момент. Post хранит только сессию, пароль — никогда.</string>
+    <string name="add_bluesky_password_link">Создать пароль приложения на bsky.app</string>
+    <string name="add_bluesky_password_warning">Это не похоже на пароль приложения (xxxx-xxxx-xxxx-xxxx).</string>
+    <string name="show_password">Показать пароль</string>
+    <string name="hide_password">Скрыть пароль</string>
+    <string name="add_bluesky_code">Код из письма</string>
+    <string name="add_bluesky_code_hint">Bluesky отправил код входа на почту этого аккаунта.</string>
+    <string name="add_bluesky_sign_in">Войти</string>
+
+    <!-- Sign-in problems -->
+    <string name="problem_invalid_address">Введите адрес сервера Mastodon, например mastodon.social. Поддерживаются только серверы с HTTPS.</string>
+    <string name="problem_not_mastodon">Этот сервер не отвечает как сервер Mastodon.</string>
+    <string name="problem_network">Сервер недоступен. Проверьте подключение и повторите.</string>
+    <string name="problem_server">Сервер отклонил вход или ответил неожиданно.</string>
+    <string name="problem_unknown_state">Эта ссылка входа открыта не из Post, поэтому она пропущена.</string>
+    <string name="problem_denied">Вход отменён.</string>
+    <string name="problem_client_rejected">Сервер не принимает регистрацию Post.</string>
+    <string name="problem_no_browser">Нет браузера, который откроет страницу входа.</string>
+    <string name="problem_invalid_handle">Введите хэндл, например you.bsky.social, или DID.</string>
+    <string name="problem_handle_not_found">Аккаунта Bluesky с таким хэндлом нет.</string>
+    <string name="problem_handle_mismatch">Документ аккаунта не подтверждает этот хэндл.</string>
+    <string name="problem_no_pds">У аккаунта нет сервера с HTTPS для входа.</string>
+    <string name="problem_wrong_password">Неверный хэндл или пароль приложения.</string>
+    <string name="problem_wrong_code">Код неверный или устарел.</string>
+    <string name="problem_account_inactive">Аккаунт деактивирован или приостановлен.</string>
+    <string name="problem_account_taken_down">Аккаунт заблокирован.</string>
+    <string name="problem_rate_limited">Слишком много попыток входа. Подождите несколько минут и повторите.</string>
+
+    <!-- Account details -->
+    <string name="account_details_title">Аккаунт</string>
+    <string name="account_label">Метка</string>
+    <string name="account_label_hint">Видна при выборе адресатов</string>
+    <string name="account_defaults">Параметры по умолчанию</string>
+    <string name="visibility">Видимость</string>
+    <string name="visibility_public">Публично</string>
+    <string name="visibility_unlisted">Тихо публично</string>
+    <string name="visibility_private">Только подписчики</string>
+    <string name="visibility_direct">Только упомянутые</string>
+    <string name="language">Язык</string>
+    <string name="language_hint">Код, например en или ru; пусто — решит сервер</string>
+    <string name="languages">Языки</string>
+    <string name="languages_hint">До трёх кодов через запятую, например en, ru</string>
+    <string name="content_warning">Предупреждение о содержимом</string>
+    <string name="sensitive_media">Отмечать медиа как чувствительные</string>
+    <string name="who_can_reply">Кто может отвечать</string>
+    <string name="reply_everyone">Все</string>
+    <string name="reply_some">Только эти люди</string>
+    <string name="reply_nobody">Никто</string>
+    <string name="reply_mentioned">Упомянутые</string>
+    <string name="reply_followers">Ваши подписчики</string>
+    <string name="reply_following">Те, на кого вы подписаны</string>
+    <string name="allow_quotes">Разрешить цитирование</string>
+    <string name="limits">Ограничения</string>
+    <string name="limits_characters">Символов в посте: %1$d</string>
+    <string name="limits_media">Файлов в посте: %1$d</string>
+    <string name="limits_image">Размер картинки: до %1$s</string>
+    <string name="limits_video">Размер видео: до %1$s</string>
+    <string name="limits_image_formats">Форматы картинок: %1$s</string>
+    <string name="limits_post_formats">Форматы постов: %1$s</string>
+    <string name="limits_read_at">Прочитаны с сервера %1$s</string>
+    <string name="limits_never">С сервера ещё не прочитаны; действуют обычные ограничения Mastodon.</string>
+    <string name="limits_bluesky_fixed">Ограничения Bluesky одинаковы для всех аккаунтов.</string>
+    <string name="limits_gallery">Картинок в галерее: до %1$d</string>
+    <string name="sign_in_again">Войти заново</string>
+    <string name="remove_account">Удалить аккаунт</string>
+    <string name="remove_account_title">Удалить этот аккаунт?</string>
+    <string name="remove_account_text">Посты, ожидающие отправки в этот аккаунт, завершатся ошибкой «аккаунт удалён». Для Mastodon Post также отзовёт свой доступ на сервере.</string>
+    <string name="remove">Удалить</string>
+</resources>

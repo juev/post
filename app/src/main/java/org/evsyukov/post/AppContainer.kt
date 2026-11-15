@@ -5,6 +5,12 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import okhttp3.OkHttpClient
+import org.evsyukov.post.accounts.AccountRemover
+import org.evsyukov.post.accounts.AccountSessions
+import org.evsyukov.post.accounts.BlueskySignIn
+import org.evsyukov.post.accounts.LimitsRefresher
+import org.evsyukov.post.accounts.MastodonSignIn
+import org.evsyukov.post.accounts.ServerPolicy
 import org.evsyukov.post.data.accounts.AccountsRepository
 import org.evsyukov.post.data.accounts.MastodonAppsRepository
 import org.evsyukov.post.data.accounts.RoomAccountsRepository
@@ -21,6 +27,9 @@ import org.evsyukov.post.data.schedule.ScheduleRepository
 import org.evsyukov.post.data.secrets.KeystoreTokenCipher
 import org.evsyukov.post.data.secrets.SecretStore
 import org.evsyukov.post.data.settings.AppSettings
+import org.evsyukov.post.oauth.FilePendingSignInStore
+import org.evsyukov.post.oauth.MastodonSignInFlow
+import java.io.File
 import java.util.concurrent.TimeUnit
 
 /**
@@ -34,11 +43,19 @@ class AppContainer(context: Context) {
     /** Work that outlives a screen, such as saving a post the user has left. */
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
-    /** One client for every server, so connections and threads are shared. */
+    /**
+     * One client for every server, so connections and threads are shared. The User-Agent names the app
+     * and its version only; nothing personal goes into headers, and no request or token is logged.
+     */
     val http: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(60, TimeUnit.SECONDS)
+        .writeTimeout(60, TimeUnit.SECONDS)
+        .addNetworkInterceptor { chain -> chain.proceed(chain.request().newBuilder().header("User-Agent", USER_AGENT).build()) }
         .build()
+
+    /** HTTPS servers only; debug builds also reach local test servers over HTTP. */
+    val serverPolicy = ServerPolicy(allowLocalHttp = BuildConfig.DEBUG)
 
     val database: PostDatabase by lazy { PostDatabase.open(this.context) }
 
@@ -60,4 +77,30 @@ class AppContainer(context: Context) {
     val history: HistoryRepository by lazy { RoomHistoryRepository(database) { settings.current().historyRetention } }
 
     val schedule: ScheduleRepository by lazy { RoomScheduleRepository(database) }
+
+    /** Credentials of signed-in accounts for publishing (see [AccountSessions]). */
+    val accountSessions: AccountSessions by lazy { AccountSessions(accounts, http) }
+
+    val accountRemover: AccountRemover by lazy { AccountRemover(accounts, mastodonApps, http) }
+
+    val limitsRefresher: LimitsRefresher by lazy { LimitsRefresher(accounts, http) }
+
+    val blueskySignIn: BlueskySignIn by lazy { BlueskySignIn(accounts, http, serverPolicy) }
+
+    val mastodonSignIn: MastodonSignIn by lazy {
+        MastodonSignIn(
+            accounts,
+            mastodonApps,
+            FilePendingSignInStore(File(this.context.noBackupFilesDir, "mastodon-sign-in.json")),
+            http,
+            serverPolicy,
+        )
+    }
+
+    /** The Mastodon sign-in in progress; it outlives screens and activities. */
+    val mastodonSignInFlow: MastodonSignInFlow by lazy { MastodonSignInFlow(mastodonSignIn, scope) }
+
+    companion object {
+        val USER_AGENT = "Post/${BuildConfig.VERSION_NAME} (+https://github.com/juev/post)"
+    }
 }
