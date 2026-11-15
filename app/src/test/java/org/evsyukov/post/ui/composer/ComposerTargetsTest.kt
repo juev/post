@@ -13,6 +13,7 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToNode
@@ -266,6 +267,28 @@ class ComposerTargetsTest {
         h.node(ComposerTags.target(alice)).assertIsSelected()
         compose.onNodeWithText(h.plural(R.plurals.composer_sending_to, 2, 2)).assertExists()
         h.waitUntil { runBlocking { h.container.settings.current().notificationPermissionAsked } }
+    }
+
+    @Test
+    fun aDoubleTapOnSendQueuesThePostOnce() {
+        val alice = h.mastodon("alice")
+        val sky = h.bluesky("sky")
+        h.defaultTargets(alice, sky)
+        h.show()
+        h.type("Only once")
+        waitStatus(0, "Mastodon 9/500")
+
+        // The second tap lands while the first send still counts the text off the main thread.
+        h.node(ComposerTags.SEND).performClick()
+        h.node(ComposerTags.SEND).performClick()
+
+        h.waitUntil { queued().isNotEmpty() }
+        h.waitUntil { h.text().isEmpty() }
+        compose.waitForIdle()
+        Thread.sleep(300)
+        compose.waitForIdle()
+        assertThat(queued()).hasSize(1)
+        assertThat(h.triggers.get()).isEqualTo(1)
     }
 
     @Test

@@ -156,6 +156,27 @@ class ComposerDraftsTest {
     }
 
     @Test
+    fun theBackAsksNothingRightAfterAnOpenedDraftIsSavedAgain() {
+        val id = runBlocking { h.container.posts.saveDraft(DraftInput(text = "Saved", options = PostOptions(), targets = emptyList())) }
+        h.show(draftId = id)
+        h.waitUntil { h.text() == "Saved" }
+        h.type(" again")
+        h.waitUntil { backIsCaught() }
+
+        h.menu(ComposerTags.MENU_SAVE)
+        h.waitUntil { drafts().single().text == "Saved again" }
+
+        // R15: nothing is unsaved, so the back is not held for a question.
+        h.waitUntil { !backIsCaught() }
+    }
+
+    private fun backIsCaught(): Boolean {
+        var caught = false
+        compose.activityRule.scenario.onActivity { caught = it.onBackPressedDispatcher.hasEnabledCallbacks() }
+        return caught
+    }
+
+    @Test
     fun anEmptyComposerLeavesWithoutAQuestion() {
         h.show()
 

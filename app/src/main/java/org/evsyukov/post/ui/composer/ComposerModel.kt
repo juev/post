@@ -80,7 +80,12 @@ class ComposerModel(private val container: AppContainer, initialDraftId: Long?) 
     var renders by mutableStateOf<Pair<RenderInput, List<ProfileRender>>?>(null)
         private set
 
-    private var saved: ComposerContent? = null
+    // State, so that whatever reads [hasUnsavedChanges] in a derived state sees a save.
+    private var saved by mutableStateOf<ComposerContent?>(null)
+
+    /** A send is running: Send and Send later do nothing until it ends, so a double tap queues one post. */
+    var sending by mutableStateOf(false)
+        private set
 
     val accounts: StateFlow<List<Account>?> = container.accounts.observe().stateIn(viewModelScope, SharingStarted.Eagerly, null)
     val settings: StateFlow<Settings?> = container.settings.settings.stateIn(viewModelScope, SharingStarted.Eagerly, null)
@@ -269,30 +274,40 @@ class ComposerModel(private val container: AppContainer, initialDraftId: Long?) 
 
     // Sending (R21, R27)
 
-    /** The outcome of a send: blocked with the reasons, or queued for this many accounts. */
+    /** The outcome of a send: blocked with the reasons, queued for this many accounts, or ignored as a repeat. */
     sealed interface SendResult {
         data class Blocked(val blockers: List<Blocker>) : SendResult
         data class Queued(val accounts: Int, val schedule: Schedule) : SendResult
+
+        /** Another send of this composer was still running; nothing was done. */
+        data object AlreadySending : SendResult
     }
 
     /**
      * Sends the draft at [schedule], Send now when null: counts the text again for the selected accounts, and
      * when nothing blocks, saves the post as queued with its targets and options in one transaction (R27),
-     * then wakes the sender and starts a new empty draft.
+     * then wakes the sender and starts a new empty draft. A send that starts while another runs does nothing,
+     * so a double tap cannot queue the same post twice.
      */
     suspend fun send(schedule: Schedule?): SendResult {
-        val input = renderInput().copy(targets = liveTargets())
-        val list = accounts.filterNotNull().first()
-        val settings = settings.filterNotNull().first()
-        val fresh = render(input, list, settings)
-        renders = input to fresh
-        val blocked = blockers(input.targets, input.text, fresh, poll, pollLimits())
-        if (blocked.isNotEmpty()) return SendResult.Blocked(blocked)
-        val time = schedule ?: Schedule.Now(Instant.now())
-        container.posts.saveAndQueue(draftInput(), time)
-        container.publishTrigger.publishNow()
-        startNew()
-        return SendResult.Queued(input.targets.size, time)
+        if (sending) return SendResult.AlreadySending
+        sending = true
+        try {
+            val input = renderInput().copy(targets = liveTargets())
+            val list = accounts.filterNotNull().first()
+            val settings = settings.filterNotNull().first()
+            val fresh = render(input, list, settings)
+            renders = input to fresh
+            val blocked = blockers(input.targets, input.text, fresh, poll, pollLimits())
+            if (blocked.isNotEmpty()) return SendResult.Blocked(blocked)
+            val time = schedule ?: Schedule.Now(Instant.now())
+            container.posts.saveAndQueue(draftInput(), time)
+            container.publishTrigger.publishNow()
+            startNew()
+            return SendResult.Queued(input.targets.size, time)
+        } finally {
+            sending = false
+        }
     }
 
     companion object {
