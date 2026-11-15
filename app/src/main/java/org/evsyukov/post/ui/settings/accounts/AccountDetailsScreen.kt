@@ -38,6 +38,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -305,11 +306,18 @@ private fun BlueskyDefaults(defaults: AccountOptions, update: (AccountOptions) -
 private const val MAX_LANGUAGE = 16
 private const val MAX_BLUESKY_LANGUAGES = 3
 private const val BLUESKY_MAX_GRAPHEMES = 300
+private const val MIB = 1024L * 1024
 
 @Composable
 private fun Limits(account: Account) {
     val context = LocalContext.current
-    fun size(bytes: Long) = Formatter.formatShortFileSize(context, bytes)
+    val resources = LocalResources.current
+    // Mastodon states its limits in binary megabytes (16 MB is 16 MiB); the system formatter would say 17 MB.
+    fun size(bytes: Long) = if (bytes % MIB == 0L) {
+        resources.getString(R.string.size_megabytes, bytes / MIB)
+    } else {
+        Formatter.formatShortFileSize(context, bytes)
+    }
     Column(Modifier.testTag(AccountDetailsTags.LIMITS), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(stringResource(R.string.limits), style = MaterialTheme.typography.titleMedium)
         when (account.network) {

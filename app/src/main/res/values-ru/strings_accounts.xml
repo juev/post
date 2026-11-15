@@ -103,6 +103,7 @@
     <string name="limits_read_at">Прочитаны с сервера %1$s</string>
     <string name="limits_never">С сервера ещё не прочитаны; действуют обычные ограничения Mastodon.</string>
     <string name="limits_bluesky_fixed">Ограничения Bluesky одинаковы для всех аккаунтов.</string>
+    <string name="size_megabytes">%1$d МБ</string>
     <string name="limits_gallery">Картинок в галерее: до %1$d</string>
     <string name="sign_in_again">Войти заново</string>
     <string name="remove_account">Удалить аккаунт</string>

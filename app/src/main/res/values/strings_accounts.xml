@@ -103,6 +103,7 @@
     <string name="limits_read_at">Read from the server on %1$s</string>
     <string name="limits_never">Not read from the server yet; the usual Mastodon limits apply.</string>
     <string name="limits_bluesky_fixed">Bluesky limits are the same for every account.</string>
+    <string name="size_megabytes">%1$d MB</string>
     <string name="limits_gallery">Images in a gallery: up to %1$d</string>
     <string name="sign_in_again">Sign in again</string>
     <string name="remove_account">Remove account</string>
