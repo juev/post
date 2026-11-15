@@ -9,6 +9,7 @@ import org.commonmark.node.Node
 import org.commonmark.node.OrderedList
 import org.evsyukov.post.core.markdown.AtomicRange
 import org.evsyukov.post.core.markdown.CodeBlockSpan
+import org.evsyukov.post.core.markdown.EmphasisSpan
 import org.evsyukov.post.core.markdown.LiteralLine
 import org.evsyukov.post.core.markdown.SourceRange
 import org.evsyukov.post.core.markdown.SourceStructure
@@ -161,8 +162,9 @@ class PieceMarkup internal constructor(
  *   quote level it is in.
  * - Emphasis cut by [from] is reopened with its exact markers, outermost first, after the quote markers of
  *   the first line; emphasis cut by [to] is closed with its exact markers, innermost first. A span inside
- *   another span with the same markers (bold in bold) is not reopened, and its closing markers in the part
- *   go, since two equal openers make one run that Markdown pairs differently.
+ *   another span with the same markers (bold in bold, strikethrough in strikethrough) that a break of the
+ *   part cuts is neither reopened nor closed, and its markers in the part go ([redundantSpans]): next to
+ *   the outer span's markers they would make one run that Markdown pairs differently.
  * - Text at the start of the part that Markdown would read as the start of a block, but that is text in
  *   the piece (`+ 2`, `1984. was`, a `>` in the middle of a line, a fence, a link reference definition), gets
  *   a backslash, so it stays text. So does every `*`, `_` and `~` of the part that is text in the piece
@@ -188,13 +190,8 @@ fun partFragment(
     require(start <= end) { "The part [$start, $end) is reversed" }
     val out = StringBuilder(end - start + 32)
     from?.codeBlock?.let { block -> out.append(fencePrefix(text, block)).append(block.openingFence).append('\n') }
-    // A span inside a reopened span with the same markers (bold in bold) is not reopened: the two openers
-    // would make one run that Markdown pairs otherwise, and the inner span adds nothing to the outer one.
-    val reopened = from?.emphasis.orEmpty()
-    val redundant = reopened.filter { inner ->
-        reopened.any { outer -> outer !== inner && outer.open == inner.open && outer.openRange.end <= inner.openRange.start }
-    }.toSet()
-    val openers = reopened.filter { it !in redundant }.joinToString("") { it.open }
+    val redundant = redundantSpans(structure, from, to, start, end)
+    val openers = from?.emphasis.orEmpty().filter { it !in redundant }.joinToString("") { it.open }
     val closers = to?.emphasis.orEmpty().filter { it !in redundant }.asReversed().joinToString("") { it.close }
     // Where the text of the first line starts, after the quote markers the part copies.
     val textStart = when {
@@ -217,6 +214,13 @@ fun partFragment(
         var k = literals.binarySearch(textStart).let { if (it < 0) -it - 1 else it }
         while (k < literals.size && literals[k] < end) escapes += literals[k++]
     }
+    for (span in redundant) {
+        // Without its markers, a span that opened a line could leave text there that starts a block (`~~+ x`).
+        val open = span.openRange
+        if (open.start > textStart && open.end <= end && opensLine(text, open.start, textStart)) {
+            escapes += blockStartEscapes(text, structure, open.end, end)
+        }
+    }
     for (position in escapes) edits += FragmentEdit(position, 0, "\\")
     // A code block left unclosed ends with its container (a list item or quote); the part may lose that
     // container, so the block gets its closing fence where it ends.
@@ -226,6 +230,7 @@ fun partFragment(
         }
     }
     for (span in redundant) {
+        if (span.openRange.start >= textStart && span.openRange.end <= end) edits += FragmentEdit(span.openRange.start, span.openRange.length, "")
         if (span.closeRange.start >= textStart && span.closeRange.end <= end) edits += FragmentEdit(span.closeRange.start, span.closeRange.length, "")
     }
     if (to != null && to.codeBlock == null) trailingBackslash(text, markup, start, end, closers.isNotEmpty())?.let { edits += it }
@@ -254,6 +259,40 @@ fun partFragment(
 }
 
 /**
+ * The emphasis spans the part `[start, end)` drops: each lies inside another span with the same markers
+ * (strikethrough in strikethrough, bold in bold) that the part's break [from] or [to] cuts. Such a span adds
+ * nothing to the outer one, but its markers next to the reopened or closing ones would make one run of
+ * markers that Markdown pairs otherwise: `~~` reopened before an inner `~~` at the start of a line is the
+ * `~~~~` of a code fence that swallows the part, and an inner `~~` closed with the outer one is a `~~~~`
+ * that closes nothing. So the part does not reopen or close such a span and leaves out its markers.
+ */
+private fun redundantSpans(structure: SourceStructure, from: Break?, to: Break?, start: Int, end: Int): Set<EmphasisSpan> {
+    val cut = from?.emphasis.orEmpty() + to?.emphasis.orEmpty()
+    if (cut.isEmpty()) return emptySet()
+    val result = HashSet<EmphasisSpan>()
+    for (inner in structure.emphasis) {
+        if (inner.openRange.start >= end) break // sorted by start
+        if (inner.closeRange.end <= start) continue
+        val nested = cut.any { outer ->
+            outer != inner && outer.open == inner.open &&
+                outer.openRange.end <= inner.openRange.start && inner.closeRange.end <= outer.closeRange.start
+        }
+        if (nested) result += inner
+    }
+    return result
+}
+
+/**
+ * Whether only indentation and quote markers come before [position] on its line, and that line is not the
+ * first line of a part whose text starts at [textStart] (where reopened markers come first).
+ */
+private fun opensLine(text: String, position: Int, textStart: Int): Boolean {
+    var k = position - 1
+    while (k >= textStart && (text[k] == ' ' || text[k] == '\t' || text[k] == '>')) k--
+    return k >= textStart && (text[k] == '\n' || text[k] == '\r')
+}
+
+/**
  * Replaces `[position, position + remove)` of the source by [insert]. Of edits at one offset, those with a
  * lower [order] go first: a blank line before a line goes before the indentation added to that line.
  */
@@ -276,7 +315,15 @@ private fun appendEdited(out: StringBuilder, text: String, start: Int, end: Int,
 private fun blockStartEscapes(text: String, structure: SourceStructure, position: Int, end: Int): List<Int> {
     if (position >= end) return emptyList()
     if (structure.listItems.any { it.markerRange.start == position }) return emptyList()
-    if (structure.codeBlocks.any { it.openingFenceRange.start == position }) return emptyList()
+    // At the top level the opening fence range holds the fence's indentation; the part starts after it.
+    if (structure.codeBlocks.any { block ->
+            var fence = block.openingFenceRange.start
+            while (fence < position && (text[fence] == ' ' || text[fence] == '\t')) fence++
+            fence == position
+        }
+    ) {
+        return emptyList()
+    }
     var lineEnd = position
     while (lineEnd < end && text[lineEnd] != '\n' && text[lineEnd] != '\r') lineEnd++
     fun spaceOrEnd(i: Int) = i >= lineEnd || text[i] == ' ' || text[i] == '\t'

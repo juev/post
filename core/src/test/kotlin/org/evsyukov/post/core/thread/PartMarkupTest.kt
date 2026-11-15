@@ -154,4 +154,20 @@ class PartMarkupTest {
         val text = "**a **b c** d**"
         assertThat(around(text, "b").second.markdown).isEqualTo("**c d**")
     }
+
+    @Test
+    fun `strikethrough inside cut strikethrough loses its markers on both sides of the break`() {
+        // Cut inside both spans: closed once, reopened once.
+        val (first, second) = around("~~one ~~two three~~ four~~", "two")
+        assertThat(first.markdown).isEqualTo("~~one two~~")
+        assertThat(second.markdown).isEqualTo("~~three four~~")
+        // The inner span right before the break, or right after it, inside the cut outer span.
+        assertThat(around("~~one ~~two~~ three~~", "~~two~~").first.markdown).isEqualTo("~~one two~~")
+        assertThat(after("~~one ~~two~~ three~~", "one")).isEqualTo("~~two three~~")
+        // Not a `~~~~` fence when the inner span opens a line, and its text stays no list item.
+        assertThat(after("~~one two\n~~Old~~ plan~~", "one")).isEqualTo("~~two\nOld plan~~")
+        assertThat(after("~~one two\n~~+ x~~ plan~~", "one")).isEqualTo("~~two\n\\+ x plan~~")
+        // A span inside a span that the part holds whole stays as typed.
+        assertThat(after("Lead. ~~one ~~two~~ three~~", "Lead.")).isEqualTo("~~one ~~two~~ three~~")
+    }
 }
