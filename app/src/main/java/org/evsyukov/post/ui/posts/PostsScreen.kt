@@ -1,10 +1,8 @@
 package org.evsyukov.post.ui.posts
 
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
@@ -17,11 +15,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.dp
 import org.evsyukov.post.R
 import org.evsyukov.post.ui.common.BackTopBar
 
@@ -33,12 +29,18 @@ object PostsTags {
 }
 
 /**
- * Posts (screens.md, Posts): the tabs Queue, Drafts and Sent. Queue lists the queue with its groups; Drafts and
- * Sent are filled by a later step. [onEdit] opens a queued post in the composer; [onOpenSchedule] the
- * Schedule screen, from the Send later sheet of Change time.
+ * Posts (screens.md, Posts): the tabs Queue, Drafts and Sent. [onEdit] opens a queued post or a draft in the
+ * composer; [onOpenSchedule] the Schedule screen, from the Send later sheet of Change time; [onOpenDetails]
+ * Post details of a queued post; [sent] where a sent post leads (R31, R37–R41).
  */
 @Composable
-fun PostsScreen(onBack: () -> Unit, onEdit: (Long) -> Unit = {}, onOpenSchedule: () -> Unit = {}) {
+fun PostsScreen(
+    onBack: () -> Unit,
+    onEdit: (Long) -> Unit = {},
+    onOpenSchedule: () -> Unit = {},
+    onOpenDetails: (Long) -> Unit = {},
+    sent: SentNavigation = SentNavigation({}, {}, {}),
+) {
     var tab by rememberSaveable { mutableIntStateOf(0) }
     val snackbar = remember { SnackbarHostState() }
     Scaffold(
@@ -53,10 +55,9 @@ fun PostsScreen(onBack: () -> Unit, onEdit: (Long) -> Unit = {}, onOpenSchedule:
                 Tab(selected = tab == 2, onClick = { tab = 2 }, text = { Text(stringResource(R.string.posts_tab_sent)) }, modifier = Modifier.testTag(PostsTags.TAB_SENT))
             }
             when (tab) {
-                0 -> QueueTab(snackbar = snackbar, onEdit = onEdit, onOpenSchedule = onOpenSchedule)
-                else -> Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
-                    Text(stringResource(R.string.posts_tab_coming), color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
+                0 -> QueueTab(snackbar = snackbar, onEdit = onEdit, onOpenSchedule = onOpenSchedule, onOpen = onOpenDetails)
+                1 -> DraftsTab(snackbar = snackbar, onOpen = onEdit)
+                else -> SentTab(snackbar = snackbar, navigation = sent)
             }
         }
     }

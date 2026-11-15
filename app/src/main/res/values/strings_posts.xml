@@ -4,7 +4,6 @@
     <string name="posts_tab_queue">Queue</string>
     <string name="posts_tab_drafts">Drafts</string>
     <string name="posts_tab_sent">Sent</string>
-    <string name="posts_tab_coming">Nothing here yet</string>
     <string name="posts_queue_empty">No posts in the queue. Posts sent later wait here.</string>
 
     <!-- Queue groups (scheduling.md Q7). -->

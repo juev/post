@@ -221,6 +221,8 @@ fun ComposerToolbar(
     onSend: () -> Unit,
     /** A queued post is edited: Send saves it and keeps its time. */
     savesQueued: Boolean = false,
+    /** A published post is edited (R40): Send becomes Save and there is no Send later. */
+    savesPublished: Boolean = false,
 ) {
     var menu by remember { mutableStateOf(false) }
     Surface(tonalElevation = 3.dp, modifier = Modifier.fillMaxWidth().testTag(ComposerTags.TOOLBAR)) {
@@ -273,8 +275,10 @@ fun ComposerToolbar(
                     }
                 }
             }
-            IconButton(onClick = onSendLater, modifier = Modifier.testTag(ComposerTags.SEND_LATER)) {
-                Icon(Icons.Outlined.Schedule, contentDescription = stringResource(R.string.composer_send_later))
+            if (!savesPublished) {
+                IconButton(onClick = onSendLater, modifier = Modifier.testTag(ComposerTags.SEND_LATER)) {
+                    Icon(Icons.Outlined.Schedule, contentDescription = stringResource(R.string.composer_send_later))
+                }
             }
             val scheme = MaterialTheme.colorScheme
             FilledIconButton(
@@ -292,7 +296,9 @@ fun ComposerToolbar(
                     .semantics { if (!canSend) disabled() }
                     .testTag(ComposerTags.SEND),
             ) {
-                if (savesQueued) {
+                if (savesPublished) {
+                    Icon(Icons.Filled.Check, contentDescription = stringResource(R.string.edit_save))
+                } else if (savesQueued) {
                     Icon(Icons.Filled.Check, contentDescription = stringResource(R.string.posts_save_queued))
                 } else {
                     Icon(Icons.AutoMirrored.Outlined.Send, contentDescription = stringResource(R.string.composer_send))

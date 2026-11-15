@@ -32,7 +32,10 @@ import org.evsyukov.post.core.media.Network
 import org.evsyukov.post.data.accounts.Account
 import org.evsyukov.post.data.posts.AccountPostOptions
 import org.evsyukov.post.data.posts.Attachment
+import org.evsyukov.post.data.db.PostKind
+import org.evsyukov.post.data.history.HistoryRecord
 import org.evsyukov.post.data.posts.DraftInput
+import org.evsyukov.post.data.posts.KeptMedia
 import org.evsyukov.post.data.posts.PollDraft
 import org.evsyukov.post.data.posts.PostNotEditable
 import org.evsyukov.post.data.posts.PostNotFound
@@ -52,6 +55,7 @@ data class ComposerContent(
     val poll: PollDraft?,
     val attachments: List<SavedAttachment> = emptyList(),
     val chosenFixes: ChosenFixes = emptyMap(),
+    val keptMedia: List<KeptMedia> = emptyList(),
 )
 
 /** What of an attachment the composer saves; the file path stands for the file, whatever its id. */
@@ -63,7 +67,14 @@ data class SavedAttachment(val path: String, val pieceIndex: Int, val alt: Strin
  * [TextFieldState]s the editor writes into directly.
  */
 @OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
-class ComposerModel(private val container: AppContainer, initialDraftId: Long?) : ViewModel() {
+class ComposerModel(
+    private val container: AppContainer,
+    initialDraftId: Long?,
+    /** Opens the composer in edit mode for this history record (R40). */
+    private val editHistoryId: Long? = null,
+    /** New post from this (R31): a new draft with the text and options of this history record. */
+    private val fromHistoryId: Long? = null,
+) : ViewModel() {
     val text = TextFieldState()
     val spoiler = TextFieldState()
 
@@ -128,6 +139,24 @@ class ComposerModel(private val container: AppContainer, initialDraftId: Long?) 
     /** A queued post is being edited: Send saves it and keeps its time (R25, Q2). */
     var editingQueued by mutableStateOf(false)
         private set
+
+    /**
+     * The published post being edited (R40, screens.md "Editing a published post"), or null. Its targets are
+     * the accounts holding it; a Bluesky account becomes a target only for "delete and post again" (N32).
+     */
+    var editing by mutableStateOf<HistoryRecord?>(null)
+        private set
+
+    /** Edit mode was asked for, but the record is gone (R37): the screen says so and saves nothing. */
+    var editUnavailable by mutableStateOf(false)
+        private set
+
+    /** The published media of the post being edited, with the alt text and removal chosen here (N30). */
+    var keptMedia by mutableStateOf<List<KeptMedia>>(emptyList())
+        private set
+
+    /** The accounts that hold the post being edited, which are the only targets an edit can have (R40). */
+    val holders: List<Long> get() = editing?.items?.map { it.accountId }.orEmpty()
 
     /** Posts in the Late group, for the warning badge on Posts (scheduling.md Q7). */
     val lateCount: StateFlow<Int> = container.posts.observeQueue()
@@ -203,7 +232,27 @@ class ComposerModel(private val container: AppContainer, initialDraftId: Long?) 
         val accounts = accounts.filterNotNull().first()
         val settings = settings.filterNotNull().first()
         val post = id?.let { container.posts.get(it) }
-        if (post == null) {
+        val existing = accounts.map { it.id }.toSet()
+        if (post == null && editHistoryId != null && id == null) {
+            val record = container.history.get(editHistoryId)
+            newDraft(accounts, settings)
+            if (record == null) {
+                editUnavailable = true
+            } else {
+                fill(record.text, record.options, accounts, emptyList())
+                editing = record
+                keptMedia = keptMediaOf(record, record.options.keptMedia)
+                // R40: Mastodon copies are edited in place; a Bluesky copy is left unchanged by default (N32).
+                targets = record.items.filter { it.network == Network.MASTODON && it.accountId in existing }.map { it.accountId }
+            }
+        } else if (post == null && fromHistoryId != null && id == null) {
+            val record = container.history.get(fromHistoryId)
+            newDraft(accounts, settings)
+            if (record != null) {
+                fill(record.text, record.options.copy(keptMedia = emptyList()), accounts, emptyList())
+                targets = record.items.map { it.accountId }.filter { it in existing }.distinct()
+            }
+        } else if (post == null) {
             newDraft(accounts, settings)
         } else {
             draftId = post.id
@@ -217,15 +266,54 @@ class ComposerModel(private val container: AppContainer, initialDraftId: Long?) 
             poll = post.options.poll
             attachments = post.attachments
             chosenFixes = post.options.chosenFixes
+            if (post.kind == PostKind.EDIT) {
+                val record = post.historyId?.let { container.history.get(it) }
+                editing = record
+                editUnavailable = record == null
+                keptMedia = record?.let { keptMediaOf(it, post.options.keptMedia) }.orEmpty()
+            }
         }
-        saved = content()
+        // A new post from a sent one is not saved yet: leaving asks whether to keep it (R15).
+        saved = if (fromHistoryId != null && id == null) null else content()
         loaded = true
+    }
+
+    /** The composer filled with [text] and [options], as a saved draft or a history record gives them. */
+    private fun fill(text: String, options: PostOptions, accounts: List<Account>, targets: List<Long>) {
+        this.text.setTextAndPlaceCursorAtEnd(text)
+        spoiler.setTextAndPlaceCursorAtEnd(options.spoilerText)
+        spoilerShown = options.spoilerText.isNotEmpty()
+        language = options.language ?: defaultLanguage(accounts.filter { it.id in targets })
+        this.targets = targets
+        accountOptions = options.accounts
+        poll = options.poll
+        chosenFixes = options.chosenFixes
+    }
+
+    /** Every published file of [record] by place, with the edits of [edits] applied (N30). */
+    private fun keptMediaOf(record: HistoryRecord, edits: List<KeptMedia>): List<KeptMedia> {
+        val item = record.items.firstOrNull { it.network == Network.MASTODON } ?: record.items.firstOrNull() ?: return emptyList()
+        val byPlace = edits.associateBy { it.part to it.index }
+        return item.parts.flatMapIndexed { part, published ->
+            published.media.mapIndexed { index, media -> byPlace[part to index] ?: KeptMedia(part, index, media.alt) }
+        }
+    }
+
+    fun setKeptMediaAlt(part: Int, index: Int, alt: String) {
+        keptMedia = keptMedia.map { if (it.part == part && it.index == index) it.copy(alt = alt) else it }
+    }
+
+    fun toggleKeptMedia(part: Int, index: Int) {
+        keptMedia = keptMedia.map { if (it.part == part && it.index == index) it.copy(removed = !it.removed) else it }
     }
 
     /** An empty draft with the default targets (R16) and the defaults of the first of them (R17). */
     private fun newDraft(accounts: List<Account>, settings: Settings) {
         draftGeneration++
         editingQueued = false
+        editing = null
+        editUnavailable = false
+        keptMedia = emptyList()
         val existing = accounts.associateBy { it.id }
         val defaults = settings.defaultTargets.filter { it in existing }
         val selected = defaults.mapNotNull { existing[it] }
@@ -254,6 +342,7 @@ class ComposerModel(private val container: AppContainer, initialDraftId: Long?) 
         poll = poll,
         attachments = attachments.map { SavedAttachment(it.path, it.pieceIndex, it.alt, it.focusX, it.focusY) },
         chosenFixes = chosenFixes,
+        keptMedia = keptMedia,
     )
 
     /**
@@ -274,6 +363,7 @@ class ComposerModel(private val container: AppContainer, initialDraftId: Long?) 
         accounts = accountOptions.filterKeys { it in targets },
         poll = poll,
         chosenFixes = chosenFixes,
+        keptMedia = if (editing != null) keptMedia else emptyList(),
     )
 
     private fun draftInput() = DraftInput(
@@ -283,6 +373,8 @@ class ComposerModel(private val container: AppContainer, initialDraftId: Long?) 
         targets = liveTargets(),
         // A new attachment is saved as a new row (id 0); a saved one keeps its id.
         attachments = attachments.map { if (it.id < 0) it.copy(id = 0) else it },
+        kind = if (editing != null) PostKind.EDIT else PostKind.NEW,
+        historyId = editing?.id,
     )
 
     /**
@@ -458,6 +550,8 @@ class ComposerModel(private val container: AppContainer, initialDraftId: Long?) 
     }
 
     fun toggleTarget(id: Long) {
+        // R40: an edit goes only to the accounts that hold the post.
+        if (editing != null && id !in holders) return
         targets = if (id in targets) targets - id else targets + id
     }
 
@@ -528,6 +622,14 @@ class ComposerModel(private val container: AppContainer, initialDraftId: Long?) 
             val media = mediaOf(input, list, settings)
             val blocked = blockers(input.targets, input.text, fresh, poll, pollLimits(), attachments, media, settings.requireAltText, importing > 0)
             if (blocked.isNotEmpty()) return SendResult.Blocked(blocked)
+            if (editUnavailable) return SendResult.NoLongerEditable
+            if (editing != null && !editingQueued) {
+                // R41: the edit is saved locally first and goes through the queue with retries.
+                if (!saveOrDetach { container.posts.saveAndQueue(draftInput(), Schedule.Now(Instant.now())) }) return SendResult.NoLongerEditable
+                container.publishTrigger.publishNow()
+                startNew()
+                return SendResult.Saved
+            }
             if (editingQueued && schedule == null) {
                 // Q2: the limits were checked again above; saving keeps the post's time and queue place.
                 if (!saveOrDetach { container.posts.saveDraft(draftInput()) }) return SendResult.NoLongerEditable
