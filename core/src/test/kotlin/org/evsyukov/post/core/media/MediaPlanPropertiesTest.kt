@@ -36,6 +36,10 @@ class MediaPlanPropertiesTest {
                     val solo = files.filter { isSolo(it, rules) }
                     if (solo.isNotEmpty()) assertWithMessage("a video alone: $context").that(files).hasSize(1)
                     if (files.any { it.kind == MediaKind.AUDIO }) assertWithMessage("audio: $context").that(rules.audioAllowed).isTrue()
+                    for (file in files) {
+                        assertWithMessage("a variant the network takes for ${file.id}: $context")
+                            .that(acceptedVariant(file, plan.conversions.getValue(file.id), rules)).isTrue()
+                    }
                 }
             }
             if (hasPoll && !rules.pollAllowedWithMedia && !plan.pollRemoved) {
@@ -79,6 +83,23 @@ class MediaPlanPropertiesTest {
     }
 
     @Test
+    fun `every kind of conversion survives JSON`() {
+        val mastodon = MediaPlanner.plan(
+            listOf(image(1, mime = "image/heic"), video(2, mime = "video/x-matroska", piece = 1), audio(3, piece = 2)),
+            MASTODON, emptyMap(), false,
+        )
+        val bluesky = MediaPlanner.plan(listOf(gif(1)), BLUESKY, emptyMap(), false)
+        val kinds = (mastodon.conversions.values + bluesky.conversions.values).map { it::class }.toSet()
+        assertThat(kinds).containsExactly(
+            Conversion.AsIs::class, Conversion.ConvertImage::class, Conversion.TranscodeVideo::class, Conversion.GifAsVideo::class,
+        )
+        for (plan in listOf(mastodon, bluesky)) {
+            val json = Json.encodeToString(MediaPlan.serializer(), plan)
+            assertThat(Json.decodeFromString(MediaPlan.serializer(), json)).isEqualTo(plan)
+        }
+    }
+
+    @Test
     fun `attachment ids must be unique`() {
         assertThrows(IllegalArgumentException::class.java) {
             MediaPlanner.plan(listOf(image(1), image(1)), MASTODON, emptyMap(), false)
@@ -91,11 +112,33 @@ class MediaPlanPropertiesTest {
     private fun goesToVideoService(item: MediaItem, rules: NetworkMediaRules) =
         item.kind == MediaKind.VIDEO || (item.kind == MediaKind.GIF && rules.gifIsVideo)
 
+    /** The uploaded variant is a type the network takes, and a GIF that goes as it is fits the GIF matrix. */
+    private fun acceptedVariant(item: MediaItem, conversion: Conversion, rules: NetworkMediaRules): Boolean = when (conversion) {
+        is Conversion.ConvertImage -> rules.acceptsImage(conversion.targetMime)
+        is Conversion.TranscodeVideo -> rules.acceptsVideo(conversion.targetMime)
+        Conversion.GifAsVideo -> item.kind == MediaKind.GIF && rules.gifIsVideo
+        Conversion.AsIs -> {
+            val pixels = if (item.width != null && item.height != null) item.width.toLong() * item.height else null
+            val gifFits = normalizeMime(item.mime) != "image/gif" || pixels == null || rules.maxGifPixels == null ||
+                pixels <= rules.maxGifPixels
+            gifFits && when (item.kind) {
+                MediaKind.IMAGE, MediaKind.GIF -> rules.acceptsImage(item.mime)
+                MediaKind.VIDEO -> rules.acceptsVideo(item.mime)
+                MediaKind.AUDIO -> rules.acceptsAudio(item.mime)
+            }
+        }
+    }
+
     private fun randomRules(): NetworkMediaRules {
         val base = if (random.nextBoolean()) MASTODON else BLUESKY
-        return when (random.nextInt(3)) {
+        return when (random.nextInt(4)) {
             0 -> base
-            1 -> base.copy(maxAttachments = random.nextInt(1, 7), galleryMax = base.galleryMax?.let { random.nextInt(2, 12) })
+            1 -> base.copy(maxAttachments = random.nextInt(0, 7), galleryMax = base.galleryMax?.let { random.nextInt(2, 12) })
+            // A fork or a merge that takes fewer types, maybe none of the conversion targets.
+            2 -> base.copy(
+                imageMimes = base.imageMimes.filter { random.nextBoolean() }.toSet(),
+                videoMimes = base.videoMimes.filter { random.nextBoolean() }.toSet(),
+            )
             else -> NetworkMediaRules.strictest(listOf(base, base.copy(maxImageBytes = base.maxImageBytes / 2, maxVideoBytes = base.maxVideoBytes / 3)))
         }
     }
@@ -106,13 +149,19 @@ class MediaPlanPropertiesTest {
         when (random.nextInt(10)) {
             in 0..4 -> image(
                 id, piece,
-                mime = listOf("image/jpeg", "image/png", "image/heic", "image/avif", "image/webp").random(random),
+                mime = listOf("image/jpeg", "image/png", "image/heic", "image/avif", "image/webp", "image/gif").random(random),
                 size = random.nextLong(10_000, 30 * MIB),
-                width = random.nextInt(100, 9000), height = random.nextInt(100, 9000),
+                width = listOf(random.nextInt(100, 9000), null).random(random), height = random.nextInt(100, 9000),
                 transparency = random.nextBoolean(),
                 alt = "a".repeat(listOf(0, 10, 2001, 10_001).random(random)),
             )
-            5, 6 -> gif(id, piece, size = random.nextLong(10_000, 25 * MIB), durationMs = random.nextLong(500, 20_000))
+            5, 6 -> gif(
+                id, piece,
+                size = random.nextLong(10_000, 25 * MIB),
+                width = listOf(320, 480, 1280, 1281, 1920).random(random),
+                height = listOf(240, 270, 720, 1080).random(random),
+                durationMs = random.nextLong(500, 20_000),
+            )
             7, 8 -> video(
                 id, piece,
                 mime = listOf("video/mp4", "video/quicktime", "video/x-matroska", "video/webm").random(random),

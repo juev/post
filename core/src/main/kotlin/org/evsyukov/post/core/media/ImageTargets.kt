@@ -7,11 +7,15 @@ import org.evsyukov.post.core.media.Conversion.ConvertImage
  *
  * An image is converted when the network does not take its type (HEIC, HEIF, AVIF and others) or
  * when it is above the size or resolution limit: [NetworkMediaRules.maxImageBytes],
- * [NetworkMediaRules.maxImagePixels] (Mastodon `image_matrix_limit`) or
- * [NetworkMediaRules.maxImageLongSide] (Bluesky 4000 px). The output is JPEG, or PNG when the image
+ * [NetworkMediaRules.maxImagePixels] (Mastodon `image_matrix_limit`),
+ * [NetworkMediaRules.maxImageLongSide] (Bluesky 4000 px) or, for a still `image/gif`,
+ * [NetworkMediaRules.maxGifPixels] (Mastodon 1280×720). The output is JPEG, or PNG when the image
  * has transparency, downscaled to the network's resolution limits and recompressed until it fits
- * the size limit. An unknown width or height is not checked against the resolution limits; the
- * converter applies them to the decoded image anyway.
+ * the size limit; the caller checks that the network takes the output type.
+ *
+ * An unknown width or height is not checked against the resolution limits. [MediaPlanner] then
+ * gives the metadata pass the network's resolution limits, so the converter checks the decoded
+ * image; with the setting to keep metadata, such an image goes as it is.
  */
 object ImageTargets {
     const val JPEG = "image/jpeg"
@@ -29,7 +33,8 @@ object ImageTargets {
     ): ConvertImage? {
         val fits = rules.acceptsImage(mime) &&
             sizeBytes <= rules.maxImageBytes &&
-            withinResolution(width, height, rules)
+            withinResolution(width, height, rules) &&
+            withinGifMatrix(width, height, mime, rules)
         if (fits) return null
         return ConvertImage(
             targetMime = if (hasTransparency) PNG else JPEG,
@@ -46,4 +51,12 @@ object ImageTargets {
         val longSideOk = rules.maxImageLongSide?.let { maxOf(width, height) <= it } ?: true
         return pixelsOk && longSideOk
     }
+
+    /** The network's limit for a GIF it takes as `image/gif` (Mastodon `GIF_MATRIX_LIMIT`). */
+    internal fun withinGifMatrix(width: Int?, height: Int?, mime: String, rules: NetworkMediaRules): Boolean {
+        if (normalizeMime(mime) != GIF || width == null || height == null) return true
+        return rules.maxGifPixels?.let { width.toLong() * height <= it } ?: true
+    }
+
+    private const val GIF = "image/gif"
 }

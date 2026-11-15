@@ -17,6 +17,10 @@ import org.evsyukov.post.core.media.Conversion.TranscodeVideo
  *    turns into blocks, so the video cannot fit ([ConflictKind.CANNOT_FIT]).
  * 4. The bitrate is capped at [MAX_BITRATE_1080] or [MAX_BITRATE_720]: a short clip gains nothing
  *    from more, and the file stays small.
+ * 5. With the source size known, the bitrate is also capped at the source's own bitrate (its size
+ *    in bits over its duration, audio included), but not below the floor of the step. A file
+ *    transcoded for its type, frame rate or resolution gains no detail from more bits, so it does
+ *    not grow beyond what it was, except up to the floor.
  *
  * A source with a short side of 720 px or less keeps its size and uses the 720 floor and cap.
  * A source between 720 and 1080 is not scaled up; it uses the 1080 floor. With a pixel limit
@@ -53,23 +57,33 @@ object VideoTargets {
     /**
      * The target for a video of [durationMs] and [width] × [height] that must fit [maxBytes], or
      * null when even 720p at [MIN_BITRATE_720] does not fit (or the duration is not positive).
-     * An unknown size is passed as 0 × 0 and is treated as a large source.
+     * An unknown size is passed as 0 × 0 and is treated as a large source. [sourceBytes] is the
+     * size of the source file; null or not positive when unknown, and then it caps nothing.
      */
-    fun target(durationMs: Long, maxBytes: Long, width: Int, height: Int, maxPixels: Long? = null): TranscodeVideo? {
+    fun target(
+        durationMs: Long,
+        maxBytes: Long,
+        width: Int,
+        height: Int,
+        maxPixels: Long? = null,
+        sourceBytes: Long? = null,
+    ): TranscodeVideo? {
         if (durationMs <= 0 || maxBytes <= 0) return null
         val budgetBits = maxBytes * 8 * BUDGET_PERCENT / 100
         val totalBitrate = budgetBits * 1000 / durationMs
         val videoBitrate = totalBitrate - AUDIO_BITRATE
+        val sourceBitrate = sourceBytes?.takeIf { it > 0 }?.let { it * 8 * 1000 / durationMs }
         val sourceShortSide = minOf(width, height)
         for (step in steps) {
             // A source that is already small keeps its size and is judged by the 720 step.
             if (step.shortSide == FULL_HD_SHORT_SIDE && sourceShortSide in 1..HD_SHORT_SIDE) continue
             if (maxPixels != null && outputPixels(width, height, step.shortSide) > maxPixels) continue
             if (videoBitrate < step.minBitrate) continue
+            val sourceCap = sourceBitrate?.coerceAtLeast(step.minBitrate.toLong()) ?: Long.MAX_VALUE
             return TranscodeVideo(
                 targetMime = TARGET_MIME,
                 maxShortSide = step.shortSide,
-                videoBitrate = minOf(videoBitrate, step.maxBitrate.toLong()).toInt(),
+                videoBitrate = minOf(videoBitrate, step.maxBitrate.toLong(), sourceCap).toInt(),
                 audioBitrate = AUDIO_BITRATE,
                 maxBytes = maxBytes,
             )

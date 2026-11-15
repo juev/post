@@ -46,6 +46,17 @@ class ImageTargetsTest {
     }
 
     @Test
+    fun `A5 a still GIF over the Mastodon GIF matrix becomes JPEG, or PNG with transparency`() {
+        assertThat(ImageTargets.target(1280, 720, 1_000_000, "image/gif", MASTODON)).isNull()
+        assertThat(ImageTargets.target(1281, 720, 1_000_000, "image/gif", MASTODON))
+            .isEqualTo(ConvertImage("image/jpeg", null, 7680L * 4320, 16 * MIB, true))
+        assertThat(ImageTargets.target(1920, 1080, 1_000_000, "image/gif", MASTODON, hasTransparency = true)?.targetMime)
+            .isEqualTo("image/png")
+        // The GIF matrix holds for GIF only: a PNG of that size fits.
+        assertThat(ImageTargets.target(1920, 1080, 1_000_000, "image/png", MASTODON)).isNull()
+    }
+
+    @Test
     fun `A5 an image over the limits keeps PNG only when it has transparency`() {
         assertThat(ImageTargets.target(6000, 4000, 9_000_000, "image/png", BLUESKY)?.targetMime).isEqualTo("image/jpeg")
         assertThat(ImageTargets.target(6000, 4000, 9_000_000, "image/png", BLUESKY, hasTransparency = true)?.targetMime)
