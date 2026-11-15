@@ -1,6 +1,8 @@
 package org.evsyukov.post.ui
 
+import android.content.Context
 import androidx.activity.ComponentActivity
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.annotation.StringRes
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
@@ -8,7 +10,10 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import org.evsyukov.post.AppContainer
+import org.evsyukov.post.data.FakeCipher
 import org.evsyukov.post.R
 import org.evsyukov.post.ui.common.BackTopBarTags
 import org.evsyukov.post.ui.composer.ComposerTags
@@ -16,6 +21,7 @@ import org.evsyukov.post.ui.posts.PostsTags
 import org.evsyukov.post.ui.schedule.ScheduleTags
 import org.evsyukov.post.ui.settings.SettingsTags
 import org.evsyukov.post.ui.theme.PostTheme
+import org.junit.After
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -30,9 +36,17 @@ class PostAppNavigationTest {
     @get:Rule
     val compose = createAndroidComposeRule<ComponentActivity>()
 
+    // The composer reads accounts, settings and the queue.
+    private val container = AppContainer(ApplicationProvider.getApplicationContext<Context>()) { FakeCipher() }
+
     @Before
     fun setUp() {
-        compose.setContent { PostTheme { PostApp() } }
+        compose.setContent { CompositionLocalProvider(LocalAppContainer provides container) { PostTheme { PostApp() } } }
+    }
+
+    @After
+    fun tearDown() {
+        if (container.database.isOpen) container.database.close()
     }
 
     @Test

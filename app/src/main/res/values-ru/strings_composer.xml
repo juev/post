@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="composer_hint">Что нового?</string>
+    <string name="composer_no_accounts">Добавьте аккаунт в настройках, чтобы выбрать, куда публиковать.</string>
+    <string name="composer_target_description">%1$s, %2$s</string>
+    <string name="composer_account_options">Параметры этого поста</string>
+    <string name="composer_account_options_menu">Параметры аккаунтов</string>
+    <string name="composer_options_for">Параметры для %1$s</string>
+
+    <string name="composer_attach">Прикрепить</string>
+    <string name="composer_bold">Жирный</string>
+    <string name="composer_italic">Курсив</string>
+    <string name="composer_strikethrough">Зачёркнутый</string>
+    <string name="composer_code">Код</string>
+    <string name="composer_quote">Цитата</string>
+    <string name="composer_list">Список</string>
+    <string name="composer_link">Ссылка</string>
+    <string name="composer_language_description">Язык: %1$s</string>
+    <string name="composer_more">Ещё действия</string>
+    <string name="composer_add_poll">Добавить опрос</string>
+    <string name="composer_remove_poll">Убрать опрос</string>
+    <string name="composer_break_here">Разрыв здесь</string>
+    <string name="composer_remove_break">Убрать разрыв</string>
+    <string name="composer_preview">Предпросмотр</string>
+    <string name="composer_save_draft">Сохранить черновик</string>
+    <string name="composer_clear">Очистить</string>
+    <string name="composer_send">Отправить</string>
+    <string name="composer_send_later">Позже</string>
+
+    <string name="composer_status_count">%1$s %2$d/%3$d</string>
+    <plurals name="composer_status_parts">
+        <item quantity="one">%1$s %2$d часть</item>
+        <item quantity="few">%1$s %2$d части</item>
+        <item quantity="many">%1$s %2$d частей</item>
+        <item quantity="other">%1$s %2$d части</item>
+    </plurals>
+    <string name="composer_status_issue">%1$s ⚠ нельзя отправить</string>
+    <string name="composer_status_no_target">Аккаунт не выбран</string>
+    <string name="composer_details">Подробности</string>
+    <string name="composer_issue_too_long">«%1$s» длиннее одной части (предел: %2$d) и не делится. Сократите или добавьте пробелы.</string>
+    <string name="composer_issue_too_many_parts">Частей нужно: %1$d, можно: %2$d.</string>
+    <string name="composer_issue_spoiler_too_long">Предупреждение о содержимом не оставляет места для текста.</string>
+    <string name="composer_many_parts">Длинный тред: %1$d.</string>
+    <string name="composer_blocker_no_target">Выберите хотя бы один аккаунт.</string>
+    <string name="composer_blocker_empty">Напишите что-нибудь.</string>
+    <string name="composer_formatting_removed">Ни один из выбранных аккаунтов не сохраняет форматирование: при публикации оно будет удалено.</string>
+    <string name="composer_part_number">Часть %1$d из %2$d</string>
+    <string name="composer_preview_cw">Предупреждение: %1$s</string>
+
+    <string name="composer_link_title">Добавить ссылку</string>
+    <string name="composer_link_address">Адрес</string>
+    <string name="composer_link_from_clipboard">Вставить %1$s</string>
+    <string name="composer_link_insert">Вставить</string>
+
+    <string name="composer_quote_policy">Кто может цитировать</string>
+    <string name="composer_quote_anyone">Все</string>
+    <string name="composer_quote_followers">Подписчики</string>
+    <string name="composer_quote_nobody">Никто</string>
+    <string name="composer_link_card">Карточка ссылки</string>
+    <string name="composer_content_labels">Метки содержимого</string>
+    <string name="composer_content_labels_hint">Метки действуют только на картинки и видео.</string>
+    <string name="composer_label_sexual">Откровенное</string>
+    <string name="composer_label_nudity">Нагота</string>
+    <string name="composer_label_porn">Для взрослых</string>
+    <string name="composer_label_graphic">Шокирующее</string>
+
+    <string name="composer_poll_title">Опрос</string>
+    <string name="composer_poll_option">Вариант %1$d</string>
+    <string name="composer_poll_remove_option">Убрать вариант %1$d</string>
+    <string name="composer_poll_add_option">Добавить вариант</string>
+    <string name="composer_poll_duration">Длительность</string>
+    <string name="composer_poll_multiple">Несколько ответов</string>
+    <string name="composer_poll_mastodon_only">Опрос уходит только в Mastodon.</string>
+    <string name="composer_poll_too_few">В опросе нужно хотя бы два варианта.</string>
+    <string name="composer_poll_too_many">Вариантов больше, чем разрешает выбранный сервер.</string>
+    <string name="composer_poll_empty_option">Заполните все варианты опроса.</string>
+    <string name="composer_poll_option_too_long">Вариант опроса длиннее, чем разрешает выбранный сервер.</string>
+    <string name="composer_poll_bad_duration">Выберите длительность, которую разрешают все выбранные серверы.</string>
+    <plurals name="composer_minutes">
+        <item quantity="one">%1$d минута</item>
+        <item quantity="few">%1$d минуты</item>
+        <item quantity="many">%1$d минут</item>
+        <item quantity="other">%1$d минуты</item>
+    </plurals>
+    <plurals name="composer_hours">
+        <item quantity="one">%1$d час</item>
+        <item quantity="few">%1$d часа</item>
+        <item quantity="many">%1$d часов</item>
+        <item quantity="other">%1$d часа</item>
+    </plurals>
+    <plurals name="composer_days">
+        <item quantity="one">%1$d день</item>
+        <item quantity="few">%1$d дня</item>
+        <item quantity="many">%1$d дней</item>
+        <item quantity="other">%1$d дня</item>
+    </plurals>
+
+    <plurals name="composer_sending_to">
+        <item quantity="one">Отправка в %1$d аккаунт</item>
+        <item quantity="few">Отправка в %1$d аккаунта</item>
+        <item quantity="many">Отправка в %1$d аккаунтов</item>
+        <item quantity="other">Отправка в %1$d аккаунта</item>
+    </plurals>
+    <string name="composer_queued_for">В очереди на %1$s</string>
+    <string name="composer_time_in_past">Выберите время в будущем.</string>
+    <string name="composer_draft_saved">Черновик сохранён</string>
+    <string name="composer_next">Далее</string>
+    <string name="composer_pick_time">Время</string>
+    <string name="composer_send_later_confirm">В очередь</string>
+    <plurals name="composer_posts_queued">
+        <item quantity="one">Посты, в очереди %1$d</item>
+        <item quantity="few">Посты, в очереди %1$d</item>
+        <item quantity="many">Посты, в очереди %1$d</item>
+        <item quantity="other">Посты, в очереди %1$d</item>
+    </plurals>
+
+    <string name="composer_leave_title">Сохранить черновик?</string>
+    <string name="composer_leave_text">В посте есть несохранённые изменения.</string>
+    <string name="composer_keep_draft">Сохранить</string>
+    <string name="composer_discard">Удалить</string>
+    <string name="composer_clear_title">Очистить пост?</string>
+    <string name="composer_clear_text">Текст, параметры и опрос будут удалены. Сохранённый черновик останется в черновиках.</string>
+</resources>
