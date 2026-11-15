@@ -68,7 +68,35 @@ class RenderPropertiesTest {
     /** A sentence without emphasis around it, ending in a letter so closing markers right after it close. */
     private fun bare(random: Random): String = sentence(random, wrap = false).trimEnd('*', '_', '~', '\\', '.', '!', '?', ',') + "x"
 
-    private fun block(random: Random): String = when (random.nextInt(15)) {
+    /**
+     * A list with items nested up to three levels, ordered or bulleted at each level with any delimiter or
+     * bullet, sometimes with a quote or a code block in an item: a part that starts inside a nested item has
+     * no markers for the items around it (T5, T17). Code blocks go only into items of the top level: deeper
+     * ones are 4 columns in, where no part may start inside their outermost item (`findBreaks`), which a
+     * dedicated test pins; here they would only turn most nested lists into conflicts.
+     */
+    private fun nestedList(random: Random, depth: Int = 0, indent: String = ""): String {
+        val ordered = random.nextBoolean()
+        val delimiter = if (random.nextInt(4) == 0) ")" else "."
+        val bullet = listOf("-", "*", "+").random(random)
+        val first = if (random.nextInt(3) == 0) random.nextInt(2, 9) else 1
+        return List(random.nextInt(1, 5)) { k ->
+            val marker = if (ordered) "${if (random.nextInt(5) == 0) first else first + k}$delimiter " else "$bullet "
+            val inner = indent + " ".repeat(marker.length)
+            val item = StringBuilder(indent).append(marker).append(sentence(random))
+            when (random.nextInt(8)) {
+                0, 1, 2 -> if (depth < 2) item.append('\n').append(nestedList(random, depth + 1, inner))
+                3 -> item.append('\n').append(inner).append("> ").append(sentence(random))
+                4 -> if (depth == 0) item.append("\n").append(inner).append("```\n").append(inner).append("code ").append(words.random(random))
+                    .append('\n').append(inner).append("```")
+                5 -> item.append("\n\n").append(inner).append(sentence(random))
+            }
+            item.toString()
+        }.joinToString("\n")
+    }
+
+    private fun block(random: Random): String = when (random.nextInt(17)) {
+        13, 14, 15 -> nestedList(random)
         0 -> "> " + List(random.nextInt(1, 4)) { sentence(random) }.joinToString("\n> ")
         1 -> List(random.nextInt(1, 5)) { "- " + sentence(random) }.joinToString("\n")
         2 -> List(random.nextInt(1, 5)) { "${it + 3}. " + sentence(random) }.joinToString("\n")

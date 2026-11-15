@@ -52,13 +52,14 @@ class PartMarkupTest {
     }
 
     @Test
-    fun `fences inside a quote keep its markers and fences in a list item keep its indentation`() {
+    fun `fences inside a quote keep its markers and fences in a cut list item lose its indentation with the code`() {
         val (quoted, quotedNext) = around("> ~~~\n> one\n> two\n> ~~~", "one")
         assertThat(quoted.markdown).isEqualTo("> ~~~\n> one\n> ~~~")
         assertThat(quotedNext.markdown).isEqualTo("> ~~~\n> two\n> ~~~")
         val (item, itemNext) = around("- ```\n  one\n  two\n  ```", "one")
         assertThat(item.markdown).isEqualTo("- ```\n  one\n  ```")
-        assertThat(itemNext.markdown).isEqualTo("  ```\n  two\n  ```")
+        // The part has no marker for the item, so the fences and the code go to the part's top level together.
+        assertThat(itemNext.markdown).isEqualTo("```\ntwo\n```")
     }
 
     @Test
@@ -110,6 +111,8 @@ class PartMarkupTest {
     fun `an item after the rest of a cut item gets a blank line so it stays a list item`() {
         assertThat(after("1. first item text\n1. second", "first")).isEqualTo("item text\n\n2. second")
         assertThat(after("> 1. first item text\n> 1. second", "first")).isEqualTo("> item text\n>\n> 2. second")
+        // The blank line stays in the item that holds the quote: its indentation goes before the marker.
+        assertThat(after("Intro words. More words\n- item\n  > 5) quoted", "Intro words.")).isEqualTo("More words\n- item\n  >\n  > 5) quoted")
         // An empty item cannot interrupt a paragraph either.
         assertThat(after("- first item text\n-\nlast", "first")).isEqualTo("item text\n\n-\nlast")
     }
@@ -128,9 +131,45 @@ class PartMarkupTest {
     }
 
     @Test
+    fun `a part inside a nested list keeps the nested list apart from the outer items after it`() {
+        // Without the other delimiter, `2. c` and `2. d` would be one list showing 2 and 3.
+        assertThat(after("1. a\n   1. b\n   2. c\n2. d", "b")).isEqualTo("2) c\n\n2. d")
+        // Lines inside the cut item lose its indentation: `3. e` is an item, not text of `2. c`.
+        assertThat(after("1. a\n   1. b\n   2. c\n   3. e\n2. d", "b")).isEqualTo("2) c\n3) e\n\n2. d")
+        // A list of another kind after it needs nothing.
+        assertThat(after("1. a\n   - b\n   - c\n2. d", "b")).isEqualTo("- c\n\n2. d")
+    }
+
+    @Test
+    fun `a part inside a nested list in a quote keeps the quote and drops the item's indentation`() {
+        assertThat(after("> 1. a\n>    1. b\n>    2. c\n> 2. d", "b")).isEqualTo("> 2) c\n>\n> 2. d")
+    }
+
+    @Test
+    fun `bullets two levels deep keep their levels apart with other bullets`() {
+        val fragment = after("- a\n  - b\n    - c\n    - d\n      - x\n  - e\n- f", "c")
+        assertThat(fragment).isEqualTo("- d\n  - x\n+ e\n- f")
+        assertThat(org.evsyukov.post.core.markdown.toPlainText(fragment)).isEqualTo("• d\n  • x\n• e\n• f")
+    }
+
+    @Test
+    fun `a part that starts at an indented marker takes as much indentation off the rest of its list`() {
+        // The break took the three spaces before `- b`; `   - c` would otherwise be a child of `b`.
+        assertThat(after("   - a\n   - b\n     - x\n   - c\n\nEnd.", "a")).isEqualTo("- b\n  - x\n- c\n\nEnd.")
+        // Inside a cut item: `3)` would otherwise be text of item 2, 3 columns into its content.
+        assertThat(after("- a\n     1) b\n     2) c\n     3) d", "b")).isEqualTo("2) c\n3) d")
+    }
+
+    @Test
+    fun `lists of the piece's top level keep their markers in a part`() {
+        // Two lists apart in the piece stay apart in the part as typed: nothing is cut around them.
+        assertThat(after("Intro.\n\n1. a\n2. b\n\nText.\n\n1. c", "Intro.")).isEqualTo("1. a\n2. b\n\nText.\n\n1. c")
+    }
+
+    @Test
     fun `a code block that its list item closes is closed where the item ends`() {
         val text = "- ```\n  one\n  two\n- next"
-        assertThat(after(text, "one")).isEqualTo("  ```\n  two\n  ```\n- next")
+        assertThat(after(text, "one")).isEqualTo("```\ntwo\n```\n- next")
     }
 
     @Test
