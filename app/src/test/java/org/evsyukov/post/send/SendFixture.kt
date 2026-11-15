@@ -12,6 +12,7 @@ import mockwebserver3.MockResponse
 import org.evsyukov.post.PublishTrigger
 import org.evsyukov.post.accounts.AccountSessions
 import org.evsyukov.post.accounts.FakeServers
+import org.evsyukov.post.core.bluesky.IdentityResolver
 import org.evsyukov.post.core.media.Conversion
 import org.evsyukov.post.core.media.MediaKind
 import org.evsyukov.post.core.media.Network
@@ -36,6 +37,8 @@ import org.evsyukov.post.data.settings.Settings
 import org.evsyukov.post.media.convert.ConvertedFile
 import org.evsyukov.post.media.convert.MediaConverter
 import org.evsyukov.post.media.prepare.MediaPreparer
+import org.evsyukov.post.send.bluesky.BlueskyExecutor
+import org.evsyukov.post.send.bluesky.LinkCardSource
 import org.evsyukov.post.text.AndroidTextSegmenter
 import java.io.Closeable
 import java.io.File
@@ -44,8 +47,11 @@ import java.time.ZoneOffset
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicInteger
 
-/** The sender with its real repositories on an in-memory database, and every server on one MockWebServer. */
-class SendFixture : Closeable {
+/**
+ * The sender with its real repositories on an in-memory database, and every server on one MockWebServer.
+ * [withBluesky] also registers the Bluesky executor; without it a Bluesky delivery has no executor.
+ */
+class SendFixture(withBluesky: Boolean = false) : Closeable {
     val context: android.content.Context = ApplicationProvider.getApplicationContext()
     val db = inMemoryDatabase()
     val clock = MutableClock(Instant.parse("2026-11-16T08:00:00Z"))
@@ -77,12 +83,27 @@ class SendFixture : Closeable {
         response
     }.build()
 
+    /** The link cards the Bluesky executor gets; none by default. */
+    var linkCards: LinkCardSource = LinkCardSource { null }
+
+    val blueskyExecutor = BlueskyExecutor(
+        http = dropping,
+        sessions = sessions,
+        accounts = accounts,
+        segmenter = AndroidTextSegmenter(),
+        linkCards = { linkCards.fetch(it) },
+        tempDir = File(filesDir, "cards"),
+        identity = IdentityResolver(dropping, Json { ignoreUnknownKeys = true }),
+        clock = clock,
+        videoPollMillis = 1,
+    )
+
     val publisher = Publisher(
         posts = posts,
         accounts = accounts,
         settings = { settings },
         freezer = PlanFreezer(AndroidTextSegmenter()),
-        executors = listOf(MastodonExecutor(dropping, sessions, accounts, clock, sleep = {})),
+        executors = listOfNotNull(MastodonExecutor(dropping, sessions, accounts, clock, sleep = {}), blueskyExecutor.takeIf { withBluesky }),
         preparer = preparer,
         filesDir = filesDir,
         notifier = notifier,
