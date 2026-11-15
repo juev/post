@@ -223,6 +223,7 @@ private fun ComposerContent(
                 is ComposerModel.SendResult.Blocked -> sheet = Sheet.Details
                 ComposerModel.SendResult.AlreadySending -> Unit
                 ComposerModel.SendResult.Saved -> onExit()
+                ComposerModel.SendResult.NoLongerEditable -> snackbar.showSnackbar(resources.getString(R.string.schedule_edit_not_saved))
                 is ComposerModel.SendResult.Queued -> {
                     if (editing) {
                         onExit()
@@ -391,8 +392,10 @@ private fun ComposerContent(
                 onOptions = { sheet = Sheet.OptionsList },
                 onSaveDraft = {
                     scope.launch {
-                        model.saveDraft()
-                        snackbar.showSnackbar(resources.getString(R.string.composer_draft_saved))
+                        val save = model.keepDraft()
+                        snackbar.showSnackbar(
+                            resources.getString(if (save.keptAsNew) R.string.schedule_edit_kept_as_draft else R.string.composer_draft_saved),
+                        )
                     }
                 },
                 onClear = { clearDialog = true },
@@ -544,7 +547,8 @@ private fun ComposerContent(
                     onClick = {
                         leaving = null
                         scope.launch {
-                            model.saveDraft()
+                            // An edited post that started sending meanwhile is kept as a new draft (Q2).
+                            model.keepDraft()
                             perform(action)
                         }
                     },

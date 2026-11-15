@@ -162,12 +162,19 @@ fun ScheduleScreen(onBack: () -> Unit, onOpenPost: (Long) -> Unit = {}) {
                 OutlinedButton(
                     onClick = {
                         scope.launch {
-                            val moved = container.queueActions.redistribute()
+                            // A post can start sending or leave the queue between the read and the write.
+                            val moved = try {
+                                container.queueActions.redistribute()
+                            } catch (_: org.evsyukov.post.data.posts.PostNotEditable) {
+                                null
+                            } catch (_: org.evsyukov.post.data.posts.PostNotFound) {
+                                null
+                            }
                             snackbar.showSnackbar(
-                                if (moved > 0) {
-                                    resources.getQuantityString(R.plurals.schedule_redistributed, moved, moved)
-                                } else {
-                                    resources.getString(R.string.schedule_nothing_to_redistribute)
+                                when {
+                                    moved == null -> resources.getString(R.string.schedule_queue_changed)
+                                    moved > 0 -> resources.getQuantityString(R.plurals.schedule_redistributed, moved, moved)
+                                    else -> resources.getString(R.string.schedule_nothing_to_redistribute)
                                 },
                             )
                         }

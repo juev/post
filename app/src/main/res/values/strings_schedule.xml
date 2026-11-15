@@ -45,4 +45,7 @@
     <string name="schedule_nothing_to_redistribute">No post needed to move</string>
     <!-- %1$s is the time zone, such as Europe/Moscow (Moscow Standard Time). -->
     <string name="schedule_time_zone">Time zone: %1$s</string>
+    <string name="schedule_edit_not_saved">This post started sending or was deleted, so it was not changed. Your edits stay here as a new post.</string>
+    <string name="schedule_edit_kept_as_draft">This post started sending or was deleted, so your edits were saved as a new draft.</string>
+    <string name="schedule_queue_changed">The queue changed meanwhile. Try again.</string>
 </resources>

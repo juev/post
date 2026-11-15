@@ -43,4 +43,7 @@
     </plurals>
     <string name="schedule_nothing_to_redistribute">Переносить ничего не пришлось</string>
     <string name="schedule_time_zone">Часовой пояс: %1$s</string>
+    <string name="schedule_edit_not_saved">Этот пост уже начал отправляться или удалён, поэтому не изменён. Правки остались здесь как новый пост.</string>
+    <string name="schedule_edit_kept_as_draft">Этот пост уже начал отправляться или удалён, поэтому правки сохранены как новый черновик.</string>
+    <string name="schedule_queue_changed">Очередь за это время изменилась. Попробуйте ещё раз.</string>
 </resources>

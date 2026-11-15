@@ -42,7 +42,7 @@ interface PostsRepository {
      * be updated until its first delivery starts (Q2); its deliveries then follow its targets.
      *
      * @throws PostNotFound for an unknown id.
-     * @throws IllegalStateException when the post can no longer be edited.
+     * @throws PostNotEditable when the post can no longer be edited.
      */
     suspend fun saveDraft(draft: DraftInput): Long
 
@@ -65,7 +65,7 @@ interface PostsRepository {
      * that has not started can be queued again with a new time and targets.
      *
      * @throws IllegalArgumentException when [targets] is empty, repeats an id, or names an unknown account.
-     * @throws IllegalStateException when the post is not a draft or a queued post that has not started.
+     * @throws PostNotEditable when the post is not a draft or a queued post that has not started.
      */
     suspend fun queue(postId: Long, schedule: Schedule, targets: List<Long>)
 
@@ -75,6 +75,8 @@ interface PostsRepository {
      * fails. Returns the id of the post.
      *
      * @throws IllegalArgumentException when the targets are empty, repeat an id, or name an unknown account.
+     * @throws PostNotFound when the draft has an id and no such post exists.
+     * @throws PostNotEditable when the post is not a draft or a queued post that has not started.
      */
     suspend fun saveAndQueue(draft: DraftInput, schedule: Schedule): Long
 
@@ -85,6 +87,8 @@ interface PostsRepository {
      * Sets new times for many posts at once, in one transaction: the result of a reorder (S8),
      * a redistribution (S6), a reschedule (Q6) or Send now (Q3). A held post given a time is queued
      * again. Every post must be queued or held and not started; otherwise nothing changes.
+     *
+     * @throws PostNotFound or [PostNotEditable] when a post is gone or has started.
      */
     suspend fun updateSchedules(changes: Map<Long, Schedule>)
 
@@ -279,7 +283,7 @@ class RoomPostsRepository(
     /** The body of [queue], run inside a transaction. */
     private suspend fun queueInTransaction(postId: Long, schedule: Schedule, targets: List<Long>, now: Long) {
         val post = posts.get(postId) ?: throw PostNotFound(postId)
-        check(post.state == PostState.DRAFT || isWaiting(post)) { "post $postId is ${post.state} and cannot be queued" }
+        if (post.state != PostState.DRAFT && !isWaiting(post)) throw PostNotEditable(postId, "post $postId is ${post.state} and cannot be queued")
         val order = if (post.state == PostState.DRAFT) posts.nextQueueOrder() else post.queueOrder
         val time = ScheduleColumns.of(schedule, zone())
         posts.queue(postId, PostState.QUEUED, time.kind, time.slotLocal, time.sendAt, encodeTargets(targets), order, now)
@@ -295,7 +299,7 @@ class RoomPostsRepository(
         db.withTransaction {
             for ((id, schedule) in changes) {
                 val post = posts.get(id) ?: throw PostNotFound(id)
-                check(isWaiting(post)) { "post $id is ${post.state} or has started and keeps its time" }
+                if (!isWaiting(post)) throw PostNotEditable(id, "post $id is ${post.state} or has started and keeps its time")
                 val time = ScheduleColumns.of(schedule, zone)
                 posts.updateSchedule(id, PostState.QUEUED, time.kind, time.slotLocal, time.sendAt, now)
             }
@@ -528,7 +532,9 @@ class RoomPostsRepository(
     }
 
     private suspend fun checkEditable(post: PostEntity) {
-        check(post.state == PostState.DRAFT || isWaiting(post)) { "post ${post.id} is ${post.state} and can no longer be edited" }
+        if (post.state != PostState.DRAFT && !isWaiting(post)) {
+            throw PostNotEditable(post.id, "post ${post.id} is ${post.state} and can no longer be edited")
+        }
     }
 
     /** Queued or held, and no delivery has made an attempt yet. */

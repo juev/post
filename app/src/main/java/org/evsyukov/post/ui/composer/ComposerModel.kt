@@ -34,6 +34,8 @@ import org.evsyukov.post.data.posts.AccountPostOptions
 import org.evsyukov.post.data.posts.Attachment
 import org.evsyukov.post.data.posts.DraftInput
 import org.evsyukov.post.data.posts.PollDraft
+import org.evsyukov.post.data.posts.PostNotEditable
+import org.evsyukov.post.data.posts.PostNotFound
 import org.evsyukov.post.data.posts.PostOptions
 import org.evsyukov.post.data.posts.Schedule
 import org.evsyukov.post.data.settings.Settings
@@ -289,7 +291,23 @@ class ComposerModel(private val container: AppContainer, initialDraftId: Long?) 
      * edit can land meanwhile: the read-back only gives ids to the saved files and keeps everything else as it
      * is now, and what came in meanwhile stays unsaved.
      */
-    suspend fun saveDraft(): Long {
+    suspend fun saveDraft(): Long = keepDraft().id
+
+    /** The outcome of a draft save: the id, and whether the edits went into a new draft (see [keepDraft]). */
+    data class DraftSave(val id: Long, val keptAsNew: Boolean)
+
+    /**
+     * [saveDraft] for Save draft and for keeping the draft on leave. When the post being edited started
+     * sending or was deleted meanwhile (Q2), the composer lets go of it ([detach]) and saves the edits as a
+     * new draft, so they are not lost.
+     */
+    suspend fun keepDraft(): DraftSave {
+        var id = 0L
+        if (saveOrDetach { id = writeDraft() }) return DraftSave(id, keptAsNew = false)
+        return DraftSave(writeDraft(), keptAsNew = true)
+    }
+
+    private suspend fun writeDraft(): Long {
         val input = draftInput()
         val snapshot = content()
         val id = container.posts.saveDraft(input)
@@ -297,6 +315,19 @@ class ComposerModel(private val container: AppContainer, initialDraftId: Long?) 
         container.posts.get(id)?.let { attachments = withSavedIds(attachments, it.attachments) }
         saved = snapshot
         return id
+    }
+
+    /**
+     * Lets go of a post that can no longer be changed: its first delivery started or it was deleted while
+     * the composer had it open (Q2). The text and options stay as a new, unsaved post. The attachments saved
+     * with the old post stay with it (they are being sent, or were deleted with it); those added since stay
+     * here. An import still running belongs to this composer and lands here too.
+     */
+    private fun detach() {
+        draftId = null
+        editingQueued = false
+        attachments = attachments.filter { it.id < 0 }
+        saved = null
     }
 
     /**
@@ -471,6 +502,12 @@ class ComposerModel(private val container: AppContainer, initialDraftId: Long?) 
 
         /** Another send of this composer was still running; nothing was done. */
         data object AlreadySending : SendResult
+
+        /**
+         * The post started sending or was deleted while it was edited, so it was not changed (Q2). The
+         * composer let go of it: the edits stay on screen as a new, unsaved post.
+         */
+        data object NoLongerEditable : SendResult
     }
 
     /**
@@ -493,18 +530,31 @@ class ComposerModel(private val container: AppContainer, initialDraftId: Long?) 
             if (blocked.isNotEmpty()) return SendResult.Blocked(blocked)
             if (editingQueued && schedule == null) {
                 // Q2: the limits were checked again above; saving keeps the post's time and queue place.
-                container.posts.saveDraft(draftInput())
+                if (!saveOrDetach { container.posts.saveDraft(draftInput()) }) return SendResult.NoLongerEditable
                 startNew()
                 return SendResult.Saved
             }
             val time = schedule ?: Schedule.Now(Instant.now())
-            container.posts.saveAndQueue(draftInput(), time)
+            if (!saveOrDetach { container.posts.saveAndQueue(draftInput(), time) }) return SendResult.NoLongerEditable
             container.publishTrigger.publishNow()
             startNew()
             return SendResult.Queued(input.targets.size, time)
         } finally {
             sending = false
         }
+    }
+
+    /** Runs [save]; false, with the composer let go of the post ([detach]), when the post can no longer be changed. */
+    private suspend fun saveOrDetach(save: suspend () -> Unit): Boolean {
+        try {
+            save()
+            return true
+        } catch (_: PostNotEditable) {
+            detach()
+        } catch (_: PostNotFound) {
+            detach()
+        }
+        return false
     }
 
     companion object {
