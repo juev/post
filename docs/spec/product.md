@@ -40,7 +40,7 @@ Android 13 (API 33) and newer. Kotlin, Jetpack Compose, Room, WorkManager, as in
 - R1. The user adds any number of accounts in each network and removes them. A removed account leaves its pending deliveries marked failed with the reason "account removed".
 - R2. Each account shows its avatar, display name, handle and network. The user sets a short label for it, shown in the target picker.
 - R3. Accounts belong to a network type through a single interface (publish, upload media, read limits, verify credentials). Adding a third network does not change the queue, composer or share flow.
-- R4. Sign-in follows the network's method from networks.md: OAuth for Mastodon, an app password for Bluesky in the first version, Bluesky OAuth later. Tokens are stored encrypted with a key in Android Keystore. They are never logged and never sent to any host other than the account's server.
+- R4. Sign-in follows the network's method from networks.md: OAuth for Mastodon and an app password for Bluesky; Bluesky OAuth is not planned for now (networks.md, N14). Tokens are stored encrypted with a key in Android Keystore. They are never logged and never sent to any host other than the account's server.
 - R5. When a server rejects the credentials, the account is marked "needs sign-in", its deliveries stop with that reason, and a notification asks to sign in again. Signing in again resumes them.
 
 ### Composer
@@ -97,7 +97,8 @@ Detailed rules are in [scheduling.md](scheduling.md).
 - R33. Material 3 with dynamic color and a dark theme. Every control has a screen reader label.
 - R34. The app sends no analytics. It talks only to:
   - the account servers (Mastodon instances, Bluesky PDSes);
-  - for Bluesky sign-in and mentions: `public.api.bsky.app` to resolve handles, `plc.directory` or the `did:web` domain for DID documents, and the handle's domain for `/.well-known/atproto-did`;
+  - for avatars (R2): the image addresses the account servers return, often a separate media host such as `cdn.bsky.app`;
+  - for Bluesky sign-in and mentions: `public.api.bsky.app` to resolve handles and read the signed-in account's public profile, `plc.directory` or the `did:web` domain for DID documents, and the handle's domain for `/.well-known/atproto-did`;
   - for Bluesky video: `video.bsky.app`;
   - for Bluesky link cards: the linked page and its preview image.
 - R35. Interface languages: English and Russian.

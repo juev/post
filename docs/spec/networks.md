@@ -42,7 +42,7 @@ Instances and forks change the limits: glitch-soc and Hometown read the text lim
 
 ### Sign-in
 
-- N4. Post registers itself on the instance with `POST /api/v1/apps` once per instance, with the redirect URI `org.evsyukov.post://oauth/mastodon` and scopes `write:statuses write:media profile` (`read:accounts` instead of `profile` before 4.3).
+- N4. Post registers itself on the instance with `POST /api/v1/apps` once per instance, with the redirect URI `org.evsyukov.post://oauth/mastodon` and scopes `write:statuses write:media read:statuses profile` (`read:accounts` instead of `profile` before 4.3). `read:statuses` lets Post find its own status after a lost answer (N12).
 - N5. Authorization uses the code flow in a Custom Tab, with PKCE S256 on 4.3+. Tokens do not expire and there is no refresh token. Removing an account calls `POST /oauth/revoke`.
 - N6. `GET /api/v1/accounts/verify_credentials` gives the account's name, handle and avatar.
 
