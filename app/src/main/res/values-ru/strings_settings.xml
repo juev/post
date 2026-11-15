@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Настройки → По умолчанию -->
+    <string name="defaults_targets">Адресаты по умолчанию</string>
+    <string name="defaults_targets_summary">Выбраны в новом черновике и получают «Отправить сейчас» из «Поделиться», в этом порядке.</string>
+    <string name="defaults_targets_empty">Аккаунтов пока нет. Добавьте аккаунт в разделе «Аккаунты», чтобы выбрать адресатов.</string>
+    <string name="defaults_target_move_up">Переместить %1$s выше</string>
+    <string name="defaults_target_move_down">Переместить %1$s ниже</string>
+    <string name="defaults_share_action">Действие «Поделиться»</string>
+    <string name="defaults_share_action_summary">Действие, которое выделено в окне «Поделиться».</string>
+    <string name="share_action_composer">Открыть редактор</string>
+    <string name="share_action_send_now">Отправить сейчас</string>
+    <string name="share_action_send_later">Отправить позже</string>
+    <string name="defaults_media">Медиа</string>
+    <string name="defaults_require_alt">Требовать описание</string>
+    <string name="defaults_require_alt_summary">Пост с картинкой или видео без описания не отправится.</string>
+    <string name="defaults_too_many_files">Файлов больше, чем принимает сеть</string>
+    <string name="defaults_unsupported_type">Тип файла, который сеть не принимает</string>
+    <string name="fix_ask">Спрашивать</string>
+    <string name="fix_move_to_reply">Перенести лишние файлы в ответ</string>
+    <string name="fix_send_without_file">Отправить без файла</string>
+    <string name="defaults_bluesky_links">Bluesky: ссылки Markdown</string>
+    <string name="defaults_bluesky_links_summary">Как ссылка вида [текст](адрес) выглядит в Bluesky.</string>
+    <string name="bluesky_links_facet">Текст ссылки как ссылка</string>
+    <string name="bluesky_links_short_url">Текст и короткий адрес</string>
+    <string name="bluesky_links_short_url_example">текст (example.com/page)</string>
+
+    <!-- Настройки → Отправка -->
+    <string name="sending_notifications">Уведомления</string>
+    <string name="sending_success_notifications">Итог успешной отправки</string>
+    <string name="sending_success_notifications_summary">Уведомление, когда пост опубликован у всех адресатов.</string>
+    <string name="sending_system_notifications">Системные настройки уведомлений</string>
+    <string name="sending_system_notifications_summary">Звуки, каналы и разрешение для Post</string>
+    <string name="sending_history">История отправленного</string>
+    <string name="sending_history_summary">Сколько вкладка «Отправленные» хранит запись. Короткий срок удалит и старые записи.</string>
+    <string name="history_off">Не хранить</string>
+    <string name="history_days_7">7 дней</string>
+    <string name="history_days_30">30 дней</string>
+    <string name="history_days_90">90 дней</string>
+    <string name="sending_late_threshold">Порог опоздания</string>
+    <string name="sending_late_threshold_summary">Пост, чьё время прошло раньше этого срока, ждёт вашего решения, а не уходит сам.</string>
+    <string name="late_minutes_15">15 минут</string>
+    <string name="late_minutes_30">30 минут</string>
+    <string name="late_hour_1">1 час</string>
+    <string name="late_hours_3">3 часа</string>
+    <string name="sending_threads">Треды</string>
+    <string name="sending_number_parts">Нумеровать части треда</string>
+    <string name="sending_number_parts_summary">Добавляет 1/3, 2/3, 3/3 в конец каждой части.</string>
+    <string name="sending_media">Медиа</string>
+    <string name="sending_video_quality">Качество перекодирования видео</string>
+    <string name="video_quality_standard">Обычное</string>
+    <string name="video_quality_standard_summary">Файлы меньше и загружаются быстрее</string>
+    <string name="video_quality_high">Высокое</string>
+    <string name="video_quality_high_summary">Больше деталей, файлы крупнее, но в пределах лимита сети</string>
+    <string name="sending_keep_metadata">Сохранять метаданные картинок</string>
+    <string name="sending_keep_metadata_summary">Если выключено, геопозиция и другие данные EXIF удаляются перед загрузкой.</string>
+
+    <!-- Настройки → О приложении -->
+    <string name="about_icon">Значок Post</string>
+    <string name="about_version">Версия %1$s (%2$d)</string>
+    <string name="about_tagline">Публикует в Bluesky и Mastodon из одного редактора.</string>
+    <string name="about_source">Исходный код</string>
+    <string name="about_privacy">О приватности</string>
+    <string name="about_license">Лицензия</string>
+    <string name="about_license_mit">MIT</string>
+</resources>
