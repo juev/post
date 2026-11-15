@@ -19,6 +19,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.List
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.PriorityHigh
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.AlertDialog
@@ -52,6 +53,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.MaterialTheme
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -60,6 +63,8 @@ import org.evsyukov.post.R
 import org.evsyukov.post.core.markdown.HighlightSpan
 import org.evsyukov.post.core.markdown.highlight
 import org.evsyukov.post.data.posts.Schedule
+import org.evsyukov.post.ui.schedule.SendLaterSheet
+import org.evsyukov.post.ui.schedule.rememberSendLaterOptions
 import org.evsyukov.post.ui.LocalAppContainer
 import java.time.Instant
 import java.time.ZoneId
@@ -70,6 +75,7 @@ object ComposerTags {
     const val SCREEN = "composer"
     const val POSTS = "composer-posts"
     const val POSTS_BADGE = "composer-posts-badge"
+    const val POSTS_LATE_BADGE = "composer-posts-late-badge"
     const val SETTINGS = "composer-settings"
     const val MORE = "composer-more"
     const val SCHEDULE = "composer-schedule"
@@ -175,6 +181,7 @@ private fun ComposerContent(
     val accounts by model.accounts.collectAsStateWithLifecycle()
     val settings by model.settings.collectAsStateWithLifecycle()
     val queueCount by model.queueCount.collectAsStateWithLifecycle()
+    val lateCount by model.lateCount.collectAsStateWithLifecycle()
 
     var topMenu by rememberSaveable { mutableStateOf(false) }
     var sheet by remember { mutableStateOf<Sheet?>(null) }
@@ -213,9 +220,14 @@ private fun ComposerContent(
             when (val result = model.send(schedule)) {
                 is ComposerModel.SendResult.Blocked -> sheet = Sheet.Details
                 ComposerModel.SendResult.AlreadySending -> Unit
+                ComposerModel.SendResult.Saved -> onExit()
                 is ComposerModel.SendResult.Queued -> {
                     askNotificationsOnce()
                     val message = when (val time = result.schedule) {
+                        is Schedule.Slot -> resources.getString(
+                            R.string.composer_queued_for,
+                            DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM, FormatStyle.SHORT).format(time.local),
+                        )
                         is Schedule.Explicit -> resources.getString(
                             R.string.composer_queued_for,
                             DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM, FormatStyle.SHORT)
@@ -249,14 +261,24 @@ private fun ComposerContent(
             TopAppBar(
                 title = { Text(stringResource(R.string.app_name)) },
                 actions = {
-                    val postsLabel = if (queueCount > 0) {
+                    val postsLabel = if (lateCount > 0) {
+                        pluralStringResource(R.plurals.schedule_late_title, lateCount, lateCount)
+                    } else if (queueCount > 0) {
                         pluralStringResource(R.plurals.composer_posts_queued, queueCount, queueCount)
                     } else {
                         stringResource(R.string.posts)
                     }
                     IconButton(onClick = { guard(LeaveAction.POSTS) }, modifier = Modifier.testTag(ComposerTags.POSTS)) {
                         BadgedBox(badge = {
-                            if (queueCount > 0) Badge(Modifier.testTag(ComposerTags.POSTS_BADGE)) { Text(queueCount.toString()) }
+                            // Q7: a warning while the Late group is not empty, else the number of queued posts.
+                            if (lateCount > 0) {
+                                Badge(
+                                    containerColor = MaterialTheme.colorScheme.error,
+                                    modifier = Modifier.testTag(ComposerTags.POSTS_LATE_BADGE),
+                                ) { Icon(Icons.Filled.PriorityHigh, contentDescription = null, modifier = Modifier.size(10.dp)) }
+                            } else if (queueCount > 0) {
+                                Badge(Modifier.testTag(ComposerTags.POSTS_BADGE)) { Text(queueCount.toString()) }
+                            }
                         }) {
                             Icon(Icons.AutoMirrored.Outlined.List, contentDescription = postsLabel)
                         }
@@ -383,6 +405,7 @@ private fun ComposerContent(
                         else -> sheet = Sheet.Details
                     }
                 },
+                savesQueued = model.editingQueued,
             )
         }
     }
@@ -464,17 +487,29 @@ private fun ComposerContent(
         )
     }
     if (sendLater) {
-        SendLaterPicker(
-            onPick = { at ->
-                sendLater = false
-                if (at.isAfter(Instant.now())) {
-                    send(Schedule.Explicit(at))
-                } else {
-                    scope.launch { snackbar.showSnackbar(resources.getString(R.string.composer_time_in_past)) }
-                }
-            },
-            onDismiss = { sendLater = false },
-        )
+        val options = rememberSendLaterOptions(except = model.draftId)
+        if (options != null) {
+            SendLaterSheet(
+                options = options,
+                onSlot = { local ->
+                    sendLater = false
+                    send(Schedule.Slot(local))
+                },
+                onTime = { at ->
+                    sendLater = false
+                    if (at.isAfter(Instant.now())) {
+                        send(Schedule.Explicit(at))
+                    } else {
+                        scope.launch { snackbar.showSnackbar(resources.getString(R.string.composer_time_in_past)) }
+                    }
+                },
+                onOpenSchedule = {
+                    sendLater = false
+                    onOpenSchedule()
+                },
+                onDismiss = { sendLater = false },
+            )
+        }
     }
     if (clearDialog) {
         AlertDialog(

@@ -123,6 +123,15 @@ class ComposerModel(private val container: AppContainer, initialDraftId: Long?) 
     val accounts: StateFlow<List<Account>?> = container.accounts.observe().stateIn(viewModelScope, SharingStarted.Eagerly, null)
     val settings: StateFlow<Settings?> = container.settings.settings.stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
+    /** A queued post is being edited: Send saves it and keeps its time (R25, Q2). */
+    var editingQueued by mutableStateOf(false)
+        private set
+
+    /** Posts in the Late group, for the warning badge on Posts (scheduling.md Q7). */
+    val lateCount: StateFlow<Int> = container.posts.observeQueue()
+        .map { list -> list.count { it.state == org.evsyukov.post.data.db.PostState.HELD } }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, 0)
+
     /** Posts waiting in the queue, for the badge on Posts. */
     val queueCount: StateFlow<Int> = container.posts.observeQueue().map { it.size }.stateIn(viewModelScope, SharingStarted.Eagerly, 0)
 
@@ -196,6 +205,7 @@ class ComposerModel(private val container: AppContainer, initialDraftId: Long?) 
             newDraft(accounts, settings)
         } else {
             draftId = post.id
+            editingQueued = post.state == org.evsyukov.post.data.db.PostState.QUEUED || post.state == org.evsyukov.post.data.db.PostState.HELD
             text.setTextAndPlaceCursorAtEnd(post.text)
             spoiler.setTextAndPlaceCursorAtEnd(post.options.spoilerText)
             spoilerShown = post.options.spoilerText.isNotEmpty()
@@ -213,6 +223,7 @@ class ComposerModel(private val container: AppContainer, initialDraftId: Long?) 
     /** An empty draft with the default targets (R16) and the defaults of the first of them (R17). */
     private fun newDraft(accounts: List<Account>, settings: Settings) {
         draftGeneration++
+        editingQueued = false
         val existing = accounts.associateBy { it.id }
         val defaults = settings.defaultTargets.filter { it in existing }
         val selected = defaults.mapNotNull { existing[it] }
@@ -455,6 +466,9 @@ class ComposerModel(private val container: AppContainer, initialDraftId: Long?) 
         data class Blocked(val blockers: List<Blocker>) : SendResult
         data class Queued(val accounts: Int, val schedule: Schedule) : SendResult
 
+        /** A queued post was edited and saved; it keeps its time (R25, Q2). */
+        data object Saved : SendResult
+
         /** Another send of this composer was still running; nothing was done. */
         data object AlreadySending : SendResult
     }
@@ -477,6 +491,12 @@ class ComposerModel(private val container: AppContainer, initialDraftId: Long?) 
             val media = mediaOf(input, list, settings)
             val blocked = blockers(input.targets, input.text, fresh, poll, pollLimits(), attachments, media, settings.requireAltText, importing > 0)
             if (blocked.isNotEmpty()) return SendResult.Blocked(blocked)
+            if (editingQueued && schedule == null) {
+                // Q2: the limits were checked again above; saving keeps the post's time and queue place.
+                container.posts.saveDraft(draftInput())
+                startNew()
+                return SendResult.Saved
+            }
             val time = schedule ?: Schedule.Now(Instant.now())
             container.posts.saveAndQueue(draftInput(), time)
             container.publishTrigger.publishNow()
