@@ -116,6 +116,11 @@ class AppSettings(scope: CoroutineScope, produceFile: () -> File) {
     suspend fun current(): Settings = settings.first()
 
     suspend fun setDefaultTargets(accountIds: List<Long>) = edit { it[DEFAULT_TARGETS] = encodeIds(accountIds) }
+
+    /** Replaces the default targets by [change] of the stored ones in one write, so quick taps do not lose one another. */
+    suspend fun updateDefaultTargets(change: (List<Long>) -> List<Long>) = edit {
+        it[DEFAULT_TARGETS] = encodeIds(change(decodeIds(it[DEFAULT_TARGETS]) ?: emptyList()))
+    }
     suspend fun setShareAction(value: ShareAction) = edit { it[SHARE_ACTION] = value.name }
     suspend fun setRequireAltText(value: Boolean) = edit { it[REQUIRE_ALT_TEXT] = value }
     suspend fun setDefaultFixTooManyFiles(value: TooManyFilesDefault) = edit { it[FIX_TOO_MANY_FILES] = value.name }

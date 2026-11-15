@@ -48,15 +48,15 @@ data class AddBlueskyKey(val accountId: Long? = null, val handle: String = "") :
 @Serializable
 data class AccountDetailsKey(val accountId: Long) : NavKey
 
-/** Settings → Defaults (completed in step 12). */
+/** Settings → Defaults. */
 @Serializable
 data object DefaultsSettingsKey : NavKey
 
-/** Settings → Sending (completed in step 12). */
+/** Settings → Sending. */
 @Serializable
 data object SendingSettingsKey : NavKey
 
-/** Settings → About (completed in step 12). */
+/** Settings → About. */
 @Serializable
 data object AboutKey : NavKey
 

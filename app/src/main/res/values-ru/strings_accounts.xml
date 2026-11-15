@@ -10,7 +10,6 @@
     <string name="settings_schedule_summary">Недельные слоты для «Отправить позже»</string>
     <string name="settings_about">О приложении</string>
     <string name="settings_about_summary">Версия, исходный код, приватность</string>
-    <string name="settings_placeholder">Этот раздел появится в этой версии.</string>
 
     <!-- Accounts list -->
     <string name="network_mastodon">Mastodon</string>

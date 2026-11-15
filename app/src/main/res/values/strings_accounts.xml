@@ -10,7 +10,6 @@
     <string name="settings_schedule_summary">Weekly slots for Send later</string>
     <string name="settings_about">About</string>
     <string name="settings_about_summary">Version, source code, privacy</string>
-    <string name="settings_placeholder">This section is coming in this version.</string>
 
     <!-- Accounts list -->
     <string name="network_mastodon">Mastodon</string>

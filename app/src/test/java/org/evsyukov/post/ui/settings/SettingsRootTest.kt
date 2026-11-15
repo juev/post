@@ -1,18 +1,25 @@
 package org.evsyukov.post.ui.settings
 
+import android.content.Context
 import androidx.activity.ComponentActivity
 import androidx.annotation.StringRes
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import org.evsyukov.post.AppContainer
 import org.evsyukov.post.R
+import org.evsyukov.post.data.FakeCipher
+import org.evsyukov.post.ui.LocalAppContainer
 import org.evsyukov.post.ui.PostApp
 import org.evsyukov.post.ui.schedule.ScheduleTags
 import org.evsyukov.post.ui.theme.PostTheme
+import org.junit.After
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -24,10 +31,17 @@ class SettingsRootTest {
     @get:Rule
     val compose = createAndroidComposeRule<ComponentActivity>()
 
+    private val container = AppContainer(ApplicationProvider.getApplicationContext<Context>()) { FakeCipher() }
+
     @Before
     fun setUp() {
-        compose.setContent { PostTheme { PostApp() } }
+        compose.setContent { CompositionLocalProvider(LocalAppContainer provides container) { PostTheme { PostApp() } } }
         compose.onNodeWithContentDescription(string(R.string.settings)).performClick()
+    }
+
+    @After
+    fun tearDown() {
+        if (container.database.isOpen) container.database.close()
     }
 
     @Test
@@ -46,7 +60,6 @@ class SettingsRootTest {
         )) {
             compose.onNodeWithTag(row).performClick()
             compose.onNodeWithTag(screen).assertIsDisplayed()
-            compose.onNodeWithText(string(R.string.settings_placeholder)).assertIsDisplayed()
             compose.onNodeWithContentDescription(string(R.string.back)).performClick()
             compose.waitForIdle()
             compose.onNodeWithTag(SettingsTags.SCREEN).assertIsDisplayed()
