@@ -85,6 +85,26 @@ class MastodonErrorsTest {
         assertThat(createFails(json("""{"error":"Your login is currently disabled"}""", 403)).isUnauthorized).isFalse()
     }
 
+    // R5 on Pleroma and Akkoma: an unknown or revoked token leaves the request without a user, and
+    // EnsureAuthenticatedPlug answers 403 "Invalid credentials." (Akkoma develop, router.ex
+    // pipeline :authenticated_api, ensure_authenticated_plug.ex).
+    @Test
+    fun pleromaAndAkkomaInvalidCredentialsIsUnauthorized() {
+        val e = createFails(json("""{"error":"Invalid credentials.","identifier":""}""", 403))
+        assertThat(e.flags()).containsExactly(true, false, false, false, false, false).inOrder()
+
+        server.enqueue(json("""{"error":"Invalid credentials."}""", 403))
+        assertThat(failing { client.verifyCredentials(token) }.isUnauthorized).isTrue()
+
+        // The same plug's other refusal is not about the token.
+        val twoFactor = createFails(json("""{"error":"Two-factor authentication enabled, you must use a access token."}""", 403))
+        assertThat(twoFactor.isUnauthorized).isFalse()
+        // Akkoma's answer to a failed code exchange is a 400 and stays a plain error (see isInvalidClient).
+        server.enqueue(json("""{"error":"Invalid credentials"}""", 400))
+        val exchange = failing { client.exchangeCode("cid", "csecret", REDIRECT_URI, "code", "verifier", "read") }
+        assertThat(exchange.flags()).containsExactly(false, false, false, false, false, false)
+    }
+
     // Before 4.3 a server could remove the app registration; the app then registers again.
     @Test
     fun invalidClientOnTokenExchangeIsReportedAndCarriesNoSecrets() {
@@ -183,6 +203,51 @@ class MastodonErrorsTest {
 
         val none = createFails(MockResponse.Builder().code(429).setHeader("Retry-After", "soon").build()) as MastodonException.Http
         assertThat(none.retryAfterSeconds).isNull()
+    }
+
+    // Mastodon sends X-RateLimit-* with every rate-limited API answer (Api::RateLimitHeaders); for
+    // creating a status the reset ends the 3-hour window of the statuses family (RateLimiter). A
+    // repeat with the same Idempotency-Key while the first request runs gets 503 (RaceConditionError).
+    @Test
+    fun rateLimitResetOfAnAnswerOtherThan429IsNotARetryHint() {
+        fun answer(code: Int) = MockResponse.Builder().code(code)
+            .setHeader("Date", "Sun, 15 Nov 2026 12:00:00 GMT")
+            .setHeader("X-RateLimit-Limit", "300")
+            .setHeader("X-RateLimit-Remaining", "250")
+            .setHeader("X-RateLimit-Reset", "2026-11-15T15:00:00.000000Z")
+            .body("""{"error":"There was a temporary problem serving your request, please try again"}""")
+
+        val busy = createFails(answer(503).build()) as MastodonException.Http
+        assertThat(busy.isTransient).isTrue()
+        assertThat(busy.retryAfterSeconds).isNull()
+        assertThat((createFails(answer(422).build()) as MastodonException.Http).retryAfterSeconds).isNull()
+        assertThat((createFails(answer(401).build()) as MastodonException.Http).retryAfterSeconds).isNull()
+
+        // Retry-After keeps its meaning with any status.
+        val withRetryAfter = createFails(answer(503).setHeader("Retry-After", "30").build()) as MastodonException.Http
+        assertThat(withRetryAfter.retryAfterSeconds).isEqualTo(30)
+        // The same headers on a 429 give the time to the reset.
+        assertThat((createFails(answer(429).build()) as MastodonException.Http).retryAfterSeconds).isEqualTo(10_800)
+    }
+
+    // A broken header must not escape as an unchecked java.time exception.
+    @Test
+    fun outOfRangeRateLimitHeadersGiveNoHintInsteadOfACrash() {
+        fun reset(value: String) = createFails(MockResponse.Builder().code(429).setHeader("X-RateLimit-Reset", value).build())
+
+        val beyondInstant = reset("99999999999999999")
+        assertThat(beyondInstant).isInstanceOf(MastodonException.Http::class.java)
+        assertThat((beyondInstant as MastodonException.Http).retryAfterSeconds).isNull()
+        assertThat(beyondInstant.isRateLimited).isTrue()
+
+        // Inside the range of Instant, but too far for milliseconds in a Long.
+        val farEpoch = reset("9999999999999999") as MastodonException.Http
+        assertThat(farEpoch.retryAfterSeconds).isEqualTo(9_999_999_999_999_999L - now.epochSecond)
+        val farDate = reset("+999999999-12-31T23:59:59Z") as MastodonException.Http
+        assertThat(farDate.retryAfterSeconds).isGreaterThan(0L)
+
+        val longOverflow = createFails(MockResponse.Builder().code(429).setHeader("Retry-After", "99999999999999999999").build())
+        assertThat((longOverflow as MastodonException.Http).retryAfterSeconds).isNull()
     }
 
     @Test

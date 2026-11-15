@@ -47,7 +47,7 @@ class MastodonClientTest {
         assertThat(request.headers["Authorization"]).isNull()
         assertThat(instance.domain).isEqualTo("mastodon.social")
         assertThat(instance.configuration!!.statuses!!.maxCharacters).isEqualTo(500)
-        assertThat(instance.configuration!!.mediaAttachments!!.videoSizeLimit).isEqualTo(103_809_024)
+        assertThat(instance.configuration.mediaAttachments!!.videoSizeLimit).isEqualTo(103_809_024)
         assertThat(instance.apiVersions!!.mastodon).isEqualTo(7)
     }
 
@@ -135,6 +135,42 @@ class MastodonClientTest {
         server.enqueue(json("""{"error":"boom"}""", 500))
         val e = assertThrows(MastodonException.Http::class.java) { runBlocking { client.authorizationServerMetadata() } }
         assertThat(e.status).isEqualTo(500)
+    }
+
+    // Akkoma develop sends unknown /.well-known/ paths to its web app page: router.ex
+    // `get("/*path", RedirectController, :redirector_with_preload)`, which answers 200 text/html.
+    // Without metadata Post asks for read:accounts (networks.md N4), so sign-in must go on.
+    @Test
+    fun authorizationServerMetadataIsNullForAnAkkomaHtmlPage() = runBlocking<Unit> {
+        server.enqueue(html(AKKOMA_INDEX_HTML))
+        val meta = client.authorizationServerMetadata()
+        assertThat(meta).isNull()
+        assertThat(scopesFor(meta)).isEqualTo("write:statuses write:media read:statuses read:accounts")
+
+        server.enqueue(json("""{"error":"Gone"}""", 410))
+        assertThat(client.authorizationServerMetadata()).isNull()
+
+        // A JSON answer that is not the document: an array, or scopes_supported of the wrong type.
+        server.enqueue(json("""["profile"]"""))
+        assertThat(client.authorizationServerMetadata()).isNull()
+        server.enqueue(json("""{"scopes_supported":"profile"}"""))
+        assertThat(client.authorizationServerMetadata()).isNull()
+
+        // A server that is down is not a server without metadata.
+        server.enqueue(html(AKKOMA_INDEX_HTML, 503))
+        assertThat(assertThrows(MastodonException::class.java) { runBlocking { client.authorizationServerMetadata() } }.isTransient).isTrue()
+    }
+
+    // The same fallback page on either NodeInfo request means no NodeInfo.
+    @Test
+    fun nodeInfoIsNullForAnHtmlPage() = runBlocking<Unit> {
+        server.enqueue(html(AKKOMA_INDEX_HTML))
+        assertThat(client.nodeInfo()).isNull()
+
+        server.enqueue(json("""{"links":[{"rel":"http://nodeinfo.diaspora.software/ns/schema/2.1","href":"/nodeinfo/2.1.json"}]}"""))
+        server.enqueue(html(AKKOMA_INDEX_HTML))
+        assertThat(client.nodeInfo()).isNull()
+        assertThat(server.requestCount).isEqualTo(3)
     }
 
     // ---- Sign-in ----
@@ -505,6 +541,28 @@ class MastodonClientTest {
         client.deleteStatus(token, "../../oauth/revoke")
 
         assertThat(take().target).isEqualTo("/api/v1/statuses/..%2F..%2Foauth%2Frevoke")
+    }
+
+    // OkHttp resolves "." and ".." even as one segment: DELETE /api/v1/statuses/.. would go to /api/v1/.
+    // An empty id would address the collection, and a 404 there would read as "already gone".
+    @Test
+    fun dotAndEmptyIdsAreRefusedBeforeAnyRequest() {
+        for (id in listOf("", ".", "..")) {
+            assertThrows(IllegalArgumentException::class.java) { runBlocking { client.deleteStatus(token, id) } }
+            assertThrows(IllegalArgumentException::class.java) { runBlocking { client.editStatus(token, id, StatusEditParams(status = "x")) } }
+            assertThrows(IllegalArgumentException::class.java) { runBlocking { client.getMedia(token, id) } }
+            assertThrows(IllegalArgumentException::class.java) { runBlocking { client.updateMedia(token, id, "alt", null) } }
+            assertThrows(IllegalArgumentException::class.java) { runBlocking { client.deleteMedia(token, id) } }
+            assertThrows(IllegalArgumentException::class.java) { runBlocking { client.accountStatuses(token, id) } }
+        }
+        assertThat(server.requestCount).isEqualTo(0)
+    }
+
+    @Test
+    fun idsWithDotsInsideStayOneSegment() = runBlocking<Unit> {
+        server.enqueue(json("{}", 404))
+        client.deleteStatus(token, "...")
+        assertThat(take().target).isEqualTo("/api/v1/statuses/...")
     }
 
     @Test

@@ -14,6 +14,16 @@ import java.net.URLDecoder
 internal fun json(body: String, code: Int = 200): MockResponse =
     MockResponse.Builder().code(code).setHeader("Content-Type", "application/json; charset=utf-8").body(body).build()
 
+/** An HTML answer with the given status. */
+internal fun html(body: String, code: Int = 200): MockResponse =
+    MockResponse.Builder().code(code).setHeader("Content-Type", "text/html; charset=utf-8").body(body).build()
+
+/** The start of the web app page Akkoma serves for unknown paths (RedirectController, index.html). */
+internal val AKKOMA_INDEX_HTML = """
+    <!doctype html><html lang="en"><head><meta charset="utf-8"><title>Akkoma</title></head>
+    <body><noscript>To use Akkoma, please enable JavaScript.</noscript><div id="app"></div></body></html>
+""".trimIndent()
+
 internal fun fixture(name: String): String =
     requireNotNull(MastodonCapabilitiesTest::class.java.getResource("/mastodon/$name")) { "fixture $name" }.readText()
 
