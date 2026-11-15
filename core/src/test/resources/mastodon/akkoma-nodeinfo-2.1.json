@@ -1,0 +1,10 @@
+{
+  "_source": "Akkoma 3e9ad30e lib/pleroma/web/nodeinfo/nodeinfo.ex: metadata.postFormats from allowed_post_formats; here an admin who left only text/plain and text/markdown",
+  "version": "2.1",
+  "software": {"name": "akkoma", "version": "3.15.2", "repository": "https://akkoma.dev/AkkomaGang/akkoma"},
+  "protocols": ["activitypub"],
+  "services": {"inbound": [], "outbound": []},
+  "openRegistrations": false,
+  "usage": {"users": {"total": 3}, "localPosts": 100},
+  "metadata": {"nodeName": "Akkoma example", "postFormats": ["text/plain", "text/markdown"], "features": ["pleroma_api", "mastodon_api"]}
+}

@@ -1,0 +1,18 @@
+{
+  "_source": "Pleroma cf6b7096 lib/pleroma/web/nodeinfo/nodeinfo.ex get_nodeinfo(2.1): software name/version/repository, metadata.postFormats",
+  "version": "2.1",
+  "software": {"name": "pleroma", "version": "2.9.1", "repository": "https://git.pleroma.social/pleroma/pleroma"},
+  "protocols": ["activitypub"],
+  "services": {"inbound": [], "outbound": []},
+  "openRegistrations": true,
+  "usage": {"users": {"total": 3, "activeMonth": 3, "activeHalfyear": 3}, "localPosts": 100},
+  "metadata": {
+    "nodeName": "Pleroma example",
+    "private": false,
+    "suggestions": {"enabled": false},
+    "pollLimits": {"max_options": 20, "max_option_chars": 200, "min_expiration": 0, "max_expiration": 31536000},
+    "postFormats": ["text/plain", "text/html", "text/markdown", "text/bbcode", "text/x.misskeymarkdown"],
+    "uploadLimits": {"general": 16000000, "avatar": 2000000, "banner": 4000000, "background": 4000000},
+    "features": ["pleroma_api", "mastodon_api"]
+  }
+}

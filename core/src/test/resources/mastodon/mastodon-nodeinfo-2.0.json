@@ -1,0 +1,10 @@
+{
+  "_source": "NodeInfo 2.0 as mastodon/mastodon main serves it (app/serializers/nodeinfo/serializer.rb shape); values illustrative",
+  "version": "2.0",
+  "software": {"name": "mastodon", "version": "4.5.0"},
+  "protocols": ["activitypub"],
+  "services": {"outbound": [], "inbound": []},
+  "usage": {"users": {"total": 3000000, "activeMonth": 279347, "activeHalfyear": 600000}, "localPosts": 1},
+  "openRegistrations": true,
+  "metadata": {"nodeName": "Mastodon", "nodeDescription": "The original server operated by the Mastodon gGmbH non-profit"}
+}
