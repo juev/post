@@ -146,9 +146,9 @@ object ComposerTags {
 }
 
 /** The key of the composer's model: one per draft, published post being edited, or sent post started from. */
-fun composerModelKey(draftId: Long?, editHistoryId: Long? = null, fromHistoryId: Long? = null): String = when {
-    editHistoryId != null -> "composer-edit-$editHistoryId"
-    fromHistoryId != null -> "composer-from-$fromHistoryId"
+fun composerModelKey(draftId: Long?, editHistoryId: Long? = null, fromHistoryId: Long? = null, session: Long = 0): String = when {
+    editHistoryId != null -> "composer-edit-$editHistoryId-$session"
+    fromHistoryId != null -> "composer-from-$fromHistoryId-$session"
     else -> "composer-${draftId ?: "new"}"
 }
 
@@ -181,9 +181,11 @@ fun ComposerScreen(
     editHistoryId: Long? = null,
     /** A new post from this history record (R31). */
     fromHistoryId: Long? = null,
+    /** Tells apart two openings of the same edit (see [org.evsyukov.post.ui.ComposerKey.session]). */
+    session: Long = 0,
 ) {
     val container = LocalAppContainer.current
-    val model: ComposerModel = viewModel(key = composerModelKey(draftId, editHistoryId, fromHistoryId)) {
+    val model: ComposerModel = viewModel(key = composerModelKey(draftId, editHistoryId, fromHistoryId, session)) {
         ComposerModel(container, draftId, editHistoryId, fromHistoryId)
     }
     ComposerContent(model, onOpenPosts, onOpenSchedule, onOpenSettings, onExit)

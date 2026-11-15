@@ -27,7 +27,16 @@ import org.evsyukov.post.ui.settings.accounts.AddMastodonScreen
  * [editHistoryId] it edits that published post (R40), with [fromHistoryId] it starts a new post from it (R31).
  */
 @Serializable
-data class ComposerKey(val draftId: Long? = null, val editHistoryId: Long? = null, val fromHistoryId: Long? = null) : NavKey
+data class ComposerKey(
+    val draftId: Long? = null,
+    val editHistoryId: Long? = null,
+    val fromHistoryId: Long? = null,
+    /**
+     * Tells apart two openings of an edit or a new post from the same record: models live as long as the
+     * activity, and one that already saved its edit starts over as an empty draft.
+     */
+    val session: Long = 0,
+) : NavKey
 
 /** Post details of a queued post ([postId]) or of a sent one ([historyId]). */
 @Serializable
@@ -97,6 +106,7 @@ fun PostApp(openOnStart: NavKey? = null) {
                     draftId = key.draftId,
                     editHistoryId = key.editHistoryId,
                     fromHistoryId = key.fromHistoryId,
+                    session = key.session,
                     onOpenPosts = { open(PostsKey) },
                     onOpenSchedule = { open(ScheduleKey) },
                     onOpenSettings = { open(SettingsKey) },
@@ -106,8 +116,8 @@ fun PostApp(openOnStart: NavKey? = null) {
             }
             val sent = SentNavigation(
                 onOpen = { open(PostDetailsKey(historyId = it)) },
-                onEdit = { open(ComposerKey(editHistoryId = it)) },
-                onNewFrom = { open(ComposerKey(fromHistoryId = it)) },
+                onEdit = { open(ComposerKey(editHistoryId = it, session = System.nanoTime())) },
+                onNewFrom = { open(ComposerKey(fromHistoryId = it, session = System.nanoTime())) },
             )
             entry<PostsKey> {
                 PostsScreen(
