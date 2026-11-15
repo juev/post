@@ -2,6 +2,7 @@ package org.evsyukov.post.send
 
 import org.evsyukov.post.core.media.Network
 import org.evsyukov.post.data.accounts.Account
+import org.evsyukov.post.data.history.HistoryItem
 import org.evsyukov.post.data.posts.Delivery
 import org.evsyukov.post.data.posts.DeliveryPlan
 import org.evsyukov.post.data.posts.DeliveryProgress
@@ -22,6 +23,8 @@ data class UploadFile(val file: File, val mime: String)
  * @property files prepares the files of the plan's attachments (media.md A4) and returns them by
  *   attachment id; it is called before the first upload, and only when the parts carry media.
  * @property saveProgress stores progress at once, so a crash after it resumes from there (R30).
+ * @property previous for an EDIT or DELETE post, the copy published on this account as history keeps it
+ *   (R38): the parts to edit or delete.
  */
 class DeliveryJob(
     val post: Post,
@@ -32,6 +35,7 @@ class DeliveryJob(
     val attempt: Int,
     val files: suspend () -> Map<Long, UploadFile>,
     val saveProgress: suspend (DeliveryProgress) -> Unit,
+    val previous: HistoryItem? = null,
 )
 
 /** How an attempt of a delivery ended (R5, R29). */

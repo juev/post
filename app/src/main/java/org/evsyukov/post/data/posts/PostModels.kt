@@ -105,6 +105,7 @@ data class PostOptions(
     val accounts: Map<Long, AccountPostOptions> = emptyMap(),
     val poll: PollDraft? = null,
     val chosenFixes: Map<Network, Map<ConflictKind, FixKind>> = emptyMap(),
+    val keptMedia: List<KeptMedia> = emptyList(),
 ) {
     /** The options [account] gets for this post: its own entry, or its defaults (R17). */
     fun forAccount(account: Account): AccountPostOptions = accounts[account.id] ?: AccountPostOptions.from(account.defaults)
@@ -115,6 +116,15 @@ data class PostOptions(
     /** The languages [account] gets: [language], or its default languages when the post has none. */
     fun languagesFor(account: Account): List<String> = language?.let(::listOf) ?: account.defaults.languages
 }
+
+/**
+ * An edit of a media file a published Mastodon post keeps (R40, N28, N30), by its place: the [index]-th file of
+ * thread part [part]. A file without an entry is kept as published; [removed] leaves it out of the edit, and
+ * [alt] is its alt text, sent as `media_attributes`. Media files themselves are not kept (R38), so a kept file
+ * can only stay or go, not change.
+ */
+@Serializable
+data class KeptMedia(val part: Int, val index: Int, val alt: String, val removed: Boolean = false)
 
 /** When a queued post is sent (scheduling.md S2, S5). */
 sealed interface Schedule {
@@ -275,6 +285,10 @@ data class PublishedPart(
     val cid: String? = null,
     val url: String? = null,
     val media: List<PublishedMedia> = emptyList(),
+    /** The text of the part as published; an edit leaves a part whose text and media did not change (N29). */
+    val text: String? = null,
+    /** The Mastodon content warning of the part as published. */
+    val spoilerText: String? = null,
 )
 
 /**
@@ -308,7 +322,13 @@ data class PartProgress(
 
 /** The progress of a delivery, stored in `progressJson`. */
 @Serializable
-data class DeliveryProgress(val parts: List<PartProgress> = emptyList()) {
+data class DeliveryProgress(
+    val parts: List<PartProgress> = emptyList(),
+    /** Published parts this delivery has deleted (R39, N29, N33): Mastodon status ids or Bluesky AT URIs. */
+    val deleted: List<String> = emptyList(),
+    /** For a Bluesky "delete and post again" (N32): the old thread is gone, the new one is being published. */
+    val oldRemoved: Boolean = false,
+) {
     /** The index of the first part that is not published, from which a retry resumes (R30). */
     fun firstUnpublished(partCount: Int): Int? =
         (0 until partCount).firstOrNull { index -> parts.none { it.index == index && it.published != null } }

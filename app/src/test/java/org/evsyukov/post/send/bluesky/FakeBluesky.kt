@@ -29,6 +29,9 @@ class FakePds(private val servers: FakeServers, val host: String = "pds.example"
 
     /** Every `applyWrites` call that wrote, as its list of creates. */
     val commits = CopyOnWriteArrayList<List<Record>>()
+
+    /** Every `applyWrites` call that deleted, as its list of "collection/rkey". */
+    val deleteCommits = CopyOnWriteArrayList<List<String>>()
     val records = ConcurrentHashMap<String, Record>()
     val blobs = CopyOnWriteArrayList<FakeServers.Seen>()
     private val nextCid = AtomicInteger()
@@ -52,7 +55,20 @@ class FakePds(private val servers: FakeServers, val host: String = "pds.example"
             writeAnswer(writeCalls.incrementAndGet(), request)?.let { return@route it }
             val body = json.parseToJsonElement(request.body).jsonObject
             check(body["repo"]!!.jsonPrimitive.content == did)
-            val creates = body["writes"]!!.jsonArray.map { it.jsonObject }.map { write ->
+            val all = body["writes"]!!.jsonArray.map { it.jsonObject }
+            val deletes = all.filter { it["\$type"]!!.jsonPrimitive.content == "com.atproto.repo.applyWrites#delete" }
+            if (deletes.isNotEmpty()) {
+                check(deletes.size == all.size) { "creates and deletes in one call" }
+                val keys = deletes.map { key(it["collection"]!!.jsonPrimitive.content, it["rkey"]!!.jsonPrimitive.content) }
+                // A delete of a missing record fails the whole commit here, so the app must leave those out.
+                if (keys.any { !records.containsKey(it) }) {
+                    return@route FakeServers.json("""{"error":"InvalidRequest","message":"Could not find record"}""", 400)
+                }
+                keys.forEach { records.remove(it) }
+                deleteCommits += keys
+                return@route FakeServers.json("""{"commit":{"cid":"bafycommit","rev":"rev"},"results":[]}""")
+            }
+            val creates = all.map { write ->
                 check(write["\$type"]!!.jsonPrimitive.content == "com.atproto.repo.applyWrites#create")
                 Record(
                     write["collection"]!!.jsonPrimitive.content,

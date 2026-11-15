@@ -21,7 +21,9 @@ import org.evsyukov.post.core.schedule.inQueueOrder
 import org.evsyukov.post.data.accounts.Account
 import org.evsyukov.post.data.accounts.AccountsRepository
 import org.evsyukov.post.data.db.DeliveryState
+import org.evsyukov.post.data.db.PostKind
 import org.evsyukov.post.data.history.HistoryItem
+import org.evsyukov.post.data.history.HistoryRecord
 import org.evsyukov.post.data.posts.Delivery
 import org.evsyukov.post.data.posts.DeliveryPlan
 import org.evsyukov.post.data.posts.FilesDirAttachmentFiles
@@ -66,6 +68,8 @@ class Publisher(
     private val beforeSend: suspend (now: Instant) -> Unit = {},
     /** Runs after every run: the alarm is set for the next pending time (scheduling.md M1). */
     private val afterRun: suspend () -> Unit = {},
+    /** The history record an EDIT or DELETE post acts on (R37–R41). */
+    private val history: suspend (Long) -> HistoryRecord? = { null },
 ) {
     private val executors: Map<Network, DeliveryExecutor> = executors.associateBy { it.network }
     private val files = FilesDirAttachmentFiles(filesDir)
@@ -129,16 +133,31 @@ class Publisher(
             if (delivery.nextAttemptAt?.isAfter(now) == true) continue
             val account = accounts.get(delivery.accountId) ?: continue
             val executor = executors[account.network] ?: continue
-            val plan = delivery.plan ?: when (val frozen = freezer.freeze(post, account, targets.filter { it.network == account.network }, settings)) {
-                is FreezeResult.Ready -> frozen.plan
-                is FreezeResult.Blocked -> {
-                    if (posts.failUnstarted(delivery.id, frozen.message)) notifier.deliveryFailed(account, post.id, frozen.message)
+            val previous: HistoryItem? = if (post.kind == PostKind.NEW) {
+                null
+            } else {
+                val item = post.historyId?.let { history(it) }?.items?.firstOrNull { it.accountId == account.id }
+                if (item == null) {
+                    // R37: without the record the app has no ids to act on.
+                    if (posts.failUnstarted(delivery.id, NO_RECORD)) notifier.deliveryFailed(account, post.id, NO_RECORD)
                     continue
+                }
+                item
+            }
+            val plan = delivery.plan ?: if (post.kind == PostKind.DELETE) {
+                DeliveryPlan(parts = emptyList())
+            } else {
+                when (val frozen = freezer.freeze(post, account, targets.filter { it.network == account.network }, settings)) {
+                    is FreezeResult.Ready -> frozen.plan
+                    is FreezeResult.Blocked -> {
+                        if (posts.failUnstarted(delivery.id, frozen.message)) notifier.deliveryFailed(account, post.id, frozen.message)
+                        continue
+                    }
                 }
             }
             val started = posts.startDelivery(delivery.id, plan) ?: continue
             val outcome = try {
-                attempt(post, account, started, started.plan ?: plan, executor, foreground)
+                attempt(post, account, started, started.plan ?: plan, executor, foreground, previous)
             } catch (_: PreparationCancelled) {
                 if (!posts.returnToDraft(post.id)) posts.deliveryFailed(started.id, CANCELLED, null)
                 return
@@ -156,6 +175,7 @@ class Publisher(
         plan: DeliveryPlan,
         executor: DeliveryExecutor,
         foreground: SendForeground,
+        previous: HistoryItem?,
     ): DeliveryOutcome {
         val job = DeliveryJob(
             post = post,
@@ -166,6 +186,7 @@ class Publisher(
             attempt = delivery.attempts,
             files = { prepareFiles(post, account.network, plan, foreground) },
             saveProgress = { posts.saveProgress(delivery.id, it) },
+            previous = previous,
         )
         return try {
             executor.publish(job)
@@ -195,21 +216,43 @@ class Publisher(
         }
     }
 
-    /** R28, R31, R38: the post is sent; history keeps per account and part the ids, urls and media. */
+    /**
+     * R28, R31, R38: the post is sent; history keeps per account and part the ids, urls, media and text. An
+     * edit replaces the copies of its targets and keeps the others (R40: a cleared account keeps its copy); a
+     * deletion leaves only the copies of the accounts it did not touch (R39).
+     */
     private suspend fun complete(post: Post, settings: Settings) {
-        val items = post.deliveries.mapNotNull { delivery ->
+        val written = post.deliveries.mapNotNull { delivery ->
             val account = accounts.get(delivery.accountId) ?: return@mapNotNull null
+            val plan = delivery.plan
             HistoryItem(
                 accountId = account.id,
                 network = account.network,
                 server = account.server,
                 handle = account.handle,
-                parts = delivery.progress.parts.sortedBy { it.index }.mapNotNull { it.published },
+                parts = delivery.progress.parts.sortedBy { it.index }.mapNotNull { progress ->
+                    val planned = plan?.parts?.getOrNull(progress.index)
+                    progress.published?.copy(text = planned?.text, spoilerText = planned?.spoilerText)
+                },
+                mastodon = plan?.mastodon,
             )
+        }
+        val record = post.historyId?.let { history(it) }
+        val items = when (post.kind) {
+            PostKind.NEW -> written
+            PostKind.EDIT -> {
+                val edited = written.associateBy { it.accountId }
+                val kept = record?.items.orEmpty().map { edited[it.accountId] ?: it }
+                kept + written.filter { item -> kept.none { it.accountId == item.accountId } }
+            }
+            PostKind.DELETE -> {
+                val deleted = post.deliveries.map { it.accountId }.toSet()
+                record?.items?.filter { it.accountId !in deleted }.orEmpty()
+            }
         }
         posts.markSent(post.id, items)
         preparer.deleteVariants(post.id)
-        if (settings.successNotifications) notifier.posted(post.id, post.deliveries.size)
+        if (settings.successNotifications && post.kind == PostKind.NEW) notifier.posted(post.id, post.deliveries.size)
     }
 
     /** Prepares the variants of [plan] (media.md A4); a video conversion shows its progress and can be cancelled. */
@@ -279,6 +322,9 @@ class Publisher(
 
     companion object {
         private const val TAG = "PostSender"
+
+        /** The error of an edit or a deletion whose history record is gone (R37). */
+        const val NO_RECORD = "the published post is no longer in history"
 
         /** The error of a delivery whose preparation was cancelled after part of the post was published. */
         const val CANCELLED = "cancelled"

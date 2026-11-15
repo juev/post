@@ -52,6 +52,8 @@ import org.evsyukov.post.data.accounts.AccountNotFound
 import org.evsyukov.post.data.accounts.AccountsRepository
 import org.evsyukov.post.data.accounts.ReplyRule
 import org.evsyukov.post.data.db.AccountState
+import org.evsyukov.post.data.db.PostKind
+import org.evsyukov.post.data.history.HistoryItem
 import org.evsyukov.post.data.posts.Attachment
 import org.evsyukov.post.data.posts.BlueskyPostOptions
 import org.evsyukov.post.data.posts.DeliveryProgress
@@ -64,6 +66,7 @@ import org.evsyukov.post.send.DeliveryExecutor
 import org.evsyukov.post.send.DeliveryJob
 import org.evsyukov.post.send.DeliveryOutcome
 import org.evsyukov.post.send.MastodonExecutor
+import org.evsyukov.post.send.Publisher
 import org.evsyukov.post.send.UploadFile
 import java.io.File
 import java.io.FileNotFoundException
@@ -109,7 +112,20 @@ class BlueskyExecutor(
     override suspend fun publish(job: DeliveryJob): DeliveryOutcome {
         val run = Run(job)
         return try {
-            sessions.bluesky(job.account.id) { auth -> run.publishAll(auth) }
+            sessions.bluesky(job.account.id) { auth ->
+                when (job.post.kind) {
+                    PostKind.NEW -> run.publishAll(auth)
+                    // N32: Bluesky has no edit here; an edit target is "delete and post again".
+                    PostKind.EDIT -> {
+                        run.removeOld(auth, job.previous ?: return@bluesky DeliveryOutcome.Failed(Publisher.NO_RECORD))
+                        run.publishAll(auth)
+                    }
+                    PostKind.DELETE -> {
+                        run.removeOld(auth, job.previous ?: return@bluesky DeliveryOutcome.Failed(Publisher.NO_RECORD))
+                        DeliveryOutcome.Sent(run.current)
+                    }
+                }
+            }
         } catch (e: CancellationException) {
             throw e
         } catch (_: NeedsSignInException) {
@@ -162,6 +178,29 @@ class BlueskyExecutor(
         private val dids = HashMap<String, String?>()
         private var lastCreatedAt: Instant? = null
         private val options: BlueskyPostOptions = job.plan.bluesky ?: BlueskyPostOptions()
+
+        val current: DeliveryProgress get() = progress
+
+        /**
+         * N33, R39: deletes every part of the published thread with its threadgate and postgates, in one
+         * `applyWrites` while they fit its limit. Records already gone are left out, so a retry, or a part
+         * deleted elsewhere, does not fail the call (R39: a part already gone counts as deleted).
+         */
+        suspend fun removeOld(auth: BlueskyAuth, previous: HistoryItem) {
+            if (progress.oldRemoved) return
+            val client = BlueskyClient(auth.pds, http, JSON, clock::millis)
+            val did = auth.did
+            val keys = previous.parts.mapNotNull { it.uri?.substringAfterLast('/') }
+            val candidates = buildList {
+                keys.reversed().forEach { add(WriteOp.Delete(Collections.POST, it)) }
+                keys.firstOrNull()?.let { add(WriteOp.Delete(Collections.THREADGATE, it)) }
+                keys.reversed().forEach { add(WriteOp.Delete(Collections.POSTGATE, it)) }
+            }
+            val writes = candidates.filter { client.getRecord(did, it.collection, it.rkey) != null }
+            writes.chunked(BlueskyClient.MAX_WRITES).forEach { client.applyWrites(auth.accessJwt, did, it) }
+            progress = progress.copy(deleted = previous.parts.mapNotNull { it.uri }, oldRemoved = true)
+            job.saveProgress(progress)
+        }
 
         suspend fun publishAll(auth: BlueskyAuth): DeliveryOutcome {
             val client = BlueskyClient(auth.pds, http, JSON, clock::millis)
@@ -377,7 +416,7 @@ class BlueskyExecutor(
         private fun partProgress(index: Int): PartProgress = progress.parts.firstOrNull { it.index == index } ?: PartProgress(index)
 
         private suspend fun save(state: PartProgress) {
-            progress = DeliveryProgress((progress.parts.filter { it.index != state.index } + state).sortedBy { it.index })
+            progress = progress.copy(parts = (progress.parts.filter { it.index != state.index } + state).sortedBy { it.index })
             job.saveProgress(progress)
         }
     }

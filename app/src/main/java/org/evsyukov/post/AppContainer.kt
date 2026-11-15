@@ -40,6 +40,7 @@ import org.evsyukov.post.send.AndroidSendNotifier
 import org.evsyukov.post.send.MastodonExecutor
 import org.evsyukov.post.send.PlanFreezer
 import org.evsyukov.post.send.PublishScheduler
+import org.evsyukov.post.send.PublishedActions
 import org.evsyukov.post.send.Publisher
 import org.evsyukov.post.send.bluesky.BlueskyExecutor
 import org.evsyukov.post.send.bluesky.LinkCardFetcher
@@ -175,8 +176,12 @@ class AppContainer(
             trigger = this.publishTrigger,
             beforeSend = { lateHolder.holdLate(it) },
             afterRun = { refreshAlarm() },
+            history = { history.get(it) },
         )
     }
+
+    /** Delete published posts through the queue (R39, R41). */
+    val publishedActions: PublishedActions by lazy { PublishedActions(posts, history, this.publishTrigger) }
 
     /** The one exact alarm for the earliest pending time (scheduling.md M1). */
     val publishAlarms: PublishAlarms by lazy { PublishAlarms(this.context, posts, WorkManager.getInstance(this.context)) }
