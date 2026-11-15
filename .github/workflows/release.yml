@@ -47,11 +47,15 @@ jobs:
       # itself is left out, so a manual run on a released commit compares with the release before.
       - name: Check the version code against the previous release
         run: |
-          previous=$(git describe --tags --abbrev=0 --match 'v*' --exclude "v$VERSION" HEAD 2>/dev/null || true)
-          if [ -z "$previous" ]; then
+          # Only "no earlier tag" skips the check: a failing git command stops the run (bash -e), and
+          # grep's "no match" is the only status that is tolerated.
+          tags=$(git tag --list 'v*' --merged HEAD)
+          earlier=$(printf '%s\n' "$tags" | grep -vxF -e "v$VERSION" -e '' || true)
+          if [ -z "$earlier" ]; then
             echo "No earlier release tag; nothing to compare"
             exit 0
           fi
+          previous=$(git describe --tags --abbrev=0 --match 'v*' --exclude "v$VERSION" HEAD)
           previous_code=$(git show "$previous:gradle.properties" | sed -n -E 's/^[[:space:]]*post\.versionCode[[:space:]]*=[[:space:]]*//p' | tr -d '\r' | sed -E 's/[[:space:]]+$//')
           case "$previous_code" in ''|*[!0-9]*)
             echo "Cannot read post.versionCode of $previous: '$previous_code'" >&2
@@ -69,6 +73,9 @@ jobs:
           distribution: temurin
           java-version: 21
       - uses: gradle/actions/setup-gradle@v6
+      # Tests run before the key is on disk and without the signing secrets in their environment.
+      - name: Test
+        run: ./gradlew :core:test testDebugUnitTest
       - name: Restore the signing key
         env:
           KEYSTORE_BASE64: ${{ secrets.POST_KEYSTORE_BASE64 }}
@@ -86,7 +93,7 @@ jobs:
           POST_KEY_ALIAS: ${{ secrets.POST_KEY_ALIAS }}
           POST_KEY_PASSWORD: ${{ secrets.POST_KEY_PASSWORD }}
         run: |
-          ./gradlew :core:test testDebugUnitTest assembleRelease
+          ./gradlew assembleRelease
           mv app/build/outputs/apk/release/app-release.apk "post-$VERSION.apk"
           echo "APK=post-$VERSION.apk" >> "$GITHUB_ENV"
       # Obtainium refuses an update signed with another key, and users pin this certificate in
