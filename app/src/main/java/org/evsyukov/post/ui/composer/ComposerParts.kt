@@ -19,6 +19,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Send
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.outlined.AttachFile
 import androidx.compose.material.icons.outlined.Code
@@ -218,6 +219,8 @@ fun ComposerToolbar(
     onClear: () -> Unit,
     onSendLater: () -> Unit,
     onSend: () -> Unit,
+    /** A queued post is edited: Send saves it and keeps its time. */
+    savesQueued: Boolean = false,
 ) {
     var menu by remember { mutableStateOf(false) }
     Surface(tonalElevation = 3.dp, modifier = Modifier.fillMaxWidth().testTag(ComposerTags.TOOLBAR)) {
@@ -289,7 +292,11 @@ fun ComposerToolbar(
                     .semantics { if (!canSend) disabled() }
                     .testTag(ComposerTags.SEND),
             ) {
-                Icon(Icons.AutoMirrored.Outlined.Send, contentDescription = stringResource(R.string.composer_send))
+                if (savesQueued) {
+                    Icon(Icons.Filled.Check, contentDescription = stringResource(R.string.posts_save_queued))
+                } else {
+                    Icon(Icons.AutoMirrored.Outlined.Send, contentDescription = stringResource(R.string.composer_send))
+                }
             }
         }
     }

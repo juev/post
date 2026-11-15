@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Posts screen tabs (screens.md, Posts). -->
+    <string name="posts_tab_queue">Queue</string>
+    <string name="posts_tab_drafts">Drafts</string>
+    <string name="posts_tab_sent">Sent</string>
+    <string name="posts_tab_coming">Nothing here yet</string>
+    <string name="posts_queue_empty">No posts in the queue. Posts sent later wait here.</string>
+
+    <!-- Queue groups (scheduling.md Q7). -->
+    <string name="posts_group_late">Late</string>
+    <string name="posts_group_late_text">These posts missed their time. Post does not send them on its own.</string>
+    <string name="posts_group_failed">Failed</string>
+    <string name="posts_group_waiting">Waiting</string>
+
+    <!-- Row and group actions (R25, scheduling.md S8–S10, Q3, Q6). -->
+    <string name="posts_send_now">Send now</string>
+    <string name="posts_reschedule">Reschedule</string>
+    <string name="posts_change_time">Change time</string>
+    <string name="posts_edit">Edit</string>
+    <string name="posts_delete">Delete</string>
+    <string name="posts_move_up">Move up</string>
+    <string name="posts_move_down">Move down</string>
+    <string name="posts_retry">Retry</string>
+    <string name="posts_retry_all">Retry all</string>
+    <string name="posts_row_menu">Actions for this post</string>
+    <string name="posts_drag_handle">Drag to change the order</string>
+    <string name="posts_explicit_time">Fixed time, does not move with the queue</string>
+    <string name="posts_order_changed">Order changed</string>
+    <string name="posts_undo">Undo</string>
+    <string name="posts_delete_title">Delete this post?</string>
+    <string name="posts_delete_text">The post and its attachments are deleted from the queue. Its slot becomes free.</string>
+    <string name="posts_cannot_delete">The post is being sent right now and cannot be deleted</string>
+    <string name="posts_no_text">No text</string>
+    <plurals name="posts_attachments">
+        <item quantity="one">%d attachment</item>
+        <item quantity="other">%d attachments</item>
+    </plurals>
+    <plurals name="posts_rescheduled">
+        <item quantity="one">%d post moved to a free slot</item>
+        <item quantity="other">%d posts moved to free slots</item>
+    </plurals>
+    <!-- %1$s is the account handle. -->
+    <string name="posts_state_waiting">%1$s: waiting</string>
+    <string name="posts_state_sending">%1$s: sending</string>
+    <string name="posts_state_sent">%1$s: sent</string>
+    <string name="posts_state_failed">%1$s: failed</string>
+    <!-- %1$s is the account handle, %2$s the server's error. -->
+    <string name="posts_delivery_error">%1$s: %2$s</string>
+    <string name="posts_save_queued">Save changes</string>
+</resources>

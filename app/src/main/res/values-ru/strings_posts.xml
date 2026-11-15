@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="posts_tab_queue">Очередь</string>
+    <string name="posts_tab_drafts">Черновики</string>
+    <string name="posts_tab_sent">Отправленные</string>
+    <string name="posts_tab_coming">Здесь пока ничего нет</string>
+    <string name="posts_queue_empty">В очереди нет постов. Здесь ждут посты, отправленные на потом.</string>
+
+    <string name="posts_group_late">Опоздавшие</string>
+    <string name="posts_group_late_text">Эти посты пропустили своё время. Post не отправляет их сам.</string>
+    <string name="posts_group_failed">Ошибки</string>
+    <string name="posts_group_waiting">Ждут отправки</string>
+
+    <string name="posts_send_now">Отправить сейчас</string>
+    <string name="posts_reschedule">Перенести</string>
+    <string name="posts_change_time">Изменить время</string>
+    <string name="posts_edit">Изменить</string>
+    <string name="posts_delete">Удалить</string>
+    <string name="posts_move_up">Выше</string>
+    <string name="posts_move_down">Ниже</string>
+    <string name="posts_retry">Повторить</string>
+    <string name="posts_retry_all">Повторить все</string>
+    <string name="posts_row_menu">Действия с постом</string>
+    <string name="posts_drag_handle">Перетащите, чтобы изменить порядок</string>
+    <string name="posts_explicit_time">Точное время, не сдвигается с очередью</string>
+    <string name="posts_order_changed">Порядок изменён</string>
+    <string name="posts_undo">Отменить</string>
+    <string name="posts_delete_title">Удалить пост?</string>
+    <string name="posts_delete_text">Пост и его вложения будут удалены из очереди. Его слот освободится.</string>
+    <string name="posts_cannot_delete">Пост отправляется прямо сейчас, удалить его нельзя</string>
+    <string name="posts_no_text">Без текста</string>
+    <plurals name="posts_attachments">
+        <item quantity="one">%d вложение</item>
+        <item quantity="few">%d вложения</item>
+        <item quantity="many">%d вложений</item>
+        <item quantity="other">%d вложения</item>
+    </plurals>
+    <plurals name="posts_rescheduled">
+        <item quantity="one">%d пост перенесён в свободный слот</item>
+        <item quantity="few">%d поста перенесены в свободные слоты</item>
+        <item quantity="many">%d постов перенесены в свободные слоты</item>
+        <item quantity="other">%d поста перенесены в свободные слоты</item>
+    </plurals>
+    <string name="posts_state_waiting">%1$s: ждёт</string>
+    <string name="posts_state_sending">%1$s: отправляется</string>
+    <string name="posts_state_sent">%1$s: отправлен</string>
+    <string name="posts_state_failed">%1$s: ошибка</string>
+    <string name="posts_delivery_error">%1$s: %2$s</string>
+    <string name="posts_save_queued">Сохранить изменения</string>
+</resources>

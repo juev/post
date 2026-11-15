@@ -93,8 +93,8 @@ fun PostApp(openOnStart: NavKey? = null) {
                     onExit = { if (backStack.size > 1) back() else activity?.finish() },
                 )
             }
-            entry<PostsKey> { PostsScreen(onBack = back) }
-            entry<ScheduleKey> { ScheduleScreen(onBack = back) }
+            entry<PostsKey> { PostsScreen(onBack = back, onEdit = { open(ComposerKey(it)) }, onOpenSchedule = { open(ScheduleKey) }) }
+            entry<ScheduleKey> { ScheduleScreen(onBack = back, onOpenPost = { open(ComposerKey(it)) }) }
             entry<SettingsKey> {
                 SettingsScreen(
                     onBack = back,
