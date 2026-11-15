@@ -61,8 +61,10 @@ data class Break(
  * hashtags), inside a grapheme cluster, inside a code line or next to a fence line, between a line's quote
  * or list markers and its text, before a code span that a part would read as a fence (it opens with three
  * backticks and closes on a later line), inside a line that opens with three backticks or tildes but is no
- * fence or opens like a link reference definition (cut short, it could read as one), and at the ends of the
- * piece. Sentences and words come from [segmenter]
+ * fence or opens like a link reference definition (cut short, it could read as one), right after a `~` that
+ * is text inside a strikethrough the break cuts (with the closing `~~` it would make a run of three),
+ * inside a list item before the end of a code block whose fences only its list items make a fence (4 or
+ * more columns in, or after a tab), and at the ends of the piece. Sentences and words come from [segmenter]
  * for [locale]; the sentence rules run on the text with the Markdown markers blanked, so `**Done.** Next`
  * ends a sentence before `Next`. Spaces that do not break (U+00A0 and the like) are never a break.
  */
@@ -87,6 +89,9 @@ private class BreakFinder(
     private val listMarkerEnd = HashMap<Int, Int>()
     private val quoteLineStarts = quoteLineStarts(structure)
 
+    /** Offsets where no part may start; see [deepFence]. */
+    private val noPartStart = BooleanArray(n + 1)
+
     init {
         for (boundary in segmenter.graphemeBoundaries(text)) graphemeStart[boundary] = true
         for (block in structure.codeBlocks) {
@@ -105,6 +110,32 @@ private class BreakFinder(
             for (i in line.end until line.next) gapChar[i] = true
         }
         lineOf[n] = lines.lastIndex
+        for (block in structure.codeBlocks) {
+            if (!deepFence(block)) continue
+            // The outermost list item: a part that starts at its marker keeps every container of the block.
+            val item = structure.listItems.filter { it.range.start <= block.range.start && block.range.end <= it.range.end }
+                .minByOrNull { it.range.start }
+            val from = item?.range?.start ?: block.range.start
+            for (i in from + 1 until minOf(block.range.end, n)) noPartStart[i] = true
+        }
+    }
+
+    /**
+     * Whether the fence lines of [block] are a fence only inside the list items around it: after the quote
+     * markers of its line (which a part keeps) they are indented by 4 columns or more, or by a tab. A part
+     * without those items would read them as text and the code as Markdown, so no part starts inside the
+     * outermost list item before the block ends (T5, T17).
+     */
+    private fun deepFence(block: CodeBlockSpan): Boolean {
+        val fence = block.openingFenceRange.start.let { var k = it; while (k < n && (text[k] == ' ' || text[k] == '\t')) k++; k }
+        var lineStart = fence
+        while (lineStart > 0 && text[lineStart - 1] != '\n' && text[lineStart - 1] != '\r') lineStart--
+        var indentStart = lineStart
+        for (i in lineStart until fence) if (text[i] == '>') indentStart = i + 1
+        val prefix = text.substring(indentStart, fence)
+        if ('\t' in prefix) return true
+        val optionalSpace = if (indentStart > lineStart && prefix.startsWith(" ")) 1 else 0
+        return prefix.length - optionalSpace >= 4
     }
 
     private fun isQuoteMarker(i: Int): Boolean = text[i] == '>' && codeBlockAt[i] == null
@@ -152,10 +183,12 @@ private class BreakFinder(
 
     private fun make(end: Int, start: Int, rank: BreakRank, block: CodeBlockSpan? = null): Break? {
         if (!graphemeStart[end] || !graphemeStart[start]) return null
+        if (noPartStart[start]) return null
         if (cutsAtom(end, start)) return null
         if (block == null && startsFenceLikeCodeSpan(start)) return null
         if (block == null && (end until start).none { text[it] == '\n' || text[it] == '\r' } && tailSensitiveLine(lineOf[end])) return null
         val emphasis = if (block != null) emptyList() else crossingEmphasis(end, start)
+        if (tildeBeforeClosers(end, emphasis)) return null
         // A part that starts at the marker of a quote line copies its markers; a literal `>` in the middle
         // of a line is text, and the part after it still reopens the quotes it is in.
         val quoteDepth = if (block != null || start in quoteLineStarts) 0 else quoteDepthAt(start)
@@ -206,6 +239,23 @@ private class BreakFinder(
     private fun cutsAtom(end: Int, start: Int): Boolean {
         if (end == start) return end > 0 && end < n && atomAt[end - 1] >= 0 && atomAt[end - 1] == atomAt[end]
         return (end until start).any { atomAt[it] >= 0 }
+    }
+
+    /**
+     * Whether the part before a break at [end] would end with a `~` that is text right before the `~~` that
+     * closes the strikethrough the break cuts ([emphasis], outermost first). The two would make one run of
+     * three that closes nothing, and a `~` that ends a bare URL (`https://example.com/~a~`) cannot be
+     * escaped, as a backslash would join the URL. A `~` that closes a strikethrough nested in the cut one is
+     * no text: the part leaves it out ([partFragment]).
+     */
+    private fun tildeBeforeClosers(end: Int, emphasis: List<EmphasisSpan>): Boolean {
+        if (end == 0 || text[end - 1] != '~' || emphasis.isEmpty()) return false
+        if (structure.emphasis.any { it.closeRange.start < end && end <= it.closeRange.end }) return false
+        // The innermost span the part closes: one nested in a span with the same markers is not closed.
+        val innermost = emphasis.lastOrNull { inner ->
+            emphasis.none { outer -> outer != inner && outer.open == inner.open && outer.openRange.end <= inner.openRange.start }
+        }
+        return innermost?.close?.startsWith("~") == true
     }
 
     private fun crossingEmphasis(end: Int, start: Int): List<EmphasisSpan> =

@@ -65,7 +65,10 @@ class RenderPropertiesTest {
         return text + listOf(".", "!", "?", "", ",").random(random)
     }
 
-    private fun block(random: Random): String = when (random.nextInt(13)) {
+    /** A sentence without emphasis around it, ending in a letter so closing markers right after it close. */
+    private fun bare(random: Random): String = sentence(random, wrap = false).trimEnd('*', '_', '~', '\\', '.', '!', '?', ',') + "x"
+
+    private fun block(random: Random): String = when (random.nextInt(15)) {
         0 -> "> " + List(random.nextInt(1, 4)) { sentence(random) }.joinToString("\n> ")
         1 -> List(random.nextInt(1, 5)) { "- " + sentence(random) }.joinToString("\n")
         2 -> List(random.nextInt(1, 5)) { "${it + 3}. " + sentence(random) }.joinToString("\n")
@@ -82,6 +85,10 @@ class RenderPropertiesTest {
         9 -> "> 1. " + sentence(random) + "\n> 1. " + sentence(random) + "\n" + sentence(random)
         // A hard line break after a word: after `*` or `**` the backslash would make the run pair otherwise.
         10 -> sentence(random) + "\n" + sentence(random, wrap = false).trimEnd('*', '_', '~', '\\') + "x\\\n" + sentence(random)
+        // Strikethrough inside strikethrough, the inner span sometimes opening a line (T5, T17).
+        11 -> "~~" + bare(random) + (if (random.nextBoolean()) "\n~~" else " ~~") + bare(random) + "~~ " + bare(random) + "~~."
+        // Bold inside bold, apart from the outer markers.
+        12 -> "**" + bare(random) + " **" + bare(random) + "** " + bare(random) + "**."
         else -> List(random.nextInt(1, 6)) { sentence(random) }.joinToString(" ")
     }
 
@@ -251,9 +258,11 @@ class RenderPropertiesTest {
     /**
      * What a reader sees of a part in [format]: plain text as it is, HTML as its text with list numbers and
      * bullets, and Markdown as HTML the way a server renders it. Whitespace (dropped at breaks), quote
-     * markers (reopened) and the emphasis characters `*`, `_` and `~` are left out: a part reopens and closes
+     * markers (reopened) and the emphasis characters `*` and `_` are left out: a part reopens and closes
      * emphasis (T5), and whether a stray `*` among others pairs depends on Markdown's delimiter rules over
-     * the whole paragraph, which is formatting rather than content.
+     * the whole paragraph, which is formatting rather than content. A `~` stays: strikethrough pairs only
+     * runs of two, so a tilde shows in a part exactly when it shows in the whole text, and a reopened `~~`
+     * that runs into another tilde shows up here.
      */
     private fun visible(text: String, format: TextFormat): String {
         val shown = when (format) {
@@ -261,7 +270,7 @@ class RenderPropertiesTest {
             TextFormat.HTML -> htmlText(text)
             TextFormat.PLAIN, TextFormat.BLUESKY -> text
         }
-        return shown.filterNot { it.isWhitespace() || it == '>' || it == '*' || it == '_' || it == '~' }
+        return shown.filterNot { it.isWhitespace() || it == '>' || it == '*' || it == '_' }
     }
 
     /** The text of [html] with `n.` for the items of ordered lists, counted from their `start`, and `•` for bullets. */

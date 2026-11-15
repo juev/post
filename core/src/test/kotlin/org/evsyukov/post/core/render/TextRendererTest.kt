@@ -277,6 +277,25 @@ class TextRendererTest {
     }
 
     @Test
+    fun `T16 fifty parts are allowed and fifty-one are refused, media-only replies included`() {
+        // Each 39-letter word fills a part of 40 alone, so n words make n parts.
+        val profile = custom(TextFormat.PLAIN, 40, Counting.GOTOSOCIAL)
+        val word = "x".repeat(39)
+        val fifty = render(words(50, word), profile)
+        assertThat(fifty.issue).isNull()
+        assertThat(fifty.parts).hasSize(50)
+        assertThat(fifty.manyPartsWarning).isTrue()
+        assertThat(render(words(51, word), profile).issue).isEqualTo(TextIssue.TooManyParts(51))
+        val withReply = render(words(49, word), profile, mediaOnlyParts = mapOf(0 to 1))
+        assertThat(withReply.issue).isNull()
+        assertThat(withReply.parts).hasSize(50)
+        assertThat(render(words(50, word), profile, mediaOnlyParts = mapOf(0 to 1)).issue).isEqualTo(TextIssue.TooManyParts(51))
+        // The warning starts at ten parts.
+        assertThat(render(words(9, word), profile).manyPartsWarning).isFalse()
+        assertThat(render(words(10, word), profile).manyPartsWarning).isTrue()
+    }
+
+    @Test
     fun `T9 a single word longer than the limit is a conflict with its range`() {
         val word = "x".repeat(320)
         val text = "Before. $word after."

@@ -150,4 +150,16 @@ class BreaksTest {
         assertThat(breaks("")).isEmpty()
         assertThat(breaks("single")).isEmpty()
     }
+
+    @Test
+    fun `T5 no break after a tilde that is text before the closing tildes of a cut strikethrough`() {
+        // With the closing `~~` the URL's own tilde would make `~~~`, which closes nothing.
+        val text = "~~see https://example.com/a~ then more~~"
+        assertThat(rankAfter(text, "https://example.com/a~")).isNull()
+        assertThat(rankAfter(text, "see")).isEqualTo(BreakRank.WORD)
+        // Outside strikethrough, and after a nested strikethrough the part leaves out, the break stays.
+        assertThat(rankAfter("see https://example.com/a~ then", "https://example.com/a~")).isEqualTo(BreakRank.WORD)
+        assertThat(rankAfter("**see https://example.com/a~ then**", "https://example.com/a~")).isEqualTo(BreakRank.WORD)
+        assertThat(rankAfter("~~see ~~inner~~ then~~", "~~inner~~")).isEqualTo(BreakRank.WORD)
+    }
 }
