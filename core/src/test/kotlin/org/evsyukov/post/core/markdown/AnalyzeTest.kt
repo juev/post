@@ -69,6 +69,39 @@ class AnalyzeTest {
     }
 
     @Test
+    fun `of entities that start together the longer one wins`() {
+        // Bluesky reads "@alice.b", Mastodon reads "@alice.b_c.com".
+        assertThat(analyze("@alice.b_c.com").atomicRanges).containsExactly(AtomicRange(0, 14, MENTION))
+    }
+
+    @Test
+    fun `bare url with markup characters is one atomic range without emphasis`() {
+        for (url in listOf("https://x.com/_jane_", "https://example.com/files/__init__.py", "https://example.com/a*b*c/~~d~~")) {
+            val source = "see $url now"
+            val structure = analyze(source)
+            assertThat(structure.atomicRanges).containsExactly(atom(source, url, URL))
+            assertThat(structure.emphasis).isEmpty()
+        }
+        val mention = "hi @_jane_ #_tag_"
+        assertThat(analyze(mention).atomicRanges).containsExactly(atom(mention, "@_jane_", MENTION), atom(mention, "#_tag_", HASHTAG)).inOrder()
+        assertThat(analyze(mention).emphasis).isEmpty()
+    }
+
+    @Test
+    fun `emphasis around a bare url ends at the markers`() {
+        val source = "_https://example.com/a_"
+        val structure = analyze(source)
+        assertThat(structure.atomicRanges).containsExactly(atom(source, "https://example.com/a", URL))
+        assertThat(structure.emphasis.single().closeRange).isEqualTo(SourceRange(22, 23))
+    }
+
+    @Test
+    fun `url in guillemets ends before the quote`() {
+        val source = "Ссылка «https://example.com» тут"
+        assertThat(analyze(source).atomicRanges).containsExactly(atom(source, "https://example.com", URL))
+    }
+
+    @Test
     fun `emphasis spans carry their exact markers and ranges`() {
         val source = "a **bold _it_ end** ~~gone~~ __b__"
         val emphasis = analyze(source).emphasis
@@ -132,6 +165,19 @@ class AnalyzeTest {
         val quote = analyze(source).quotes.single()
         assertThat(quote.lines).containsExactly(SourceRange(0, 5), SourceRange(6, 11)).inOrder()
         assertThat(quote.range).isEqualTo(SourceRange(0, 16))
+    }
+
+    @Test
+    fun `quote lines indented by up to three spaces start at the marker`() {
+        assertThat(analyze("   > indented quote").quotes.single().lines).containsExactly(SourceRange(3, 19))
+        assertThat(analyze("> a\n   > b").quotes.single().lines).containsExactly(SourceRange(0, 3), SourceRange(7, 10)).inOrder()
+    }
+
+    @Test
+    fun `spaced thematic break is neither a list nor an atomic range`() {
+        val structure = analyze("* * *\n- - -")
+        assertThat(structure.listItems).isEmpty()
+        assertThat(structure.atomicRanges).isEmpty()
     }
 
     @Test

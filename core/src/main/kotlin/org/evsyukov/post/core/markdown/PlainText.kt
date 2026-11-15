@@ -14,6 +14,8 @@ import org.evsyukov.post.core.text.TextEntities
  * - the fence lines of a code block go, the code stays as typed;
  * - images, inline HTML, reference links and Markdown outside the subset of F3 stay as typed, and so do
  *   line breaks, blank lines and indentation;
+ * - bare URLs, mentions and hashtags stay as typed even when they hold `_`, `*` or `~`
+ *   (`https://example.com/files/__init__.py`, `@_jane_`; see [parseMarkdown]);
  * - manual break lines are removed (threads.md, T13); the pieces around them are joined by a blank line.
  */
 fun toPlainText(source: String): String = rewritePlain(withoutManualBreaks(source)) { range, text, destination ->
@@ -56,9 +58,14 @@ fun toBlueskyText(source: String, mode: BlueskyLinkMode): BlueskyText {
     val rewritten = rewritePlain(withoutManualBreaks(source)) { range, text, destination ->
         blueskyLink(range, text, destination, mode)
     }
-    val links = rewritten.links.toMutableList()
+    // Both lists are sorted and free of overlaps of their own, so one pass finds the bare URLs to keep.
+    val markdownLinks = rewritten.links.sortedBy { it.start }
+    val links = ArrayList<LinkSpan>(markdownLinks)
+    var next = 0
     for (url in TextEntities.urls(rewritten.text)) {
-        if (links.none { it.start < url.end && url.start < it.end }) links += LinkSpan(url.start, url.end, url.value)
+        while (next < markdownLinks.size && markdownLinks[next].end <= url.start) next++
+        val overlaps = next < markdownLinks.size && markdownLinks[next].start < url.end
+        if (!overlaps) links += LinkSpan(url.start, url.end, url.value)
     }
     links.sortBy { it.start }
     return BlueskyText(rewritten.text, links)
@@ -69,7 +76,7 @@ private fun rewritePlain(
     linkEdit: (range: SourceRange, text: String, destination: String) -> Edit,
 ): Rewritten {
     val rewriter = PlainRewriter(source, linkEdit)
-    rewriter.visit(markdownParser.parse(source))
+    rewriter.visit(parseMarkdown(source))
     return applyEdits(source, rewriter.edits)
 }
 

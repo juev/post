@@ -93,6 +93,25 @@ class HighlightTest {
     }
 
     @Test
+    fun `indented quote marker is syntax`() {
+        assertThat(highlight("   > indented")).containsAtLeast(span(0, 13, QUOTE), span(3, 4, SYNTAX))
+        assertThat(highlight("> a\n   > b")).containsAtLeast(span(0, 1, SYNTAX), span(7, 8, SYNTAX))
+    }
+
+    @Test
+    fun `markup characters inside bare urls and mentions are not styled`() {
+        for (source in listOf("https://example.com/files/__init__.py", "see https://x.com/_jane_ now", "hi @_jane_", "https://example.com/a*b*c")) {
+            assertThat(highlight(source)).isEmpty()
+        }
+        assertThat(highlight("**https://example.com/a**")).containsExactly(span(0, 2, SYNTAX), span(2, 23, BOLD), span(23, 25, SYNTAX)).inOrder()
+    }
+
+    @Test
+    fun `spaced thematic break is not a list`() {
+        assertThat(highlight("* * *\n- - -")).isEmpty()
+    }
+
+    @Test
     fun `nested quote markers`() {
         val spans = highlight(">> deep")
         assertThat(spans).containsAtLeast(span(0, 1, SYNTAX), span(1, 2, SYNTAX), span(0, 7, QUOTE), span(1, 7, QUOTE))
@@ -222,12 +241,64 @@ class HighlightTest {
         assertThat(best).isLessThan(250.0)
     }
 
+    @Test
+    fun `public highlight drops nothing on random input`() {
+        // highlightUnguarded does not filter, so an offset bug shows in the fuzz tests above, not here.
+        val random = Random(5)
+        val alphabet = "*_~`[]()<>!#>-+.:/ \n1ahtps⸻"
+        repeat(500) {
+            val text = buildString { repeat(random.nextInt(0, 80)) { append(alphabet[random.nextInt(alphabet.length)]) } }
+            assertThat(highlight(text)).isEqualTo(highlightUnguarded(text))
+        }
+    }
+
+    /**
+     * Invariants the highlighter does not enforce by construction, so an offset or nesting bug breaks them:
+     * spans lie inside the text, styled text is framed by its own markers, break markers are exactly the
+     * manual break lines, list markers and quote markers are what they claim to be.
+     */
     private fun assertValid(text: String, spans: List<HighlightSpan>) {
         for (s in spans) {
             assertThat(s.start).isAtLeast(0)
             assertThat(s.end).isAtMost(text.length)
             assertThat(s.start).isLessThan(s.end)
         }
-        assertThat(spans).isInOrder(compareBy<HighlightSpan>({ it.start }, { it.end }, { it.kind.ordinal }))
+        val syntax = spans.filter { it.kind == SYNTAX }.map { text.substring(it.start, it.end) to it.start }.toSet()
+        fun syntaxAt(start: Int, end: Int) = (text.substring(start, end) to start) in syntax
+        for (s in spans) {
+            val content = text.substring(s.start, s.end)
+            when (s.kind) {
+                BOLD, ITALIC, STRIKE -> {
+                    val markers = when (s.kind) {
+                        BOLD -> listOf("**", "__")
+                        ITALIC -> listOf("*", "_")
+                        else -> listOf("~~")
+                    }
+                    assertThat(markers.any { m ->
+                        s.start >= m.length && text.startsWith(m, s.start - m.length) && text.startsWith(m, s.end) &&
+                            syntaxAt(s.start - m.length, s.start) && syntaxAt(s.end, s.end + m.length)
+                    }).isTrue()
+                }
+                CODE -> {
+                    // The opening run may follow an escaped backtick, so look for the run the highlighter marked.
+                    val ticks = (1..s.start).firstOrNull { k ->
+                        text.substring(s.start - k, s.start).all { it == '`' } && syntaxAt(s.start - k, s.start)
+                    }
+                    assertThat(ticks).isNotNull()
+                    assertThat(syntaxAt(s.end, s.end + ticks!!)).isTrue()
+                    assertThat(text.substring(s.end, s.end + ticks).all { it == '`' }).isTrue()
+                }
+                LIST_MARKER -> {
+                    assertThat(content).matches("[-*+]|[0-9]+[.)]")
+                    assertThat(syntaxAt(s.start, s.end)).isTrue()
+                }
+                QUOTE -> assertThat(content.trimStart(' ', '\t')).startsWith(">")
+                CODE_BLOCK -> assertThat(content.trimStart(' ', '\t').take(3)).isAnyOf("```", "~~~")
+                BREAK_MARKER -> assertThat(isManualBreakLine(content)).isTrue()
+                else -> Unit
+            }
+        }
+        val breakLines = text.split("\r\n", "\n", "\r").count { isManualBreakLine(it) }
+        assertThat(spans.count { it.kind == BREAK_MARKER }).isEqualTo(breakLines)
     }
 }

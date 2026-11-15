@@ -70,7 +70,8 @@ data class HighlightSpan(val start: Int, val end: Int, val kind: Kind) {
  */
 fun highlight(source: String): List<HighlightSpan> =
     try {
-        highlightUnguarded(source)
+        // A span outside the text would crash the editor's styling, so the safety net drops it.
+        highlightUnguarded(source).filter { it.start < it.end && it.start >= 0 && it.end <= source.length }
     } catch (e: RuntimeException) {
         // Highlighting is cosmetic: on a failure the draft shows as plain text instead of crashing the editor.
         emptyList()
@@ -78,18 +79,17 @@ fun highlight(source: String): List<HighlightSpan> =
         emptyList()
     }
 
-/** [highlight] without the safety net, so tests see a failure instead of an empty result. */
+/** [highlight] without the safety net, so tests see a failure or a span out of bounds instead of a filtered result. */
 internal fun highlightUnguarded(source: String): List<HighlightSpan> {
     val spans = ArrayList<HighlightSpan>()
     val breaks = manualBreakLines(source)
     breaks.forEach { spans += HighlightSpan(it.start, it.end, HighlightSpan.Kind.BREAK_MARKER) }
     for (piece in pieceRanges(source, breaks)) {
         if (piece.length == 0) continue
-        val document = markdownParser.parse(source.substring(piece.start, piece.end))
+        val document = parseMarkdown(source.substring(piece.start, piece.end))
         Highlighter(source, piece.start, spans).visit(document)
     }
     return spans
-        .filter { it.start < it.end && it.start >= 0 && it.end <= source.length }
         .distinct()
         .sortedWith(compareBy<HighlightSpan>({ it.start }, { it.end }, { it.kind.ordinal }))
 }
@@ -184,8 +184,8 @@ private class Highlighter(
         val range = node.deepRange(offset) ?: return
         add(range.start, range.end, HighlightSpan.Kind.QUOTE)
         for (span in node.sourceSpans) {
-            val start = span.inputIndex + offset
-            if (span.length > 0 && source[start] == '>') add(start, start + 1, HighlightSpan.Kind.SYNTAX)
+            val marker = quoteMarker(source, span.inputIndex + offset, span.inputIndex + span.length + offset)
+            if (marker >= 0) add(marker, marker + 1, HighlightSpan.Kind.SYNTAX)
         }
     }
 
@@ -194,6 +194,16 @@ private class Highlighter(
         add(marker.start, marker.end, HighlightSpan.Kind.LIST_MARKER)
         add(marker.start, marker.end, HighlightSpan.Kind.SYNTAX)
     }
+}
+
+/**
+ * The offset of the `>` that starts the quote line `[start, end)` of [source] after up to three spaces of
+ * indentation, or -1 for a lazy continuation line.
+ */
+internal fun quoteMarker(source: String, start: Int, end: Int): Int {
+    var i = start
+    while (i < end && i - start < 3 && source[i] == ' ') i++
+    return if (i < end && source[i] == '>') i else -1
 }
 
 /**

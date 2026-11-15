@@ -50,6 +50,23 @@ class BlueskyTextTest {
     }
 
     @Test
+    fun `bare urls with markup characters keep their text and facet`() {
+        for (url in listOf("https://example.com/files/__init__.py", "https://mastodon.social/@_jane_", "https://example.com/a*b*c")) {
+            assertThat(toBlueskyText(url, FACET_ON_TEXT)).isEqualTo(BlueskyText(url, listOf(LinkSpan(0, url.length, url))))
+        }
+        assertThat(toBlueskyText("**https://example.com/a**", FACET_ON_TEXT))
+            .isEqualTo(BlueskyText("https://example.com/a", listOf(LinkSpan(0, 21, "https://example.com/a"))))
+    }
+
+    @Test
+    fun `url in guillemets gets a facet without the quote`() {
+        assertThat(toBlueskyText("Ссылка «https://example.com/path» тут", FACET_ON_TEXT).links)
+            .containsExactly(LinkSpan(8, 32, "https://example.com/path"))
+        assertThat(toBlueskyText("«https://example.com»", FACET_ON_TEXT).links)
+            .containsExactly(LinkSpan(1, 20, "https://example.com"))
+    }
+
+    @Test
     fun `links to other destinations are plain text without facets`() {
         assertThat(toBlueskyText("[a](/rel) <me@example.com> [x](javascript:alert(1))", FACET_ON_TEXT))
             .isEqualTo(BlueskyText("a (/rel) me@example.com x (javascript:alert(1))", emptyList()))

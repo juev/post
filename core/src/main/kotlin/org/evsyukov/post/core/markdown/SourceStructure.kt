@@ -134,8 +134,10 @@ data class ListItemSpan(
  * The structure of the Markdown [source] for the thread splitter; see [SourceStructure] for the contract.
  *
  * Bare URLs, mentions and hashtags are found in the text outside code blocks, code spans, links, images
- * and inline HTML. A bare entity that runs into an emphasis marker (`**https://example.com**`) ends at the
- * marker. Where entities overlap, the one that starts first wins, then the longer one.
+ * and inline HTML. Markup characters inside them are text, not emphasis ([parseMarkdown]), so
+ * `https://example.com/files/__init__.py` and `@_jane_` are one range each. A bare entity that runs into an
+ * emphasis marker (`**https://example.com**`) ends at the marker. Where entities overlap, the one that
+ * starts first wins, then the longer one (`@alice.b_c.com` is one Mastodon mention, not `@alice.b`).
  */
 fun analyze(source: String): SourceStructure {
     val breaks = manualBreakLines(source)
@@ -143,7 +145,7 @@ fun analyze(source: String): SourceStructure {
     for (piece in pieceRanges(source, breaks)) {
         if (piece.length == 0) continue
         collector.offset = piece.start
-        collector.visit(markdownParser.parse(source.substring(piece.start, piece.end)))
+        collector.visit(parseMarkdown(source.substring(piece.start, piece.end)))
     }
     val blanked = collector.atomic.map { SourceRange(it.start, it.end) } +
         collector.codeBlocks.map { it.range } + collector.opaque + breaks +
@@ -282,9 +284,11 @@ private class StructureCollector(private val source: String) {
 
     private fun quote(node: BlockQuote) {
         val range = node.deepRange(offset) ?: return
-        val lines = node.sourceSpans
-            .map { SourceRange(it.inputIndex + offset, it.inputIndex + it.length + offset) }
-            .filter { it.length > 0 && source[it.start] == '>' }
+        val lines = node.sourceSpans.mapNotNull {
+            val end = it.inputIndex + it.length + offset
+            val marker = quoteMarker(source, it.inputIndex + offset, end)
+            if (marker >= 0) SourceRange(marker, end) else null
+        }
         quotes += QuoteSpan(range, lines)
     }
 

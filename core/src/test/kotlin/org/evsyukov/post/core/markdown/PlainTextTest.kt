@@ -127,6 +127,54 @@ class PlainTextTest {
     }
 
     @Test
+    fun `bare urls stay as typed whatever markup characters they hold`() {
+        for (url in listOf(
+            "https://x.com/_jane_",
+            "https://docs.python.org/3/reference/datamodel.html#object.__init__",
+            "https://example.com/files/__init__.py",
+            "https://mastodon.social/@_jane_",
+            "https://example.com/a*b*c",
+            "https://example.com/~~x~~",
+            "https://example.com/`x`",
+            "https://web.archive.org/web/*/example.com/*",
+            "https://example.com/a[1](2)",
+        )) {
+            assertThat(toPlainText("see $url now")).isEqualTo("see $url now")
+        }
+    }
+
+    @Test
+    fun `emphasis around a bare url still works`() {
+        assertThat(toPlainText("**https://example.com/a**")).isEqualTo("https://example.com/a")
+        assertThat(toPlainText("_https://example.com/a_ and *see https://example.com/b*"))
+            .isEqualTo("https://example.com/a and see https://example.com/b")
+        assertThat(toPlainText("~~https://example.com/__init__.py~~")).isEqualTo("https://example.com/__init__.py")
+    }
+
+    @Test
+    fun `mentions and hashtags stay as typed`() {
+        assertThat(toPlainText("hi @_jane_ and @__init__@example.social #_tag_"))
+            .isEqualTo("hi @_jane_ and @__init__@example.social #_tag_")
+        assertThat(toPlainText("_@alice_ **#tag**")).isEqualTo("@alice #tag")
+    }
+
+    @Test
+    fun `link text that is a url with underscores shows only the url`() {
+        assertThat(toPlainText("[https://example.com/__init__.py](https://example.com/__init__.py)"))
+            .isEqualTo("https://example.com/__init__.py")
+    }
+
+    @Test
+    fun `spaced thematic breaks stay as typed`() {
+        for (line in listOf("* * *", "- - -", "  *  *  *  ", "-\t-\t-")) {
+            assertThat(toPlainText(line)).isEqualTo(line)
+            assertThat(toPlainText("Text\n$line\nmore")).isEqualTo("Text\n$line\nmore")
+        }
+        assertThat(toPlainText("> * * *")).isEqualTo("> * * *")
+        assertThat(toPlainText("- a\n- * b")).isEqualTo("• a\n• • b")
+    }
+
+    @Test
     fun `manual break lines are removed`() {
         assertThat(toPlainText("first **one**\n\n⸻\n\nsecond")).isEqualTo("first one\n\nsecond")
         assertThat(toPlainText("⸻")).isEmpty()

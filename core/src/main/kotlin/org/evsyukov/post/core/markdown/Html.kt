@@ -35,7 +35,9 @@ import org.evsyukov.post.core.text.TextEntities
  * - An inline link or autolink to an `http`, `https` or `mailto` URL is `<a href>`; a link to anything
  *   else becomes the text `text (url)` of F10. Bare `http` and `https` URLs become `<a href>` as well.
  * - A fenced code block is `<pre><code>` without the info string; inline code is `<code>`.
- * - Images, reference links and their definitions, and Markdown outside the subset of F3 are text as typed.
+ * - Images, reference links and their definitions, and Markdown outside the subset of F3 are text as typed;
+ *   a spaced thematic break such as `* * *` is a paragraph of its own.
+ * - A bare URL holding `_`, `*` or `~` is one link, as typed (see [parseMarkdown]).
  * - An ordered list is `<ol>` without `start`, because no attribute but `href` is allowed; its items are
  *   numbered from 1 by the reader.
  * - Manual break lines are removed (threads.md, T13); the pieces around them are joined by a blank line.
@@ -43,7 +45,7 @@ import org.evsyukov.post.core.text.TextEntities
 fun toHtml(source: String): String {
     val text = withoutManualBreaks(source)
     val out = StringBuilder(text.length + text.length / 4)
-    HtmlWriter(text, out).block(markdownParser.parse(text))
+    HtmlWriter(text, out).block(parseMarkdown(text))
     return out.toString()
 }
 
@@ -71,13 +73,13 @@ private class HtmlWriter(private val source: String, private val out: StringBuil
                 escape(node.literal.orEmpty())
                 out.append("</code></pre>")
             }
-            is LinkReferenceDefinition -> {
+            is LinkReferenceDefinition, is LiteralLine -> {
                 out.append("<p>")
-                escape(asTyped(node))
+                escape(asTyped(node).trim())
                 out.append("</p>")
             }
             else -> {
-                // Blocks outside the subset cannot appear with the parser's settings; their text is kept.
+                // Other blocks outside the subset cannot appear with the parser's settings; their text is kept.
                 val typed = asTyped(node)
                 if (typed.isNotEmpty()) {
                     out.append("<p>")

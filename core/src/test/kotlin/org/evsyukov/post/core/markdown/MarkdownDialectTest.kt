@@ -54,6 +54,30 @@ class MarkdownDialectTest {
     }
 
     @Test
+    fun `bare urls and mentions are not rewritten`() {
+        for (source in listOf(
+            "https://mastodon.social/@_jane_",
+            "see https://example.com/files/__init__.py now",
+            "https://docs.python.org/3/reference/datamodel.html#object.__init__",
+            "hi @_jane_ and #_tag_",
+        )) {
+            assertThat(toMarkdownDialect(source)).isEqualTo(source)
+        }
+        assertThat(toMarkdownDialect("_https://example.com/a_ and __@alice__")).isEqualTo("*https://example.com/a* and **@alice**")
+    }
+
+    @Test
+    fun `a failing replacement among many stays fast`() {
+        // The fallback checks the replacements in halves, not one parse per replacement.
+        val source = "@*_=b)_> " + "_ok_ ".repeat(2_000)
+        val started = System.nanoTime()
+        val dialect = toMarkdownDialect(source)
+        val millis = (System.nanoTime() - started) / 1_000_000
+        assertThat(dialect).isEqualTo("@*_=b)_> " + "*ok* ".repeat(2_000))
+        assertThat(millis).isLessThan(1_500L)
+    }
+
+    @Test
     fun `everything else stays exactly as typed`() {
         val source = "# Heading\n> quote _it_\n- item\n1) one\n![i](u.png) <b>x</b> ~~s~~ `c`\n\n```kt\nval a = 1\n```\n" +
             "[ref][r]\n\n[r]: https://x.com\n    indented\nПривет 👍🏽"
