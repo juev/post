@@ -69,17 +69,27 @@ object ThreadSplitter {
 
     /**
      * The split of the piece whose candidate breaks have [ranks] (one per break, in order) under
-     * [measure], with at most [limit] units in a part (used only to thin dense breaks).
+     * [measure], with at most [limit] units in a part (used only to thin dense breaks). The nodes of [keep]
+     * survive the thinning, as the ends of the greedy split do.
      */
-    fun split(ranks: List<BreakRank>, measure: PartMeasure, limit: Int): SplitPlan {
+    fun split(ranks: List<BreakRank>, measure: PartMeasure, limit: Int, keep: List<Int> = emptyList()): SplitPlan {
         require(measure.nodeCount == ranks.size + 2) { "one rank per break" }
         val greedy = greedy(measure)
         if (greedy !is SplitPlan.Parts || greedy.count == 1) return greedy
-        val nodes = thin(ranks, measure, limit, greedy.ends)
+        val nodes = thin(ranks, measure, limit, greedy.ends + keep)
         for (parts in greedy.count..greedy.count + MAX_EXTRA_PARTS) {
             balance(nodes, ranks, measure, parts, tailRule = true)?.let { return SplitPlan.Parts(it) }
         }
         return balance(nodes, ranks, measure, greedy.count, tailRule = false)?.let { SplitPlan.Parts(it) } ?: greedy
+    }
+
+    /**
+     * The cheapest split into exactly [parts] parts that meets the tail rule (T7, T8), over the breaks
+     * thinned as [split] thins them with [keep] kept; null when there is none.
+     */
+    fun balanced(ranks: List<BreakRank>, measure: PartMeasure, limit: Int, parts: Int, keep: List<Int>): List<Int>? {
+        require(measure.nodeCount == ranks.size + 2) { "one rank per break" }
+        return balance(thin(ranks, measure, limit, keep), ranks, measure, parts, tailRule = true)
     }
 
     /** The greedy split of T6: every part ends at the farthest node that still fits. */

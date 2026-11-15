@@ -67,6 +67,10 @@ class PartAssemblerTest {
         assertThat(result.parts.single().mediaItemIds).containsExactly(1L)
         assertThat(result.parts.single().mediaOnly).isTrue()
         assertThat(result.parts.single().text).isEmpty()
+        // Without media the one empty part carries nothing: it is not media-only.
+        val bare = assembled("", bluesky(), null)
+        assertThat(bare.parts.single().mediaOnly).isFalse()
+        assertThat(bare.parts.single().mediaItemIds).isEmpty()
     }
 
     @Test

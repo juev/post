@@ -36,7 +36,8 @@ enum class BreakRank {
  * @property codeBlock the fenced code block the break falls in, between two of its lines; the part before
  *   closes the fence and the part after reopens it with its info string (T5).
  * @property quoteDepth how many levels of block quote the part after the break must reopen with `> `,
- *   because it starts in the middle of a quoted line or on a lazy continuation line.
+ *   because it starts in the middle of a quoted line or on a lazy continuation line; 0 when it starts at
+ *   the `>` marker of a quote line, which it copies.
  */
 data class Break(
     val end: Int,
@@ -58,7 +59,10 @@ data class Break(
  *
  * Kept out: breaks inside an atomic range (inline code, links, autolinks, images, bare URLs, mentions,
  * hashtags), inside a grapheme cluster, inside a code line or next to a fence line, between a line's quote
- * or list markers and its text, and at the ends of the piece. Sentences and words come from [segmenter]
+ * or list markers and its text, before a code span that a part would read as a fence (it opens with three
+ * backticks and closes on a later line), inside a line that opens with three backticks or tildes but is no
+ * fence or opens like a link reference definition (cut short, it could read as one), and at the ends of the
+ * piece. Sentences and words come from [segmenter]
  * for [locale]; the sentence rules run on the text with the Markdown markers blanked, so `**Done.** Next`
  * ends a sentence before `Next`. Spaces that do not break (U+00A0 and the like) are never a break.
  */
@@ -81,6 +85,7 @@ private class BreakFinder(
     private val lines = lines(text)
     private val lineOf = IntArray(n + 1)
     private val listMarkerEnd = HashMap<Int, Int>()
+    private val quoteLineStarts = quoteLineStarts(structure)
 
     init {
         for (boundary in segmenter.graphemeBoundaries(text)) graphemeStart[boundary] = true
@@ -148,10 +153,54 @@ private class BreakFinder(
     private fun make(end: Int, start: Int, rank: BreakRank, block: CodeBlockSpan? = null): Break? {
         if (!graphemeStart[end] || !graphemeStart[start]) return null
         if (cutsAtom(end, start)) return null
+        if (block == null && startsFenceLikeCodeSpan(start)) return null
+        if (block == null && (end until start).none { text[it] == '\n' || text[it] == '\r' } && tailSensitiveLine(lineOf[end])) return null
         val emphasis = if (block != null) emptyList() else crossingEmphasis(end, start)
-        val quoteDepth = if (block != null || text[start] == '>') 0 else quoteDepthAt(start)
+        // A part that starts at the marker of a quote line copies its markers; a literal `>` in the middle
+        // of a line is text, and the part after it still reopens the quotes it is in.
+        val quoteDepth = if (block != null || start in quoteLineStarts) 0 else quoteDepthAt(start)
         return Break(end, start, rank, emphasis, block, quoteDepth)
     }
+
+    /**
+     * Whether a code span that opens with three or more backticks and closes on a later line starts at
+     * [start]. At the start of a part it would open a code block instead, and no escape keeps it a code span.
+     */
+    private fun startsFenceLikeCodeSpan(start: Int): Boolean {
+        if (start >= n || text[start] != '`' || atomAt[start] < 0 || structure.atomicRanges[atomAt[start]].start != start) return false
+        var k = start
+        while (k < n && text[k] == '`') k++
+        if (k - start < 3) return false
+        while (k < n && text[k] != '\n' && text[k] != '\r') {
+            if (text[k] == '`') return false
+            k++
+        }
+        return true
+    }
+
+    /**
+     * Whether line [index] reads differently when a part cuts it short: after its container prefix it opens
+     * with three or more backticks or tildes and is no fence in the piece (a backtick "fence" with backticks
+     * later in its line is text), or it opens like a link reference definition (`[label]:`), which is one
+     * only when the rest of the line allows. No break falls inside such a line.
+     */
+    private fun tailSensitiveLine(index: Int): Boolean {
+        tailSensitive[index]?.let { return it }
+        val line = lines[index]
+        val p = prefixEnd(line)
+        var result = false
+        if (p < line.end && (text[p] == '`' || text[p] == '~') && codeBlockAt[p] == null) {
+            var k = p
+            while (k < line.end && text[k] == text[p]) k++
+            result = k - p >= 3
+        } else if (p < line.end && text[p] == '[') {
+            result = LINK_DEFINITION.containsMatchIn(text.substring(p, line.end))
+        }
+        tailSensitive[index] = result
+        return result
+    }
+
+    private val tailSensitive = arrayOfNulls<Boolean>(lines.size)
 
     /** Whether a break with the gap `[end, start)` would cut an atomic range. */
     private fun cutsAtom(end: Int, start: Int): Boolean {
@@ -266,3 +315,10 @@ private class BreakFinder(
             Character.isLetter(cp) && Character.UnicodeScript.of(cp) in NO_SPACE_SCRIPTS
     }
 }
+
+/** The offsets of the `>` markers that start quote lines in [structure]: the only `>` that are markup. */
+internal fun quoteLineStarts(structure: SourceStructure): Set<Int> =
+    structure.quotes.flatMapTo(HashSet()) { quote -> quote.lines.map { it.start } }
+
+/** The start of a link reference definition, `[label]:`; a part must not start one where the piece has text. */
+internal val LINK_DEFINITION = Regex("""^\[(?:[^\]\\]|\\.)+]:""")

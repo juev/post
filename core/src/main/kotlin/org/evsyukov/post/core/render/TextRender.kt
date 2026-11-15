@@ -59,8 +59,9 @@ sealed interface TextIssue {
     data class TooManyParts(val count: Int) : TextIssue
 
     /**
-     * The content warning, which goes with every Mastodon part and counts in it (N3), leaves no room for the
-     * text: it counts [count] against the limit.
+     * The content warning, which goes with every Mastodon part and counts in it (N3), leaves no room: it
+     * counts [count] against the limit, and with it the limit is reached before the text, a run of the text
+     * that would fit without the warning, or the number of a media-only part (A11).
      */
     data class SpoilerTooLong(val count: Int) : TextIssue
 }

@@ -11,6 +11,7 @@ import org.evsyukov.post.core.thread.Break
 import org.evsyukov.post.core.thread.BreakRank
 import org.evsyukov.post.core.thread.PartMeasure
 import org.evsyukov.post.core.thread.Piece
+import org.evsyukov.post.core.thread.PieceMarkup
 import org.evsyukov.post.core.thread.SplitPlan
 import org.evsyukov.post.core.thread.ThreadSplitter
 import org.evsyukov.post.core.thread.fencePrefix
@@ -26,8 +27,9 @@ import java.util.Locale
  * points, URL weights, bytes), as the character reaches the converted text: markers the format removes
  * weigh 0, an atomic range (code, link, URL, mention, hashtag) weighs what it converts to on its own, HTML
  * tags and escapes add their length. Prefix sums make the length of any part a subtraction, plus what the
- * breaks at its ends reopen and close. The estimate only steers the search: a piece that fits is checked
- * exactly first (T2), and every part is then converted and counted exactly ([exact]).
+ * breaks at its ends reopen and close. The estimate only steers the balance: a piece that fits is checked
+ * exactly first (T2), the number of parts comes from a greedy split by exact counts (T6), and every part the
+ * plan returns has been converted and counted exactly ([exact], [plan]).
  */
 internal class PieceModel(
     val piece: Piece,
@@ -47,6 +49,7 @@ internal class PieceModel(
     private val bytes: IntArray?
     private val openUnits = IntArray(nodeCount)
     private val closeUnits = IntArray(nodeCount)
+    private val markup: PieceMarkup = PieceMarkup.of(text, structure)
     private val exactCache = HashMap<Triple<Int, Int, String?>, ConvertedPart>()
 
     init {
@@ -75,34 +78,89 @@ internal class PieceModel(
         else -> breaks[node - 1].end
     }
 
+    /** The estimated length of the part `(from, to)`, without the content warning and the number. */
+    fun estimate(from: Int, to: Int): Int = units[endOf(to)] - units[startOf(from)] + openUnits[from] + closeUnits[to]
+
     /** The part `(from, to)` converted, numbered with [label] and counted exactly. */
     fun exact(from: Int, to: Int, label: String?): ConvertedPart = exactCache.getOrPut(Triple(from, to, label)) {
-        val fragment = partFragment(text, structure, breakAt(from), breakAt(to), closeCodeBlock = label != null)
+        val fragment = partFragment(text, structure, breakAt(from), breakAt(to), closeCodeBlock = label != null, markup)
         converter.part(fragment, label)
     }
 
     private fun exactFits(from: Int, to: Int, label: String?): Boolean = exact(from, to, label).fits(profile)
 
     /**
-     * The parts of this piece when every part may take up to `limit - spoiler - reserve - slack` estimated
-     * units (and the same for bytes), or by exact checks only when [exactOnly].
+     * Whether the part `(from, to)` with [label] would fit without the content warning, which counts
+     * [spoilerUnits]: then the warning, not the text, leaves no room.
      */
-    fun plan(digits: Int, spoilerUnits: Int, slack: Int, byteSlack: Int, exactOnly: Boolean, padding: Int = 0): SplitPlan {
+    fun fitsWithoutSpoiler(from: Int, to: Int, label: String?, spoilerUnits: Int): Boolean {
+        val part = exact(from, to, label)
+        return part.overshoot(profile) - spoilerUnits <= 0 && part.byteOvershoot(profile) <= 0
+    }
+
+    /**
+     * The parts of this piece when each ends with a number of [digits] digits (none for 0) and the content
+     * warning counts [spoilerUnits]. Every part of the result fits once converted and counted with the widest
+     * number, padded with [padding] spaces.
+     *
+     * 1. A piece that fits as it is stays one part (T2).
+     * 2. The exact greedy split ([exactGreedy]) gives the smallest number of parts (T6), or the run that fits
+     *    nowhere (T9).
+     * 3. The splitter balances the parts (T7, T8) over the estimate, guided by exact checks
+     *    ([GuidedMeasure]): the parts of the greedy split are known to fit, the estimate budget widens so it
+     *    admits them, and every split it returns is converted and counted; a part over the limit is ruled out
+     *    and the splitter runs again, up to [MAX_GUIDED_ROUNDS] times, then the greedy split stands.
+     * 4. More parts than the greedy split are kept only when the greedy split breaks the tail rule (T8);
+     *    otherwise the best balanced split of the greedy count is taken, or the greedy split itself.
+     */
+    fun plan(digits: Int, spoilerUnits: Int, padding: Int = 0): SplitPlan {
         val label = widestLabel(digits)?.let { it + " ".repeat(padding) }
-        // T2: a piece that fits as it is stays one part, whatever the estimate says.
         if (exactFits(0, last, label)) return SplitPlan.Parts(listOf(last))
-        if (exactOnly) return exactGreedy(label)
+        val greedy = exactGreedy(label)
+        if (greedy !is SplitPlan.Parts) return greedy
         val reserve = numberReserve(profile.format, digits)
-        val budget = profile.maxCharacters - spoilerUnits - reserve - slack
-        val byteBudget = profile.maxBytes?.let { it - reserve - byteSlack }
-        return ThreadSplitter.split(breaks.map { it.rank }, Measure(budget, byteBudget), profile.maxCharacters)
+        val measure = GuidedMeasure(
+            label,
+            profile.maxCharacters - spoilerUnits - reserve,
+            profile.maxBytes?.let { it - reserve },
+            greedy.ends,
+        )
+        val ranks = breaks.map { it.rank }
+        var chosen: List<Int> = greedy.ends
+        for (round in 1..MAX_GUIDED_ROUNDS) {
+            val plan = ThreadSplitter.split(ranks, measure, profile.maxCharacters, keep = greedy.ends)
+            if (plan !is SplitPlan.Parts) break
+            if (measure.verify(plan.ends)) {
+                chosen = plan.ends
+                break
+            }
+        }
+        if (chosen.size > greedy.count && meetsTailRule(greedy.ends, spoilerUnits)) {
+            chosen = greedy.ends
+            for (round in 1..MAX_GUIDED_ROUNDS) {
+                val balanced = ThreadSplitter.balanced(ranks, measure, profile.maxCharacters, greedy.count, keep = greedy.ends) ?: break
+                if (measure.verify(balanced)) {
+                    if (meetsTailRule(balanced, spoilerUnits)) chosen = balanced
+                    break
+                }
+            }
+        }
+        return SplitPlan.Parts(chosen)
+    }
+
+    /** Whether the last of the parts ending at [ends] holds a third of their average length (T8), by exact counts. */
+    private fun meetsTailRule(ends: List<Int>, spoilerUnits: Int): Boolean {
+        if (ends.size < 2) return true
+        var from = 0
+        val lengths = ends.map { to -> (exact(from, to, null).count - spoilerUnits).also { from = to } }
+        return lengths.last() * 3.0 >= lengths.sum().toDouble() / lengths.size
     }
 
     /**
      * The greedy split of T6 by exact checks: each part ends at the farthest node that fits once converted
-     * and counted, found by bisection over the nodes the estimate allows with a wide margin.
+     * and counted with [label], found by bisection over the nodes the estimate allows with a wide margin.
      */
-    private fun exactGreedy(label: String?): SplitPlan {
+    fun exactGreedy(label: String?): SplitPlan {
         val ends = ArrayList<Int>()
         var from = 0
         val margin = 2 * profile.maxCharacters + 64
@@ -131,8 +189,39 @@ internal class PieceModel(
         return SplitPlan.Parts(ends)
     }
 
-    private inner class Measure(private val budget: Int, private val byteBudget: Int?) : PartMeasure {
+    /**
+     * The estimate of [estimate] for the splitter, corrected by exact checks with [label]. A part checked
+     * exactly fits or not by that check. Past a part found too long, no longer part from the same node fits.
+     * Any other part fits when its estimate is within the budget ([budget] units and [byteBudget] bytes for
+     * the text alone), widened so that the estimate admits every part of [known], a split known to fit.
+     */
+    private inner class GuidedMeasure(
+        private val label: String?,
+        budget: Int,
+        byteBudget: Int?,
+        known: List<Int>,
+    ) : PartMeasure {
         override val nodeCount: Int get() = this@PieceModel.nodeCount
+
+        private val verdicts = arrayOfNulls<HashMap<Int, Boolean>>(nodeCount)
+        private val reach = IntArray(nodeCount) { -1 }
+        private val cap = IntArray(nodeCount) { Int.MAX_VALUE }
+        private val budget: Int
+        private val byteBudget: Int?
+
+        init {
+            var widen = 0
+            var widenBytes = 0
+            var from = 0
+            for (to in known) {
+                record(from, to, true)
+                widen = maxOf(widen, estimate(from, to) - budget)
+                if (byteBudget != null) widenBytes = maxOf(widenBytes, rawBytes(from, to) + openUnits[from] + closeUnits[to] - byteBudget)
+                from = to
+            }
+            this.budget = budget + widen
+            this.byteBudget = byteBudget?.let { it + widenBytes }
+        }
 
         private fun raw(from: Int, to: Int): Int = units[endOf(to)] - units[startOf(from)]
 
@@ -141,17 +230,41 @@ internal class PieceModel(
             return sums[endOf(to)] - sums[startOf(from)]
         }
 
-        override fun length(from: Int, to: Int): Int = raw(from, to) + openUnits[from] + closeUnits[to]
+        private fun record(from: Int, to: Int, fits: Boolean) {
+            (verdicts[from] ?: HashMap<Int, Boolean>().also { verdicts[from] = it })[to] = fits
+            if (fits) reach[from] = maxOf(reach[from], to) else cap[from] = minOf(cap[from], to)
+        }
 
-        override fun fits(from: Int, to: Int): Boolean =
-            length(from, to) <= budget &&
+        override fun length(from: Int, to: Int): Int = estimate(from, to)
+
+        override fun fits(from: Int, to: Int): Boolean {
+            verdicts[from]?.get(to)?.let { return it }
+            if (to >= cap[from]) return false
+            return estimate(from, to) <= budget &&
                 (byteBudget == null || rawBytes(from, to) + openUnits[from] + closeUnits[to] <= byteBudget)
+        }
 
         override fun exhausted(from: Int, to: Int): Boolean =
-            raw(from, to) > budget || (byteBudget != null && rawBytes(from, to) > byteBudget)
+            to > reach[from] && (to >= cap[from] || raw(from, to) > budget || (byteBudget != null && rawBytes(from, to) > byteBudget))
+
+        /** Checks every part ending at [ends] exactly; whether all fit. */
+        fun verify(ends: List<Int>): Boolean {
+            var all = true
+            var from = 0
+            for (to in ends) {
+                val known = verdicts[from]?.get(to)
+                val fits = known ?: exactFits(from, to, label).also { record(from, to, it) }
+                if (!fits) all = false
+                from = to
+            }
+            return all
+        }
     }
 
     private companion object {
+        /** Runs of the splitter checked exactly before the greedy split stands. */
+        const val MAX_GUIDED_ROUNDS = 24
+
         fun prefixSums(weights: IntArray): IntArray {
             val sums = IntArray(weights.size + 1)
             for (i in weights.indices) sums[i + 1] = sums[i] + weights[i]
@@ -323,8 +436,8 @@ private class Weights(
                 "> ".repeat(cut.quoteDepth) + cut.emphasis.joinToString("") { it.open },
         )
         TextFormat.PLAIN, TextFormat.BLUESKY -> 2 * cut.quoteDepth
-        TextFormat.HTML -> cut.emphasis.sumOf { openTag(it) } + paragraphTag(cut, 11, 3) + 15 * cut.quoteDepth +
-            (if (inListItem(cut.start)) 8 else 0)
+        // A part that starts inside a list item continues as a paragraph: the item's tags stay in the part before.
+        TextFormat.HTML -> cut.emphasis.sumOf { openTag(it) } + paragraphTag(cut, 11, 3) + 15 * cut.quoteDepth
     }
 
     /** The length the part before [cut] gains at its end from what [cut] closes. */
@@ -334,9 +447,9 @@ private class Weights(
                 (cut.codeBlock?.let { "\n" + fencePrefix(text, it) + it.closingFence } ?: ""),
         )
         TextFormat.PLAIN, TextFormat.BLUESKY -> 0
+        // The closing tags of a list item cut here are in the weights of its marker.
         TextFormat.HTML -> cut.emphasis.sumOf { openTag(it) + 1 } + paragraphTag(cut, 13, 4) +
-            17 * structure.quotes.count { it.range.start < cut.end && cut.end < it.range.end } +
-            (if (inListItem(cut.end)) 10 else 0)
+            17 * structure.quotes.count { it.range.start < cut.end && cut.end < it.range.end }
     }
 
     /**
@@ -348,8 +461,6 @@ private class Weights(
         cut.rank == BreakRank.PARAGRAPH -> 0
         else -> paragraph
     }
-
-    private fun inListItem(position: Int): Boolean = structure.listItems.any { it.range.start < position && position < it.range.end }
 
     private fun openTag(span: EmphasisSpan): Int = when (span.kind) {
         EmphasisSpan.Kind.BOLD -> "<strong>".length

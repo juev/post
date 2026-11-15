@@ -118,6 +118,34 @@ class BreaksTest {
     }
 
     @Test
+    fun `a part that starts at a literal greater-than sign still reopens the quotes it is in`() {
+        val text = "> one > two three"
+        val cut = breaks(text).single { text.substring(0, it.end).endsWith("one") }
+        assertThat(text[cut.start]).isEqualTo('>')
+        assertThat(cut.quoteDepth).isEqualTo(1)
+        val plain = "one > two"
+        assertThat(breaks(plain).single { plain.substring(0, it.end).endsWith("one") }.quoteDepth).isEqualTo(0)
+    }
+
+    @Test
+    fun `T17 no break before a code span that a part would read as a fence`() {
+        val text = "Start ```js code\nmore``` end"
+        assertThat(rankAfter(text, "Start")).isNull()
+        assertThat(rankAfter(text, "more```")).isEqualTo(BreakRank.WORD)
+    }
+
+    @Test
+    fun `T17 no break inside a line that reads otherwise when cut short`() {
+        // With its backticks, the first line is no fence; cut before them, it would be one and hide its text.
+        val fenceLike = "```js and more ``` here\nnext line"
+        assertThat(breaks(fenceLike).map { fenceLike.substring(0, it.end) })
+            .containsExactly("```js and more ``` here", "```js and more ``` here\nnext").inOrder()
+        // Cut after the URL, the line would be a link reference definition and show nothing.
+        val definition = "Text.\n\n[ref]: https://example.com/a and more"
+        assertThat(breaks(definition).map { definition.substring(0, it.end) }).containsExactly("Text.")
+    }
+
+    @Test
     fun `an empty text has no breaks`() {
         assertThat(breaks("")).isEmpty()
         assertThat(breaks("single")).isEmpty()

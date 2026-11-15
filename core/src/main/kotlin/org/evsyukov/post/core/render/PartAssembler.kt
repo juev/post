@@ -17,8 +17,9 @@ import org.evsyukov.post.core.media.Network
  * @property spoilerText the Mastodon content warning of every part (N3), or null when there is none or the
  *   network is Bluesky.
  * @property mediaItemIds the attachments of this part, in order (T14, A11).
- * @property mediaOnly the part carries no text of the draft: a media-only reply (A11) or the part of a piece
- *   that has media and no text. Its text is empty or only the part number.
+ * @property mediaOnly the part carries media and no text of the draft: a media-only reply (A11) or the part of
+ *   a piece that has media and no text. Its text is empty or only the part number. The one empty part of an
+ *   empty draft without media is not media-only.
  * @property carriesPoll the Mastodon poll goes with this part, the first of the thread.
  * @property links Bluesky link facets, [mentions] by handle and [tags]; empty for Mastodon.
  */
@@ -118,7 +119,7 @@ object PartAssembler {
                 limit = text.limit,
                 bytes = part.bytes,
                 mediaItemIds = items,
-                mediaOnly = part.mediaReply || part.sourceStart == part.sourceEnd,
+                mediaOnly = part.mediaReply || (part.sourceStart == part.sourceEnd && items.isNotEmpty()),
                 carriesPoll = poll && index == 0,
                 links = part.links,
                 mentions = part.mentions,
