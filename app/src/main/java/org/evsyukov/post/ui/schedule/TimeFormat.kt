@@ -1,7 +1,7 @@
 package org.evsyukov.post.ui.schedule
 
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import org.evsyukov.post.R
 import java.time.DayOfWeek
@@ -33,7 +33,8 @@ fun formatDateTime(local: LocalDateTime, today: LocalDate, locale: Locale, today
 /** [formatDateTime] with the strings and locale of the composition. */
 @Composable
 fun formatSlot(local: LocalDateTime): String {
-    val locale = LocalConfiguration.current.locales[0]
+    // The locale of the strings, so the date reads in the same language even inside a sheet's own window.
+    val locale = LocalResources.current.configuration.locales[0]
     return formatDateTime(
         local,
         LocalDate.now(),

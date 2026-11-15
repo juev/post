@@ -3,6 +3,7 @@ package org.evsyukov.post.send.schedule
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.util.Log
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingPeriodicWorkPolicy
@@ -51,11 +52,14 @@ class ScheduleRestorer(
 class ScheduleRestoreReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action !in ACTIONS) return
+        Log.i(TAG, "restoring the schedule after ${intent.action}")
         val host = context.applicationContext as? SchedulingHost ?: return
         runAsync(host) { host.scheduleRestorer.restore() }
     }
 
     companion object {
+        private const val TAG = "PostAlarm"
+
         val ACTIONS = setOf(
             Intent.ACTION_BOOT_COMPLETED,
             Intent.ACTION_TIME_CHANGED,

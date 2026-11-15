@@ -216,12 +216,18 @@ private fun ComposerContent(
     }
 
     fun send(schedule: Schedule?) {
+        // A queued post opened from the queue goes back there once it is saved or given a new time.
+        val editing = model.editingQueued
         scope.launch {
             when (val result = model.send(schedule)) {
                 is ComposerModel.SendResult.Blocked -> sheet = Sheet.Details
                 ComposerModel.SendResult.AlreadySending -> Unit
                 ComposerModel.SendResult.Saved -> onExit()
                 is ComposerModel.SendResult.Queued -> {
+                    if (editing) {
+                        onExit()
+                        return@launch
+                    }
                     askNotificationsOnce()
                     val message = when (val time = result.schedule) {
                         is Schedule.Slot -> resources.getString(
