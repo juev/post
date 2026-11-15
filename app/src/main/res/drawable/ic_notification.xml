@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The small icon of notifications: the paper plane of the launcher icon without its trails, which blur at
+  this size. It is the launcher plane scaled by one half into the 20dp live area of the 24dp grid.
+  Android draws a small icon from its alpha only, so it is white on transparent.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M22,2.25L2,9.75L11.5,13Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M22,2.25L12.75,14.25L15.25,21.75Z" />
+</vector>

@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- A temporary background: indigo, lighter at the top. -->
+<!-- A diagonal gradient: deep indigo at the bottom left, where the trails start, to violet at the top right, where the plane flies. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
@@ -11,11 +11,11 @@
             <gradient
                 android:type="linear"
                 android:startX="0"
-                android:startY="0"
-                android:endX="0"
-                android:endY="108">
-                <item android:offset="0" android:color="#FF4F6BED" />
-                <item android:offset="1" android:color="#FF2E3FAE" />
+                android:startY="108"
+                android:endX="108"
+                android:endY="0">
+                <item android:offset="0" android:color="#FF303F9F" />
+                <item android:offset="1" android:color="#FF8E5BD0" />
             </gradient>
         </aapt:attr>
     </path>
