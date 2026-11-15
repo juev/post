@@ -40,7 +40,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -92,7 +91,7 @@ fun ScheduleScreen(onBack: () -> Unit, onOpenPost: (Long) -> Unit = {}) {
     val container = LocalAppContainer.current
     val schedule by container.schedule.observe().collectAsStateWithLifecycle(initialValue = null)
     val queue by container.posts.observeQueue().collectAsStateWithLifecycle(initialValue = emptyList())
-    val locale = LocalConfiguration.current.locales[0]
+    val locale = LocalResources.current.configuration.locales[0]
     val resources = LocalResources.current
     val scope = rememberCoroutineScope()
     val snackbar = remember { SnackbarHostState() }
