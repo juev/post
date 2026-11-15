@@ -17,9 +17,11 @@ import org.evsyukov.post.core.render.TextIssue
 import org.evsyukov.post.core.render.TextRenderer
 import org.evsyukov.post.core.text.TextSegmenter
 import org.evsyukov.post.data.accounts.Account
+import org.evsyukov.post.data.posts.BlueskyPostOptions
 import org.evsyukov.post.data.posts.DeliveryPlan
 import org.evsyukov.post.data.posts.MastodonStatusOptions
 import org.evsyukov.post.data.posts.PlannedPart
+import org.evsyukov.post.data.posts.PlannedSpan
 import org.evsyukov.post.data.posts.Post
 import org.evsyukov.post.data.settings.Settings
 import org.evsyukov.post.media.convert.MastodonVideoCheck
@@ -97,17 +99,33 @@ class PlanFreezer(
         } else {
             null
         }
+        val bluesky = if (network == Network.BLUESKY) {
+            val accountOptions = options.forAccount(account)
+            BlueskyPostOptions(
+                langs = options.languagesFor(account).take(MAX_BLUESKY_LANGS),
+                labels = accountOptions.contentLabels,
+                replyRules = accountOptions.replyRules,
+                allowQuotes = accountOptions.allowQuotes,
+                linkCard = accountOptions.linkCard,
+            )
+        } else {
+            null
+        }
         val parts = render.parts.map { part ->
             PlannedPart(
                 text = part.text,
                 attachmentIds = part.mediaItemIds,
-                key = newKey(),
+                // N24: a Bluesky part gets its record key right before its first write, not here.
+                key = if (network == Network.BLUESKY) null else newKey(),
                 contentType = part.contentType,
                 spoilerText = part.spoilerText,
                 carriesPoll = part.carriesPoll,
+                links = part.links.map { PlannedSpan(it.start, it.end, it.uri) },
+                mentions = part.mentions.map { PlannedSpan(it.start, it.end, it.handle) },
+                tags = part.tags.map { PlannedSpan(it.start, it.end, it.tag) },
             )
         }
-        return FreezeResult.Ready(DeliveryPlan(parts, conversions, mastodon))
+        return FreezeResult.Ready(DeliveryPlan(parts, conversions, mastodon, bluesky))
     }
 
     private fun mediaPlan(post: Post, network: Network, accounts: List<Account>, settings: Settings): MediaPlan? {
@@ -125,6 +143,9 @@ class PlanFreezer(
         NetworkMediaRules.strictest(accounts.filter { it.network == network }.map { it.mediaRules() })
 
     companion object {
+        /** `app.bsky.feed.post#langs` takes at most three (N18). */
+        const val MAX_BLUESKY_LANGS = 3
+
         /** The reason a delivery fails with when a media conflict has no fix (shown in the failure notification). */
         fun conflictMessage(kind: ConflictKind): String = when (kind) {
             ConflictKind.TOO_MANY_FILES -> "too many files for this server"

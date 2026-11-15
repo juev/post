@@ -41,6 +41,8 @@ import org.evsyukov.post.send.MastodonExecutor
 import org.evsyukov.post.send.PlanFreezer
 import org.evsyukov.post.send.PublishScheduler
 import org.evsyukov.post.send.Publisher
+import org.evsyukov.post.send.bluesky.BlueskyExecutor
+import org.evsyukov.post.send.bluesky.LinkCardFetcher
 import org.evsyukov.post.text.AndroidTextSegmenter
 import java.io.File
 import java.util.concurrent.TimeUnit
@@ -143,7 +145,17 @@ class AppContainer(
             accounts = accounts,
             settings = { settings.current() },
             freezer = PlanFreezer(textSegmenter),
-            executors = listOf(MastodonExecutor(http, accountSessions, accounts)),
+            executors = listOf(
+                MastodonExecutor(http, accountSessions, accounts),
+                BlueskyExecutor(
+                    http = http,
+                    sessions = accountSessions,
+                    accounts = accounts,
+                    segmenter = textSegmenter,
+                    linkCards = LinkCardFetcher(http),
+                    tempDir = File(this.context.cacheDir, "link-cards"),
+                ),
+            ),
             preparer = mediaPreparer,
             filesDir = this.context.filesDir,
             notifier = sendNotifier,

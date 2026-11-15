@@ -192,16 +192,19 @@ data class DeliveryPlan(
     val parts: List<PlannedPart>,
     val conversions: Map<Long, Conversion> = emptyMap(),
     val mastodon: MastodonStatusOptions? = null,
+    val bluesky: BlueskyPostOptions? = null,
 )
 
 /**
  * One thread part: its text as the account gets it and the attachments it carries.
  *
  * @property key the Mastodon `Idempotency-Key` of the part, chosen at the freeze and sent with every
- *   attempt (N11).
+ *   attempt (N11). Bluesky parts have none: their record key is chosen before the first write (N24).
  * @property contentType the Mastodon `content_type`, or null to send none.
  * @property spoilerText the Mastodon content warning of the part (N3).
  * @property carriesPoll the Mastodon poll goes with this part, the first one.
+ * @property links Bluesky link facets over [text] (formatting.md F11), [mentions] by handle and [tags]
+ *   (networks.md N17); empty for Mastodon.
  */
 @Serializable
 data class PlannedPart(
@@ -211,6 +214,35 @@ data class PlannedPart(
     val contentType: String? = null,
     val spoilerText: String? = null,
     val carriesPoll: Boolean = false,
+    val links: List<PlannedSpan> = emptyList(),
+    val mentions: List<PlannedSpan> = emptyList(),
+    val tags: List<PlannedSpan> = emptyList(),
+)
+
+/**
+ * A range `text[start, end)` of a part in UTF-16 indices with its [value]: the link URI, the lowercased
+ * handle of a mention, or the tag without `#`.
+ */
+@Serializable
+data class PlannedSpan(val start: Int, val end: Int, val value: String)
+
+/**
+ * What every post of a Bluesky delivery carries (networks.md N18, N22, N24; product.md R14), frozen with
+ * the plan.
+ *
+ * @property langs up to three languages (N18).
+ * @property labels self-labels, put on the parts that carry media (N22).
+ * @property replyRules the threadgate of the first part: null for none, empty for nobody.
+ * @property allowQuotes false puts a postgate that disables quoting on every part.
+ * @property linkCard a part without media gets a card for its first link (R14).
+ */
+@Serializable
+data class BlueskyPostOptions(
+    val langs: List<String> = emptyList(),
+    val labels: Set<ContentLabel> = emptySet(),
+    val replyRules: Set<ReplyRule>? = null,
+    val allowQuotes: Boolean = true,
+    val linkCard: Boolean = true,
 )
 
 /**
@@ -267,6 +299,11 @@ data class PartProgress(
      * part may be on the server (N12). Null once an answer said it is not.
      */
     val unknownSince: Long? = null,
+    /**
+     * Bluesky video service jobs by attachment id, stored when an upload starts so that a later attempt
+     * resumes it (N20); dropped once the video's blob is in [uploaded].
+     */
+    val videoJobs: Map<Long, String> = emptyMap(),
 )
 
 /** The progress of a delivery, stored in `progressJson`. */
