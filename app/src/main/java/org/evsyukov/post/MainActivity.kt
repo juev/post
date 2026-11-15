@@ -16,6 +16,7 @@ import org.evsyukov.post.ui.LocalAppContainer
 import org.evsyukov.post.ui.LocalBrowserLauncher
 import org.evsyukov.post.ui.PostApp
 import org.evsyukov.post.ui.PostsKey
+import org.evsyukov.post.ui.ScheduleKey
 import org.evsyukov.post.ui.theme.PostTheme
 
 class MainActivity : ComponentActivity() {
@@ -39,15 +40,25 @@ class MainActivity : ComponentActivity() {
             AndroidSendNotifier.OPEN_QUEUE -> PostsKey
             AndroidSendNotifier.OPEN_ACCOUNT -> intent.getLongExtra(AndroidSendNotifier.EXTRA_ACCOUNT_ID, -1).takeIf { it >= 0 }?.let(::AccountDetailsKey)
             else -> null
-        }
+        } ?: if (intent?.getBooleanExtra(EXTRA_OPEN_SCHEDULE, false) == true) ScheduleKey else null
+        // A draft saved by the Share sheet opens as the start screen (R20).
+        val draftId = intent?.getLongExtra(EXTRA_DRAFT_ID, -1L)?.takeIf { it > 0 }
         setContent {
             CompositionLocalProvider(LocalAppContainer provides container, LocalBrowserLauncher provides launcher) {
                 PostTheme {
                     Surface(Modifier.fillMaxSize()) {
-                        PostApp(openOnStart)
+                        PostApp(openOnStart, draftId)
                     }
                 }
             }
         }
+    }
+
+    companion object {
+        /** The draft to open in the composer, from Open in composer of the Share sheet. */
+        const val EXTRA_DRAFT_ID = "org.evsyukov.post.extra.DRAFT_ID"
+
+        /** Opens Schedule over the composer, from Set up schedule of the Share sheet. */
+        const val EXTRA_OPEN_SCHEDULE = "org.evsyukov.post.extra.OPEN_SCHEDULE"
     }
 }

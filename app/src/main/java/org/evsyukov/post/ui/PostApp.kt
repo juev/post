@@ -82,11 +82,12 @@ data object AboutKey : NavKey
 /**
  * The composer, with the other screens opened on top of it by its top bar and closed by their back
  * arrow or by the system back. There is no bottom navigation: the composer keeps the whole screen.
- * [openOnStart] is a screen a notification asked for (product.md R5, R32), opened over the composer.
+ * [openOnStart] is a screen a notification asked for (product.md R5, R32), opened over the composer. With
+ * [draftId] the composer starts with that draft, as Open in composer of the Share sheet asks (R20).
  */
 @Composable
-fun PostApp(openOnStart: NavKey? = null) {
-    val backStack = rememberNavBackStack(*listOfNotNull(ComposerKey(), openOnStart).toTypedArray())
+fun PostApp(openOnStart: NavKey? = null, draftId: Long? = null) {
+    val backStack = rememberNavBackStack(*listOfNotNull(ComposerKey(draftId), openOnStart).toTypedArray())
     val activity = LocalActivity.current
     // A second tap on an action while its screen slides in would stack the screen twice.
     val open: (NavKey) -> Unit = { key -> if (backStack.lastOrNull() != key) backStack.add(key) }
