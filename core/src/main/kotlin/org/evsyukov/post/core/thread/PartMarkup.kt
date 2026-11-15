@@ -171,6 +171,12 @@ class PieceMarkup internal constructor(
  *   ([PieceMarkup.literalDelimiters]): with fewer markers around, and the reopened ones, it could pair.
  * - The first item of an ordered list that began before the part shows the number it has in the piece, and
  *   a blank line keeps an item numbered other than 1 a list item where the part puts it after a paragraph.
+ * - A part that starts inside list items ([CutItems]: their markers are in an earlier part) has no markers
+ *   for them, so its lines inside them lose the indentation those items gave them: a nested item is then an
+ *   item of the part's top level, with its own children under it, not text of the item before it. Where a
+ *   list that was nested in a cut item is followed at the part's top level by another list of the same kind
+ *   and marker, the nested one gets the other delimiter (`.` and `)`) or bullet (`+`, `-`, `*`), so the two
+ *   stay two lists, each numbered as in the piece, instead of one that counts on.
  * - A backslash that made a line break at the end of the part goes, and a backslash before closing
  *   markers is doubled, so it does not escape them.
  * - A code block left unclosed in the piece, which its container closes, gets its closing fence where it
@@ -189,7 +195,8 @@ fun partFragment(
     val end = to?.end ?: text.length
     require(start <= end) { "The part [$start, $end) is reversed" }
     val out = StringBuilder(end - start + 32)
-    from?.codeBlock?.let { block -> out.append(fencePrefix(text, block)).append(block.openingFence).append('\n') }
+    val cutItems = if (from != null) CutItems.of(text, markup, start) else CutItems.NONE
+    from?.codeBlock?.let { block -> out.append(partFencePrefix(text, block, cutItems, emptyList())).append(block.openingFence).append('\n') }
     val redundant = redundantSpans(structure, from, to, start, end)
     val openers = from?.emphasis.orEmpty().filter { it !in redundant }.joinToString("") { it.open }
     val closers = to?.emphasis.orEmpty().filter { it !in redundant }.asReversed().joinToString("") { it.close }
@@ -203,9 +210,20 @@ fun partFragment(
     val widened = ArrayList<Pair<PieceMarkup.OrderedItem, Int>>()
     // Offsets that get a backslash before them, so they stay text.
     val escapes = sortedSetOf<Int>()
+    // Where the text of the first line starts once the indentation the part drops is gone.
+    var firstText = textStart
     if (from != null) {
-        if (from.codeBlock == null) escapes += blockStartEscapes(text, structure, textStart, end)
-        edits += listNumbering(text, markup, start, textStart, end, widened)
+        val dedents = cutItems.dedents(text, start, textStart, end)
+        dedents.firstOrNull { it.position == textStart }?.let { firstText = textStart + it.remove }
+        edits += dedents
+        if (from.codeBlock == null) {
+            // Up to three spaces of indentation still let a line start a block.
+            var k = firstText
+            while (k < end && k - firstText < 3 && text[k] == ' ') k++
+            escapes += blockStartEscapes(text, structure, k, end)
+        }
+        edits += listNumbering(text, markup, start, textStart, end, widened, dedents)
+        edits += cutItems.separations(text, markup, textStart, end)
     }
     if (from != null || to != null) {
         // A part has fewer markers to pair with than the piece and gains the reopened and closing ones, so a
@@ -226,7 +244,7 @@ fun partFragment(
     // container, so the block gets its closing fence where it ends.
     for (block in structure.codeBlocks) {
         if (block.closingFenceRange == null && block.range.end in textStart + 1 until end) {
-            edits += FragmentEdit(block.range.end, 0, "\n" + closingPrefix(text, block, widened) + block.closingFence)
+            edits += FragmentEdit(block.range.end, 0, "\n" + partFencePrefix(text, block, cutItems, widened) + block.closingFence)
         }
     }
     for (span in redundant) {
@@ -243,7 +261,7 @@ fun partFragment(
     var endsWithCodeBlock = false
     val cut = to?.codeBlock
     if (cut != null) {
-        out.append('\n').append(closingPrefix(text, cut, widened)).append(cut.closingFence)
+        out.append('\n').append(partFencePrefix(text, cut, cutItems, widened)).append(cut.closingFence)
         endsWithCodeBlock = true
     } else {
         val block = structure.codeBlocks.firstOrNull { it.range.start < end && end <= it.range.end }
@@ -251,7 +269,7 @@ fun partFragment(
         if (block != null && closing != null && closing.end == end) {
             endsWithCodeBlock = true
         } else if (block != null && closing == null && closeCodeBlock) {
-            out.append('\n').append(closingPrefix(text, block, widened)).append(block.closingFence)
+            out.append('\n').append(partFencePrefix(text, block, cutItems, widened)).append(block.closingFence)
             endsWithCodeBlock = true
         }
     }
@@ -362,6 +380,7 @@ private fun listNumbering(
     textStart: Int,
     end: Int,
     widened: MutableList<Pair<PieceMarkup.OrderedItem, Int>>,
+    dedents: List<FragmentEdit>,
 ): List<FragmentEdit> {
     if (markup.items.isEmpty()) return emptyList()
     val edits = ArrayList<FragmentEdit>()
@@ -386,8 +405,16 @@ private fun listNumbering(
             if (lineStart > start) while (from < previous && (text[from] == ' ' || text[from] == '\t' || text[from] == '>')) from++
             val holdsText = (from until previous).any { !text[it].isWhitespace() }
             if (holdsText) {
-                val prefix = (item.lineStart until item.digitsStart).filter { text[it] == '>' }.joinToString("") { ">" }
-                edits += FragmentEdit(item.lineStart, 0, prefix + "\n", order = 0)
+                // The blank line keeps the quote markers of the item's line and the indentation before them,
+                // as the line has it in the part, so it stays in the same containers.
+                val removed = dedents.firstOrNull { it.position in item.lineStart until item.digitsStart }
+                val prefix = StringBuilder()
+                for (i in item.lineStart until item.digitsStart) {
+                    if (removed != null && i >= removed.position && i < removed.position + removed.remove) continue
+                    prefix.append(text[i])
+                }
+                val lastMarker = prefix.lastIndexOf(">")
+                edits += FragmentEdit(item.lineStart, 0, prefix.substring(0, lastMarker + 1) + "\n", order = 0)
             }
         }
         val number = item.number?.toString() ?: continue
@@ -453,19 +480,168 @@ private fun quoteMarkersEnd(text: String, start: Int, end: Int): Int {
 }
 
 /**
- * The prefix of a closing fence the part adds to [block]: that of its opening fence, wider by the digits
- * the part added to the number of a list item the block is in ([widened]).
+ * The prefix of a fence line the part adds to [block], reopening or closing it: that of its opening fence
+ * ([fencePrefix]) without the columns of the list items the part starts inside of ([cut]), whose markers it
+ * leaves out, and wider by the digits the part added to the number of a list item the block is in
+ * ([widened]).
  */
-private fun closingPrefix(text: String, block: CodeBlockSpan, widened: List<Pair<PieceMarkup.OrderedItem, Int>>): String {
-    val prefix = fencePrefix(text, block)
-    val fence = block.openingFenceRange.start
-    var result = prefix
-    for ((item, growth) in widened.sortedByDescending { it.first.digitsStart }) {
-        if (fence < item.lineStart || fence >= item.end) continue
-        val at = minOf(result.length, item.digitsStart - item.lineStart)
-        result = result.substring(0, at) + " ".repeat(growth) + result.substring(at)
+private fun partFencePrefix(
+    text: String,
+    block: CodeBlockSpan,
+    cut: CutItems,
+    widened: List<Pair<PieceMarkup.OrderedItem, Int>>,
+): String {
+    val fenceStart = block.openingFenceRange.start
+    var lineStart = fenceStart
+    while (lineStart > 0 && text[lineStart - 1] != '\n' && text[lineStart - 1] != '\r') lineStart--
+    val removed = cut.columns(text, lineStart)
+    val growths = widened.filter { (item, _) -> fenceStart >= item.lineStart && fenceStart < item.end }
+        .map { (item, growth) -> (item.digitsStart - item.lineStart) to growth }
+    val prefix = StringBuilder(fenceStart - lineStart + 4)
+    for (i in lineStart until fenceStart) {
+        for ((column, growth) in growths) if (column == i - lineStart) repeat(growth) { prefix.append(' ') }
+        if (removed != null && i >= removed.first && i < removed.second) continue
+        prefix.append(if (text[i] == '>') '>' else ' ')
     }
-    return result
+    for ((column, growth) in growths) if (column >= fenceStart - lineStart) repeat(growth) { prefix.append(' ') }
+    return prefix.toString()
+}
+
+/**
+ * The list items a part starts inside of ([items], outermost first): each has its marker before the part and
+ * content in it. The part has no markers for them, so what they hold must not stay indented as their content:
+ * a nested item would read as text of the item before it (`4. Put` after `3. Make` in a part is a lazy line,
+ * not an item), and a deeper one, 4 columns in, as text at all.
+ *
+ * A part that starts at a list marker also lost the marker's own indentation in its container to the break
+ * ([lead] columns); the lines of the other items of that list ([siblings], each with its own marker
+ * indentation) lose as much, but no more than their item's marker indentation, or a sibling indented like the
+ * first item would fall inside its content.
+ */
+private class CutItems(
+    private val items: List<PieceMarkup.OrderedItem>,
+    private val lead: Int = 0,
+    private val siblings: List<Pair<PieceMarkup.OrderedItem, Int>> = emptyList(),
+) {
+    val isEmpty: Boolean get() = items.isEmpty() && lead == 0
+
+    /** The lead columns a line of the first list loses: as many as the item holding it, at most [lead]. */
+    private fun extra(lineStart: Int): Int {
+        if (lead == 0) return 0
+        val holder = siblings.lastOrNull { (item, _) -> item.lineStart <= lineStart && lineStart < item.end } ?: return 0
+        return minOf(lead, holder.second)
+    }
+
+    /**
+     * `[first, second)` of the line that starts at [lineStart]: the columns the cut items give it, from where
+     * the outermost one's container begins (after the quote markers outside it) to the content column of
+     * the innermost one that holds the line, and the [lead] columns after them on a line of the first list;
+     * null when there are none, or when the line does not begin with the quote markers and spaces of the
+     * containers outside the items (a lazy line).
+     */
+    fun columns(text: String, lineStart: Int): Pair<Int, Int>? {
+        val holders = items.filter { it.lineStart <= lineStart && lineStart < it.end }
+        val extra = extra(lineStart)
+        if (holders.isEmpty()) return if (extra > 0) lineStart to lineStart + extra else null
+        val outer = holders.first()
+        val outside = quoteMarkersEnd(text, outer.lineStart, outer.digitsStart) - outer.lineStart
+        for (i in lineStart until lineStart + outside) {
+            if (i >= text.length || (text[i] != ' ' && text[i] != '\t' && text[i] != '>')) return null
+        }
+        return (lineStart + outside) to (lineStart + holders.last().contentColumn + extra)
+    }
+
+    /**
+     * Edits that take out the indentation the cut items give each line of the part `[start, end)`, whose text
+     * starts at [textStart]: the spaces within [columns]. The first line counts only when the part starts at
+     * its beginning (a code line, or a quote line whose markers it copies); otherwise its indentation lies in
+     * the break the part starts after.
+     */
+    fun dedents(text: String, start: Int, textStart: Int, end: Int): List<FragmentEdit> {
+        if (isEmpty) return emptyList()
+        val result = ArrayList<FragmentEdit>()
+        var lineStart = if (start == 0 || text[start - 1] == '\n' || text[start - 1] == '\r') start else nextLineStart(text, start)
+        while (lineStart < end) {
+            val range = columns(text, lineStart)
+            if (range != null && range.first >= textStart) {
+                var k = range.first
+                while (k < range.second && k < end && text[k] == ' ') k++
+                if (k > range.first) result += FragmentEdit(range.first, k - range.first, "")
+            }
+            lineStart = nextLineStart(text, lineStart)
+        }
+        return result
+    }
+
+    /**
+     * Edits that keep apart the lists that the part puts next to each other at its top level although they
+     * are different lists in the piece: a list nested in a cut item, then the items of a list around it.
+     * Of two such lists of the same kind and marker, the earlier, nested one gets another delimiter or bullet;
+     * the lists of the piece's top level keep theirs. Lists of the part's own items stay as they are.
+     */
+    fun separations(text: String, markup: PieceMarkup, textStart: Int, end: Int): List<FragmentEdit> {
+        if (items.isEmpty()) return emptyList()
+        val inPart = markup.items.filter { it.digitsStart in textStart until end }
+        // Items at the part's top level: no item of the part holds them.
+        val top = inPart.filter { item -> inPart.none { it.digitsStart < item.digitsStart && item.digitsStart < it.end } }
+        val lists = ArrayList<PieceMarkup.OrderedItem>() // the first item of each list, in order
+        for (item in top) if (lists.lastOrNull()?.list != item.list) lists += item
+        if (lists.size < 2) return emptyList()
+        val markers = CharArray(lists.size) { markerChar(text, lists[it]) }
+        val nested = BooleanArray(lists.size) { k -> items.any { lists[k].digitsStart < it.end } }
+        for (k in lists.size - 2 downTo 0) {
+            val ordered = lists[k].number != null
+            if ((nested[k] || nested[k + 1]) && ordered == (lists[k + 1].number != null) && markers[k] == markers[k + 1]) {
+                markers[k] = if (ordered) {
+                    if (markers[k + 1] == '.') ')' else '.'
+                } else {
+                    BULLETS.first { it != markers[k + 1] }
+                }
+            }
+        }
+        val edits = ArrayList<FragmentEdit>()
+        lists.forEachIndexed { k, first ->
+            if (markers[k] == markerChar(text, first)) return@forEachIndexed
+            for (item in top) {
+                if (item.list != first.list) continue
+                val at = if (item.number != null) item.digitsEnd else item.digitsStart
+                edits += FragmentEdit(at, 1, markers[k].toString())
+            }
+        }
+        return edits
+    }
+
+    companion object {
+        val NONE = CutItems(emptyList())
+
+        /** `+` first: unlike `-` and `*` it never makes a thematic break with the text after it. */
+        private val BULLETS = listOf('+', '-', '*')
+
+        /** The cut items of the part that starts at [start] of the piece [text] with the markup [markup]. */
+        fun of(text: String, markup: PieceMarkup, start: Int): CutItems {
+            val items = markup.items.filter { it.digitsStart < start && start < it.end }
+            val first = markup.items.firstOrNull { it.digitsStart == start }
+            // Only whitespace is before the marker on its line: the break took it.
+            if (first == null || first.lineStart >= start || (first.lineStart until start).any { text[it] != ' ' }) return CutItems(items)
+            val container = items.lastOrNull()?.contentColumn ?: 0
+            val lead = start - first.lineStart - container
+            if (lead <= 0) return CutItems(items)
+            val siblings = markup.items.filter { it.list == first.list && it.digitsStart >= start }
+                .map { it to maxOf(0, it.digitsStart - it.lineStart - container) }
+            return CutItems(items, lead, siblings)
+        }
+
+        /** The delimiter of an ordered item (`.` or `)`) or the bullet of a bullet item. */
+        fun markerChar(text: String, item: PieceMarkup.OrderedItem): Char =
+            if (item.number != null) text[item.digitsEnd] else text[item.digitsStart]
+    }
+}
+
+private fun nextLineStart(text: String, from: Int): Int {
+    var i = from
+    while (i < text.length && text[i] != '\n' && text[i] != '\r') i++
+    if (i < text.length) i += if (text[i] == '\r' && i + 1 < text.length && text[i + 1] == '\n') 2 else 1
+    return i
 }
 
 /** The prefix a fence line of [block] needs to stay in its container: quote markers kept, the rest spaces. */
