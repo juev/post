@@ -195,4 +195,24 @@ class ComposerMediaTest {
         val poll = PollDraft(listOf("a", ""), 86_400)
         assertThat(blockers(listOf(1), "", emptyList(), poll, limits, listOf(image(1)))).containsExactly(Blocker.Poll(PollProblem.EMPTY_OPTION))
     }
+
+    @Test
+    fun aCopyStillRunningHoldsSendAndIsNotAnEmptyPost() {
+        val limits = PollLimits.of(emptyList())
+        // R9: the picked files are part of the post; it waits for them, and it is not empty while they come.
+        assertThat(blockers(listOf(1), " ", emptyList(), null, limits, importing = true)).containsExactly(Blocker.Importing)
+        assertThat(blockers(listOf(1), "text", emptyList(), null, limits, importing = true)).containsExactly(Blocker.Importing)
+        assertThat(blockers(listOf(1), "text", emptyList(), null, limits, importing = false)).isEmpty()
+    }
+
+    @Test
+    fun theReadBackOfASaveOnlyGivesIdsAndKeepsWhatCameInMeanwhile() {
+        // Saved: -1 (as a new row, now 7) and 3 (an old row). Meanwhile -1 got alt text and -2 was imported.
+        val current = listOf(image(3), image(-1, alt = "typed during the save"), image(-2))
+        val savedBack = listOf(image(3), image(-1).copy(id = 7))
+        val merged = ComposerModel.withSavedIds(current, savedBack)
+        assertThat(merged.map { it.id }).containsExactly(3L, 7L, -2L).inOrder()
+        assertThat(merged[1].alt).isEqualTo("typed during the save")
+        assertThat(merged[1].path).isEqualTo(image(-1).path)
+    }
 }

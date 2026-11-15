@@ -75,6 +75,7 @@
         <item quantity="other">У %d вложения нет описания</item>
     </plurals>
     <string name="media_alt_too_long_blocker">Описание длиннее предела выбранного сервера Mastodon (%1$d), сервер его отклонит</string>
+    <string name="media_importing_blocker">Файлы ещё добавляются; отправка подождёт, пока они не будут готовы</string>
     <plurals name="media_preview_part">
         <item quantity="one">%d вложение</item>
         <item quantity="few">%d вложения</item>

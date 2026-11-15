@@ -20,6 +20,8 @@ import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.AtomicReference
 import org.evsyukov.post.R
 import org.evsyukov.post.core.markdown.MANUAL_BREAK
 import org.evsyukov.post.core.mastodon.MastodonCapabilities
@@ -36,6 +38,9 @@ import org.junit.rules.TemporaryFolder
 import org.junit.runner.RunWith
 import org.robolectric.annotation.GraphicsMode
 import java.io.File
+import java.io.FileOutputStream
+
+private val UNSET = Any()
 
 /**
  * Attachments in the composer (R9–R11, media.md, threads.md T14; screens.md attachment strip and sheet): the
@@ -395,6 +400,117 @@ class ComposerAttachmentsTest {
         // Saving again adds no rows: the composer now holds the saved ids.
         runBlocking { h.model.saveDraft() }
         assertThat(runBlocking { h.container.posts.get(id) }!!.attachments.map { it.id }).isEqualTo(post.attachments.map { it.id })
+    }
+
+    /**
+     * A source that cannot be read until [feed] writes it: a named pipe. The copy of the importer blocks on it,
+     * so a test can act while an import is running.
+     */
+    private fun pipe(): File {
+        val file = File(temp.newFolder(), "slow.png")
+        val made = ProcessBuilder("mkfifo", file.path).start().waitFor()
+        check(made == 0) { "mkfifo failed" }
+        return file
+    }
+
+    private fun feed(pipe: File, name: String = "alpha.png") {
+        requireNotNull(javaClass.getResourceAsStream("/media/$name")).use { input -> FileOutputStream(pipe).use { input.copyTo(it) } }
+    }
+
+    /** Starts adding [pipe] as the attach menu does, without waiting; the result holds the failures when done. */
+    private fun startAdding(pipe: File): AtomicInteger {
+        val failed = AtomicInteger(-1)
+        h.model.viewModelScope.launch { failed.set(h.model.addAttachments(listOf(Uri.fromFile(pipe)))) }
+        settle { h.model.importing == 1 }
+        return failed
+    }
+
+    private fun <T> onModel(block: suspend () -> T): T {
+        val result = AtomicReference<Any?>(UNSET)
+        h.model.viewModelScope.launch { result.set(block()) }
+        settle { result.get() !== UNSET }
+        @Suppress("UNCHECKED_CAST")
+        return result.get() as T
+    }
+
+    @Test
+    fun sendWaitsWhileAFileIsCopiedAndThenTheFileGoesWithThePost() {
+        val sky = h.bluesky("sky")
+        h.defaultTargets(sky)
+        h.show()
+        h.type("Photo")
+        val pipe = pipe()
+        val failed = startAdding(pipe)
+        try {
+            assertThat(h.model.currentBlockers()).containsExactly(Blocker.Importing)
+            settle { runCatching { h.node(ComposerTags.SEND).assertIsNotEnabled() }.isSuccess }
+            // A tap on Send while the copy runs queues nothing.
+            assertThat(onModel { h.model.send(null) }).isEqualTo(ComposerModel.SendResult.Blocked(listOf(Blocker.Importing)))
+            assertThat(queued()).isEmpty()
+        } finally {
+            feed(pipe)
+        }
+        settle { failed.get() == 0 }
+        assertThat(h.model.attachments).hasSize(1)
+        settle { runCatching { h.node(ComposerTags.SEND).assertIsEnabled() }.isSuccess }
+
+        assertThat(onModel { h.model.send(null) }).isInstanceOf(ComposerModel.SendResult.Queued::class.java)
+
+        val post = queued().single()
+        assertThat(post.attachments).hasSize(1)
+        assertThat(File(h.context.filesDir, post.attachments.single().path).isFile).isTrue()
+        assertThat(h.model.attachments).isEmpty()
+    }
+
+    @Test
+    fun aFileCopiedForADraftThatWasClearedMeanwhileIsDeletedNotAdded() {
+        val sky = h.bluesky("sky")
+        h.defaultTargets(sky)
+        h.show()
+        h.type("draft")
+        val pipe = pipe()
+        val failed = startAdding(pipe)
+        try {
+            onModel { h.model.clearDraft() }
+        } finally {
+            feed(pipe)
+        }
+        settle { failed.get() == 0 }
+        settle { h.model.importing == 0 }
+        assertThat(h.model.attachments).isEmpty()
+        assertThat(stored()).isEmpty()
+    }
+
+    @Test
+    fun aFileThatArrivesWhileTheDraftIsSavedStaysAndIsSavedNextTime() {
+        val sky = h.bluesky("sky")
+        h.defaultTargets(sky)
+        h.show()
+        h.type("draft")
+        val pipe = pipe()
+        val failed = startAdding(pipe)
+        feed(pipe)
+        // Wait, without letting the main thread run, until the copy is in place: its return to the composer is
+        // then the next thing the main thread does, after the save below has taken what it saves.
+        val end = System.currentTimeMillis() + 10_000
+        while (stored().none { !it.endsWith(".part") }) {
+            check(System.currentTimeMillis() < end) { "The copy did not finish" }
+            Thread.sleep(10)
+        }
+        Thread.sleep(500)
+        val id = AtomicLong(0)
+        h.model.viewModelScope.launch { id.set(h.model.saveDraft()) }
+        settle { id.get() > 0 && failed.get() == 0 }
+
+        // The save did not include the file, and its read-back did not drop it.
+        assertThat(drafts().single().attachments).isEmpty()
+        val arrived = h.model.attachments.single()
+        assertThat(arrived.id).isLessThan(0L)
+        assertThat(h.model.hasUnsavedChanges()).isTrue()
+
+        onModel { h.model.saveDraft() }
+        assertThat(drafts().single().attachments.map { it.path }).containsExactly(arrived.path)
+        assertThat(h.model.hasUnsavedChanges()).isFalse()
     }
 
     @Test

@@ -95,6 +95,12 @@ class ComposerModel(private val container: AppContainer, initialDraftId: Long?) 
 
     private var nextNewId = -1L
 
+    /**
+     * Changes whenever the composer starts another draft or reloads one (sent, cleared, discarded); an import
+     * that started before belongs to a draft that is gone, so its files are deleted instead of added.
+     */
+    private var draftGeneration = 0
+
     /** The post being edited, or null for a new one that was never saved. */
     var draftId by mutableStateOf(initialDraftId)
         private set
@@ -170,7 +176,7 @@ class ComposerModel(private val container: AppContainer, initialDraftId: Long?) 
     /** What keeps Send disabled for the counters shown now. */
     fun currentBlockers(): List<Blocker> = blockers(
         liveTargets(), text.text.toString(), renders?.second.orEmpty(), poll, pollLimits(),
-        attachments, currentMedia(), settings.value?.requireAltText == true,
+        attachments, currentMedia(), settings.value?.requireAltText == true, importing > 0,
     )
 
     /** The targets that still exist: an account removed while selected is dropped. */
@@ -182,6 +188,7 @@ class ComposerModel(private val container: AppContainer, initialDraftId: Long?) 
     // Loading and drafts (R15, R16, R17)
 
     private suspend fun load(id: Long?) {
+        draftGeneration++
         val accounts = accounts.filterNotNull().first()
         val settings = settings.filterNotNull().first()
         val post = id?.let { container.posts.get(it) }
@@ -205,6 +212,7 @@ class ComposerModel(private val container: AppContainer, initialDraftId: Long?) 
 
     /** An empty draft with the default targets (R16) and the defaults of the first of them (R17). */
     private fun newDraft(accounts: List<Account>, settings: Settings) {
+        draftGeneration++
         val existing = accounts.associateBy { it.id }
         val defaults = settings.defaultTargets.filter { it in existing }
         val selected = defaults.mapNotNull { existing[it] }
@@ -265,14 +273,18 @@ class ComposerModel(private val container: AppContainer, initialDraftId: Long?) 
     )
 
     /**
-     * Saves the draft and remembers it as saved; the composer keeps editing it. The attachments are read back
-     * so that the new ones carry their database ids from now on.
+     * Saves the draft and remembers what was saved; the composer keeps editing it. The attachments are read
+     * back so that the new ones carry their database ids from now on. The save suspends, so an import or an
+     * edit can land meanwhile: the read-back only gives ids to the saved files and keeps everything else as it
+     * is now, and what came in meanwhile stays unsaved.
      */
     suspend fun saveDraft(): Long {
-        val id = container.posts.saveDraft(draftInput())
+        val input = draftInput()
+        val snapshot = content()
+        val id = container.posts.saveDraft(input)
         draftId = id
-        container.posts.get(id)?.let { attachments = it.attachments }
-        saved = content()
+        container.posts.get(id)?.let { attachments = withSavedIds(attachments, it.attachments) }
+        saved = snapshot
         return id
     }
 
@@ -328,9 +340,16 @@ class ComposerModel(private val container: AppContainer, initialDraftId: Long?) 
     suspend fun addAttachments(uris: List<Uri>): Int {
         if (uris.isEmpty()) return 0
         val piece = currentPiece()
+        val generation = draftGeneration
         importing++
         try {
             val result = container.attachmentImporter.import(uris, piece)
+            if (generation != draftGeneration) {
+                // The draft the files were picked for was sent, cleared or discarded meanwhile.
+                val paths = result.attachments.map { it.path }
+                if (paths.isNotEmpty()) withContext(Dispatchers.IO) { container.attachmentFiles.delete(paths) }
+                return result.failures.size
+            }
             attachments = attachments + result.attachments.map { it.copy(id = nextNewId--) }
             return result.failures.size
         } finally {
@@ -456,7 +475,7 @@ class ComposerModel(private val container: AppContainer, initialDraftId: Long?) 
             val fresh = render(input, list, settings)
             renders = input to fresh
             val media = mediaOf(input, list, settings)
-            val blocked = blockers(input.targets, input.text, fresh, poll, pollLimits(), attachments, media, settings.requireAltText)
+            val blocked = blockers(input.targets, input.text, fresh, poll, pollLimits(), attachments, media, settings.requireAltText, importing > 0)
             if (blocked.isNotEmpty()) return SendResult.Blocked(blocked)
             val time = schedule ?: Schedule.Now(Instant.now())
             container.posts.saveAndQueue(draftInput(), time)
@@ -470,6 +489,17 @@ class ComposerModel(private val container: AppContainer, initialDraftId: Long?) 
 
     companion object {
         const val RENDER_DEBOUNCE_MS = 150L
+
+        /**
+         * [current] with the database ids of [savedBack], matched by file path, which is unique per copy. Only the
+         * ids change: an attachment added, removed or edited while the save ran stays as the composer has it.
+         */
+        fun withSavedIds(current: List<Attachment>, savedBack: List<Attachment>): List<Attachment> {
+            val ids = savedBack.associate { it.path to it.id }
+            return current.map { attachment ->
+                if (attachment.id >= 0) attachment else ids[attachment.path]?.let { attachment.copy(id = it) } ?: attachment
+            }
+        }
         private const val DEFAULT_POLL_SECONDS = 86_400L
     }
 }
