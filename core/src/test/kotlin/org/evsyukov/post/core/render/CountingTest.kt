@@ -46,11 +46,24 @@ class CountingTest {
     }
 
     @Test
-    fun `the conservative count takes code points and at least 23 per URL`() {
-        assertThat(count(Counting.FULL, "$thumbsUpMedium$eAcute")).isEqualTo(4)
+    fun `the conservative count takes UTF-16 units and at least 23 per URL`() {
+        // 👍🏽 is two code points outside the BMP, four UTF-16 units; é is two units.
+        assertThat(count(Counting.FULL, "$thumbsUpMedium$eAcute")).isEqualTo(6)
         assertThat(count(Counting.FULL, "see https://a.co")).isEqualTo(4 + 23)
         assertThat(count(Counting.FULL, "see $longUrl")).isEqualTo(4 + longUrl.length)
         assertThat(count(Counting.FULL, "hi @alice@example.com", spoiler = "CW")).isEqualTo(2 + 3 + "@alice@example.com".length)
+        // A server that declares a heavier URL weighs a short URL so.
+        assertThat(Counting.FULL.count("see https://a.co", "", segmenter, charactersReservedPerUrl = 30)).isEqualTo(4 + 30)
+        assertThat(Counting.FULL.count("see https://a.co", "", segmenter, charactersReservedPerUrl = 0)).isEqualTo(4 + 23)
+    }
+
+    @Test
+    fun `the conservative count matches Iceshrimp_NET, which counts UTF-16 units of text and warning`() {
+        // NoteService.cs: (data.Text?.Length ?? 0) + (data.Cw?.Length ?? 0) > CharacterLimit, C# string.Length.
+        val text = "Привет 👍 漢字 😀😀"
+        val cw = "CW 🇺🇦"
+        assertThat(count(Counting.FULL, text, cw)).isEqualTo(text.length + cw.length)
+        assertThat(count(Counting.FULL, text, cw)).isGreaterThan(count(Counting.GOTOSOCIAL, text, cw))
     }
 
     @Test
@@ -70,6 +83,7 @@ class CountingTest {
             val text = List(random.nextInt(0, 12)) { atoms.random(random) }.joinToString("")
             val spoiler = List(random.nextInt(0, 3)) { atoms.random(random) }.joinToString("")
             val full = count(Counting.FULL, text, spoiler)
+            assertThat(full).isAtLeast(text.length + spoiler.length)
             for (family in listOf(Counting.MASTODON, Counting.PLEROMA, Counting.GOTOSOCIAL)) {
                 assertThat(full).isAtLeast(count(family, text, spoiler))
             }

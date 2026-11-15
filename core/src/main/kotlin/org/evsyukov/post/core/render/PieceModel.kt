@@ -305,6 +305,8 @@ private class Weights(
         if (profile.counting.usesGraphemes()) {
             val boundaries = segmenter.graphemeBoundaries(text)
             for (k in 0 until boundaries.size - 1) units[boundaries[k]] = 1
+        } else if (profile.counting == Counting.FULL) {
+            units.fill(1) // UTF-16 units
         } else {
             for (i in 0 until n) units[i] = if (text[i].isLowSurrogate() && i > 0 && text[i - 1].isHighSurrogate()) 0 else 1
         }

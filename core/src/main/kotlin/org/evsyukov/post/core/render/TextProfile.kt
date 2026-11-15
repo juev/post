@@ -59,12 +59,17 @@ enum class Counting {
     GOTOSOCIAL,
 
     /**
-     * The conservative count for servers whose software Post does not know or could not detect: code
-     * points of the content warning and the text, mentions in full, and every URL in full but at least
-     * [MastodonCapabilities.Defaults.CHARACTERS_RESERVED_PER_URL] (23), as Mastodon forks weigh a short
-     * URL. It is never below the other Mastodon-API counts: a grapheme holds at least one code point, and
-     * no family shortens a URL below 23 or a mention below its full length. Not covered: a server that
-     * counts UTF-16 units or bytes (not verified for any Mastodon-API server).
+     * The conservative count for servers whose software Post does not know or could not detect: UTF-16
+     * units of the content warning and the text (Java's `String.length`), mentions in full, and every URL in
+     * full but at least the profile's `charactersReservedPerUrl`, which is never below
+     * [MastodonCapabilities.Defaults.CHARACTERS_RESERVED_PER_URL] (23), as Mastodon forks weigh a short URL.
+     * It is never below the other Mastodon-API counts: a grapheme holds at least one code point and a code
+     * point one or two UTF-16 units, and no family shortens a URL below what the server declares or a
+     * mention below its full length. Iceshrimp.NET, which reports itself as `Iceshrimp.NET` and so gets
+     * this family, counts exactly this way without the URL weight: `NoteService.cs` checks
+     * `(data.Text?.Length ?? 0) + (data.Cw?.Length ?? 0)` (C# `string.Length`, UTF-16 units) against
+     * `CharacterLimit` (branch `dev`, read 2026-11-15). Not covered: a server that counts UTF-8 bytes
+     * (none known among Mastodon-API servers).
      */
     FULL,
 
@@ -77,15 +82,17 @@ enum class Counting {
 
     /**
      * The length of a post with [text] and the content warning [spoilerText] as this family's server counts
-     * it. [charactersReservedPerUrl] matters only for [MASTODON].
+     * it. [charactersReservedPerUrl] matters only for [MASTODON] and, as the least weight of a URL, for
+     * [FULL], which never takes less than 23.
      */
     fun count(text: String, spoilerText: String, segmenter: TextSegmenter, charactersReservedPerUrl: Int = 23): Int =
         when (this) {
             MASTODON -> MastodonCounter(segmenter, charactersReservedPerUrl).count(text, spoilerText)
             PLEROMA -> segmenter.graphemeCount(text + spoilerText)
             GOTOSOCIAL -> codePoints(text) + codePoints(spoilerText)
-            FULL -> codePoints(text) + codePoints(spoilerText) + TextEntities.urls(text).sumOf {
-                maxOf(0, MastodonCapabilities.Defaults.CHARACTERS_RESERVED_PER_URL - codePoints(it.value))
+            FULL -> {
+                val urlWeight = maxOf(charactersReservedPerUrl, MastodonCapabilities.Defaults.CHARACTERS_RESERVED_PER_URL)
+                text.length + spoilerText.length + TextEntities.urls(text).sumOf { maxOf(0, urlWeight - it.value.length) }
             }
             BLUESKY -> segmenter.graphemeCount(text)
         }
@@ -103,8 +110,9 @@ private fun codePoints(text: String): Int = text.codePointCount(0, text.length)
  * @property contentType the `content_type` sent with a Mastodon status, or null to send none (only a type
  *   the server listed is sent; formatting.md, notes to the table).
  * @property maxBytes the UTF-8 byte limit (Bluesky's 3000), or null when the network has none.
- * @property charactersReservedPerUrl the weight of a URL for [Counting.MASTODON]; 0 for other families,
- *   which do not use it, so it does not split their accounts into different profiles.
+ * @property charactersReservedPerUrl the weight of a URL for [Counting.MASTODON], the least weight of a URL
+ *   for [Counting.FULL] (at least 23); 0 for other families, which do not use it, so it does not split their
+ *   accounts into different profiles.
  * @property blueskyLinkMode how Markdown links reach Bluesky (F11); [BlueskyLinkMode.FACET_ON_TEXT] for
  *   other formats, where it has no effect.
  */
@@ -173,7 +181,12 @@ object TextProfiles {
             counting = counting,
             maxCharacters = maxCharacters,
             maxBytes = null,
-            charactersReservedPerUrl = if (counting == Counting.MASTODON) capabilities.charactersReservedPerUrl.coerceAtLeast(0) else 0,
+            charactersReservedPerUrl = when (counting) {
+                Counting.MASTODON -> capabilities.charactersReservedPerUrl.coerceAtLeast(0)
+                // An unknown server that declares a heavier URL than Mastodon's may weigh it so.
+                Counting.FULL -> maxOf(capabilities.charactersReservedPerUrl, MastodonCapabilities.Defaults.CHARACTERS_RESERVED_PER_URL)
+                else -> 0
+            },
             blueskyLinkMode = BlueskyLinkMode.FACET_ON_TEXT,
             numberParts = numberParts,
         )

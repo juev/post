@@ -42,6 +42,11 @@ class TextProfilesTest {
         assertThat(TextProfiles.mastodon(pleroma.copy(charactersReservedPerUrl = 23), false))
             .isEqualTo(TextProfiles.mastodon(pleroma, false))
         assertThat(TextProfiles.mastodon(MastodonCapabilities(maxCharacters = 0), false).maxCharacters).isEqualTo(500)
+        // An unknown server keeps a URL weight it declares over 23 as the least weight of a URL.
+        val unknown = MastodonCapabilities(charactersReservedPerUrl = 30, softwareName = "Iceshrimp.NET")
+        assertThat(TextProfiles.mastodon(unknown, false).counting).isEqualTo(Counting.FULL)
+        assertThat(TextProfiles.mastodon(unknown, false).charactersReservedPerUrl).isEqualTo(30)
+        assertThat(TextProfiles.mastodon(unknown.copy(charactersReservedPerUrl = 0), false).charactersReservedPerUrl).isEqualTo(23)
     }
 
     @Test
