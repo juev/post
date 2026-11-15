@@ -22,7 +22,7 @@ Share sheet (from other apps) ── Composer
 
 ```
 ┌──────────────────────────────────────────┐
-│ Post                      [Posts 3] [⚙] │  top bar: queue badge, schedule and settings in ⋮
+│ Post                  [Posts 3] [⚙] [⋮] │  top bar: Posts with queue badge, Settings, Schedule in ⋮
 ├──────────────────────────────────────────┤
 │ (M) @me@mastodon.social ✓  (B) me.bsky ✓ │  targets: account chips, scroll sideways
 │ (M) @work@fosstodon ·                    │

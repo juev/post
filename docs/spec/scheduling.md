@@ -7,7 +7,7 @@ Decisions of 2026-11-15: the schedule is a set of weekly slots; scheduled posts 
 ## Schedule
 
 - S1. The schedule is a list of times for each weekday, for example Monday–Friday 09:00, 13:00, 18:00 and Saturday 11:00. An empty schedule is allowed; then "Next free slot" is unavailable and Send later asks for a time.
-- S2. Times are local wall-clock times in the device time zone. A slot that does not exist on a daylight-saving change day is moved to the first minute after the gap; a slot that occurs twice is used once, at its first occurrence.
+- S2. Times are local wall-clock times in the device time zone. A slot that does not exist on a daylight-saving change day is moved to the first minute after the gap; a slot that occurs twice is used once, at its first occurrence. A slot-based post stores the local date and time of its slot and is converted to an instant in the time zone the device has when the alarm is set, so it follows the device to a new zone. A post with an explicit time stores an absolute instant.
 - S3. A slot is free when no queued post is assigned to it. Each slot holds at most one post.
 - S4. "Next free slot" assigns the earliest free slot that is at least one minute after now.
 - S5. A post may have an explicit time instead of a slot. Such posts do not occupy slots and may share a time with other posts.
@@ -28,7 +28,7 @@ Decisions of 2026-11-15: the schedule is a set of weekly slots; scheduled posts 
   - Send now: sends all held posts at once, in queue order (Q8).
   - Reschedule: gives each held post, in queue order, the next free slot. A post with an explicit time also gets a slot.
   - Review: opens the Late group of the Queue tab.
-  The notification stays until a decision is made, and is updated when more posts go on hold.
+  The app does not cancel the notification until a decision is made, and updates it when more posts go on hold. Android 14 and later let the user swipe it away; the Late group and the badge (Q7) stay.
 - Q7. The Late group sits at the top of the Queue tab. It has the same three actions for the whole group. Each post in it can also be sent now, given a new time, edited or deleted. The composer's top bar shows a warning badge on Posts while the group is not empty.
 - Q8. Several posts due at the same time are sent in their queue order, one after another per account, so threads and order stay intact.
 
@@ -45,7 +45,7 @@ Facts are from developer.android.com, read 2026-11-15:
 Design:
 
 - M1. One exact alarm is set for the earliest pending send time, with `USE_EXACT_ALARM`. Whenever the queue changes, the alarm is reset to the new earliest time.
-- M2. The alarm receiver enqueues a unique WorkManager job with a `CONNECTED` network constraint. The job sends every post whose time has come, then sets the next alarm.
+- M2. The alarm receiver enqueues a unique WorkManager job with a `CONNECTED` network constraint as expedited work (`RUN_AS_NON_EXPEDITED_WORK_REQUEST` when the quota is exhausted), because Doze does not run ordinary jobs. The job sends every post whose time has come, then sets the next alarm. A job that uploads video calls `setForeground` at its start, inside the window the alarm grants.
 - M3. On `BOOT_COMPLETED`, time zone change, time change and app update, the app sets the alarm again. Then the job runs once to put late posts on hold and ask about them (Q4–Q6).
 - M4. A periodic WorkManager check every 30 minutes restores a missing alarm or job, as in ShareDing.
 - M5. Video uploads run as a long-running worker with a `dataSync` foreground notification. (Hypothesis, not verified: starting the foreground worker from an exact-alarm receiver on Android 14+ is allowed; check on a device before relying on it.)

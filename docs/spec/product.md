@@ -95,7 +95,11 @@ Detailed rules are in [scheduling.md](scheduling.md).
 ### General
 
 - R33. Material 3 with dynamic color and a dark theme. Every control has a screen reader label.
-- R34. The app sends no analytics and talks only to the account servers and, for Bluesky link cards, the linked page.
+- R34. The app sends no analytics. It talks only to:
+  - the account servers (Mastodon instances, Bluesky PDSes);
+  - for Bluesky sign-in and mentions: `public.api.bsky.app` to resolve handles, `plc.directory` or the `did:web` domain for DID documents, and the handle's domain for `/.well-known/atproto-did`;
+  - for Bluesky video: `video.bsky.app`;
+  - for Bluesky link cards: the linked page and its preview image.
 - R35. Interface languages: English and Russian.
 
 ### Editing and deleting published posts
