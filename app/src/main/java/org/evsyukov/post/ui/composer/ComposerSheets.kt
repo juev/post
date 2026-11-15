@@ -126,7 +126,10 @@ fun DetailsSheet(
         ) {
             SheetTitle(stringResource(R.string.composer_details))
             for (render in renders) {
-                Text("${profileName(render, renders)}: ${statusText(render)}", style = MaterialTheme.typography.titleSmall)
+                // The status text names the network; the accounts are added when the network has several profiles.
+                val several = renders.count { it.network == render.network } > 1
+                val accounts = if (several) " (${render.accounts.joinToString(", ") { it.chipLabel() }})" else ""
+                Text(statusText(render) + accounts, style = MaterialTheme.typography.titleSmall)
                 render.render.issue?.let { Text(issueText(it, source, render.render.limit), color = MaterialTheme.colorScheme.error) }
                 if (render.render.issue == null && render.render.manyPartsWarning) {
                     Text(stringResource(R.string.composer_many_parts, render.render.parts.size))

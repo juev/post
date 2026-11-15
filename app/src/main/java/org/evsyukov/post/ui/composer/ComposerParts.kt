@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -31,14 +30,15 @@ import androidx.compose.material.icons.outlined.FormatStrikethrough
 import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.MoreHoriz
 import androidx.compose.material.icons.outlined.ReportProblem
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material3.Card
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.IconToggleButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -260,27 +260,26 @@ fun ComposerToolbar(
                     }
                 }
             }
-            TextButton(onClick = onSendLater, modifier = Modifier.testTag(ComposerTags.SEND_LATER)) {
-                Text(stringResource(R.string.composer_send_later))
+            IconButton(onClick = onSendLater, modifier = Modifier.testTag(ComposerTags.SEND_LATER)) {
+                Icon(Icons.Outlined.Schedule, contentDescription = stringResource(R.string.composer_send_later))
             }
             val scheme = MaterialTheme.colorScheme
-            Button(
+            FilledIconButton(
                 onClick = onSend,
                 colors = if (canSend) {
-                    ButtonDefaults.buttonColors()
+                    IconButtonDefaults.filledIconButtonColors()
                 } else {
-                    ButtonDefaults.buttonColors(
+                    IconButtonDefaults.filledIconButtonColors(
                         containerColor = scheme.onSurface.copy(alpha = 0.12f),
                         contentColor = scheme.onSurface.copy(alpha = 0.38f),
                     )
                 },
                 modifier = Modifier
+                    .padding(end = 4.dp)
                     .semantics { if (!canSend) disabled() }
                     .testTag(ComposerTags.SEND),
             ) {
-                Icon(Icons.AutoMirrored.Outlined.Send, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(6.dp))
-                Text(stringResource(R.string.composer_send))
+                Icon(Icons.AutoMirrored.Outlined.Send, contentDescription = stringResource(R.string.composer_send))
             }
         }
     }
