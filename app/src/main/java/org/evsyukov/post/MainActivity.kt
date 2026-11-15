@@ -10,9 +10,12 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import org.evsyukov.post.oauth.AuthTabBrowserLauncher
+import org.evsyukov.post.send.AndroidSendNotifier
+import org.evsyukov.post.ui.AccountDetailsKey
 import org.evsyukov.post.ui.LocalAppContainer
 import org.evsyukov.post.ui.LocalBrowserLauncher
 import org.evsyukov.post.ui.PostApp
+import org.evsyukov.post.ui.PostsKey
 import org.evsyukov.post.ui.theme.PostTheme
 
 class MainActivity : ComponentActivity() {
@@ -32,11 +35,16 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         val container = (application as PostApplication).container
         val launcher = AuthTabBrowserLauncher(this, authTab)
+        val openOnStart = when (intent?.getStringExtra(AndroidSendNotifier.EXTRA_OPEN)) {
+            AndroidSendNotifier.OPEN_QUEUE -> PostsKey
+            AndroidSendNotifier.OPEN_ACCOUNT -> intent.getLongExtra(AndroidSendNotifier.EXTRA_ACCOUNT_ID, -1).takeIf { it >= 0 }?.let(::AccountDetailsKey)
+            else -> null
+        }
         setContent {
             CompositionLocalProvider(LocalAppContainer provides container, LocalBrowserLauncher provides launcher) {
                 PostTheme {
                     Surface(Modifier.fillMaxSize()) {
-                        PostApp()
+                        PostApp(openOnStart)
                     }
                 }
             }

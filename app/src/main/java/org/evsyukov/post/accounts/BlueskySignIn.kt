@@ -26,6 +26,8 @@ class BlueskySignIn(
     private val policy: ServerPolicy,
     private val appView: HttpUrl = IdentityResolver.DEFAULT_APP_VIEW,
     private val plc: HttpUrl = IdentityResolver.DEFAULT_PLC,
+    /** Called with the account id after a successful sign-in; the sender resumes its deliveries (R5). */
+    private val onSignedIn: suspend (Long) -> Unit = {},
 ) {
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -78,6 +80,7 @@ class BlueskySignIn(
                 ),
                 BlueskySecret(session.accessJwt, session.refreshJwt),
             )
+            notifySignedIn(id, onSignedIn)
             return Result.Done(id)
         } catch (e: Exception) {
             throw blueskyProblem(e)

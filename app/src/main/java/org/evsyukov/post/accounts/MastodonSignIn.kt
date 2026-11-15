@@ -75,6 +75,8 @@ class MastodonSignIn(
     private val http: OkHttpClient,
     private val policy: ServerPolicy,
     private val clock: Clock = Clock.systemUTC(),
+    /** Called with the account id after a successful sign-in; the sender resumes its deliveries (R5). */
+    private val onSignedIn: suspend (Long) -> Unit = {},
 ) {
     /** What the redirect led to. */
     sealed interface Completion {
@@ -149,6 +151,7 @@ class MastodonSignIn(
             )
             accounts.updateLimits(id, AccountLimits.Mastodon(current.capabilities), clock.instant())
             pending.clear()
+            notifySignedIn(id, onSignedIn)
             return Completion.Done(id)
         } catch (e: CancellationException) {
             throw e

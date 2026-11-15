@@ -4,6 +4,7 @@ import kotlinx.serialization.Serializable
 import org.evsyukov.post.core.bluesky.ContentLabel
 import org.evsyukov.post.core.mastodon.Visibility
 import org.evsyukov.post.core.media.ConflictKind
+import org.evsyukov.post.core.media.Conversion
 import org.evsyukov.post.core.media.FixKind
 import org.evsyukov.post.core.media.MediaItem
 import org.evsyukov.post.core.media.MediaKind
@@ -179,13 +180,53 @@ data class Attachment(
     )
 }
 
-/** The parts and media of a delivery, frozen at its first attempt (R30). Later steps add fields. */
+/**
+ * The parts and media of a delivery, frozen at its first attempt (R30). Later steps add fields.
+ *
+ * @property conversions the file to upload for every attachment of the parts (media.md A2): the original
+ *   or a variant, as the network's media plan chose at the freeze.
+ * @property mastodon the Mastodon status options of the delivery, the same for every part (N10).
+ */
 @Serializable
-data class DeliveryPlan(val parts: List<PlannedPart>)
+data class DeliveryPlan(
+    val parts: List<PlannedPart>,
+    val conversions: Map<Long, Conversion> = emptyMap(),
+    val mastodon: MastodonStatusOptions? = null,
+)
 
-/** One thread part: its text as the account gets it and the attachments it carries. */
+/**
+ * One thread part: its text as the account gets it and the attachments it carries.
+ *
+ * @property key the Mastodon `Idempotency-Key` of the part, chosen at the freeze and sent with every
+ *   attempt (N11).
+ * @property contentType the Mastodon `content_type`, or null to send none.
+ * @property spoilerText the Mastodon content warning of the part (N3).
+ * @property carriesPoll the Mastodon poll goes with this part, the first one.
+ */
 @Serializable
-data class PlannedPart(val text: String, val attachmentIds: List<Long> = emptyList())
+data class PlannedPart(
+    val text: String,
+    val attachmentIds: List<Long> = emptyList(),
+    val key: String? = null,
+    val contentType: String? = null,
+    val spoilerText: String? = null,
+    val carriesPoll: Boolean = false,
+)
+
+/**
+ * What every status of a Mastodon delivery carries (N9, N10), frozen with the plan.
+ *
+ * @property visibility the wire value of `visibility`, the same for every part (N10).
+ * @property quoteApprovalPolicy sent only when the server supports it.
+ */
+@Serializable
+data class MastodonStatusOptions(
+    val visibility: Visibility = Visibility.PUBLIC,
+    val sensitive: Boolean = false,
+    val language: String? = null,
+    val quoteApprovalPolicy: String? = null,
+    val poll: PollDraft? = null,
+)
 
 /** A media file uploaded to the server: its id there and the alt text it was sent with (R38). */
 @Serializable
@@ -219,6 +260,13 @@ data class PartProgress(
     val key: String? = null,
     val uploaded: Map<Long, String> = emptyMap(),
     val published: PublishedPart? = null,
+    /** When each media of [uploaded] was uploaded, epoch milliseconds; Mastodon drops unattached media after a day (N8). */
+    val uploadedAt: Map<Long, Long> = emptyMap(),
+    /**
+     * When a request to publish the part was first sent without a definite answer, epoch milliseconds: the
+     * part may be on the server (N12). Null once an answer said it is not.
+     */
+    val unknownSince: Long? = null,
 )
 
 /** The progress of a delivery, stored in `progressJson`. */

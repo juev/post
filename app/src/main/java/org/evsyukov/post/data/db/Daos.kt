@@ -300,6 +300,49 @@ interface DeliveryDao {
     )
     suspend fun retryFailed(postId: Long): Int
 
+    /** A waiting delivery that cannot start, such as one whose plan cannot be made, fails at once (R29). */
+    @Query(
+        """
+        UPDATE deliveries SET state = 'FAILED', error = :error, attempts = attempts + 1, lastAttemptAt = :at,
+            nextAttemptAt = NULL
+        WHERE id = :id AND state = 'WAITING'
+        """,
+    )
+    suspend fun failUnstarted(id: Long, at: Long, error: String): Int
+
+    /** One failed delivery waits again, unless its account was removed (R1). */
+    @Query(
+        """
+        UPDATE deliveries SET state = 'WAITING', nextAttemptAt = NULL
+        WHERE id = :id AND state = 'FAILED' AND accountId IN (SELECT id FROM accounts)
+        """,
+    )
+    suspend fun retryOne(id: Long): Int
+
+    @Query("SELECT DISTINCT postId FROM deliveries WHERE accountId = :accountId AND state = 'FAILED' AND error = :reason")
+    suspend fun postsFailedWith(accountId: Long, reason: String): List<Long>
+
+    /** R5: the deliveries of an account that failed because it needed sign-in wait again. */
+    @Query(
+        """
+        UPDATE deliveries SET state = 'WAITING', error = NULL, nextAttemptAt = NULL
+        WHERE accountId = :accountId AND state = 'FAILED' AND error = :reason
+        """,
+    )
+    suspend fun resumeFailedWith(accountId: Long, reason: String): Int
+
+    /** The earliest time a waiting delivery of a queued or sending post asked to be tried again. */
+    @Query(
+        """
+        SELECT MIN(d.nextAttemptAt) FROM deliveries d JOIN posts p ON p.id = d.postId
+        WHERE d.state = 'WAITING' AND d.nextAttemptAt IS NOT NULL AND p.state IN ('QUEUED', 'SENDING')
+        """,
+    )
+    suspend fun earliestRetry(): Long?
+
+    @Query("DELETE FROM deliveries WHERE postId = :postId")
+    suspend fun deleteForPost(postId: Long): Int
+
     /** Deliveries the process left in SENDING when it died go back to waiting (R27, R30). */
     @Query("SELECT DISTINCT postId FROM deliveries WHERE state = 'SENDING'")
     suspend fun postsWithSending(): List<Long>

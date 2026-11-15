@@ -1,6 +1,7 @@
 package org.evsyukov.post
 
 import android.content.Context
+import androidx.work.WorkManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -32,6 +33,13 @@ import org.evsyukov.post.data.settings.AppSettings
 import org.evsyukov.post.oauth.FilePendingSignInStore
 import org.evsyukov.post.oauth.MastodonSignInFlow
 import org.evsyukov.post.oauth.PendingSignInStore
+import org.evsyukov.post.media.convert.DeviceMediaConverter
+import org.evsyukov.post.media.prepare.MediaPreparer
+import org.evsyukov.post.send.AndroidSendNotifier
+import org.evsyukov.post.send.MastodonExecutor
+import org.evsyukov.post.send.PlanFreezer
+import org.evsyukov.post.send.PublishScheduler
+import org.evsyukov.post.send.Publisher
 import org.evsyukov.post.text.AndroidTextSegmenter
 import java.io.File
 import java.util.concurrent.TimeUnit
@@ -43,8 +51,8 @@ import java.util.concurrent.TimeUnit
  */
 class AppContainer(
     context: Context,
-    /** Starts publishing of due posts; the sender replaces the no-op, and tests record the calls. */
-    val publishTrigger: PublishTrigger = PublishTrigger {},
+    /** Starts publishing of due posts; null uses WorkManager ([PublishScheduler]), tests record the calls. */
+    publishTrigger: PublishTrigger? = null,
     // Tests on the JVM pass a stand-in: Robolectric has no Android Keystore. It stays the last parameter,
     // so `AppContainer(context) { FakeCipher() }` keeps meaning the cipher.
     private val cipher: () -> TokenCipher = { KeystoreTokenCipher() },
@@ -99,17 +107,46 @@ class AppContainer(
 
     val limitsRefresher: LimitsRefresher by lazy { LimitsRefresher(accounts, http) }
 
-    val blueskySignIn: BlueskySignIn by lazy { BlueskySignIn(accounts, http, serverPolicy) }
+    val blueskySignIn: BlueskySignIn by lazy { BlueskySignIn(accounts, http, serverPolicy, onSignedIn = { publisher.onSignedIn(it) }) }
 
     /** The Mastodon sign-in waiting for its redirect; on disk, so it survives the process (N4). */
     val pendingSignIns: PendingSignInStore by lazy {
         FilePendingSignInStore(File(this.context.noBackupFilesDir, "mastodon-sign-in.json"))
     }
 
-    val mastodonSignIn: MastodonSignIn by lazy { MastodonSignIn(accounts, mastodonApps, pendingSignIns, http, serverPolicy) }
+    val mastodonSignIn: MastodonSignIn by lazy {
+        MastodonSignIn(accounts, mastodonApps, pendingSignIns, http, serverPolicy, onSignedIn = { publisher.onSignedIn(it) })
+    }
 
     /** The Mastodon sign-in in progress; it outlives screens and activities. */
     val mastodonSignInFlow: MastodonSignInFlow by lazy { MastodonSignInFlow(mastodonSignIn, scope) }
+
+    /** Runs the sender through WorkManager: unique work, expedited, with one successor (scheduling.md M2). */
+    val publishScheduler: PublishScheduler by lazy { PublishScheduler(WorkManager.getInstance(this.context), scope) }
+
+    /** Starts publishing of due posts (R21); the composer calls it after saving the post (R27). */
+    val publishTrigger: PublishTrigger = publishTrigger ?: PublishTrigger { publishScheduler.publishNow() }
+
+    /** Variants of attachments for upload (media.md A2, A4). */
+    val mediaPreparer: MediaPreparer by lazy { MediaPreparer(database, this.context.filesDir, DeviceMediaConverter(this.context)) }
+
+    val sendNotifier: AndroidSendNotifier by lazy { AndroidSendNotifier(this.context) }
+
+    /** The sender of due posts (R27–R32); each network registers its executor here. */
+    val publisher: Publisher by lazy {
+        Publisher(
+            posts = posts,
+            accounts = accounts,
+            settings = { settings.current() },
+            freezer = PlanFreezer(textSegmenter),
+            executors = listOf(MastodonExecutor(http, accountSessions, accounts)),
+            preparer = mediaPreparer,
+            filesDir = this.context.filesDir,
+            notifier = sendNotifier,
+            scheduleRetry = { publishScheduler.scheduleRetry(it) },
+            trigger = this.publishTrigger,
+        )
+    }
 
     companion object {
         val USER_AGENT = "Post/${BuildConfig.VERSION_NAME} (+https://github.com/juev/post)"
