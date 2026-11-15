@@ -119,7 +119,8 @@ fun AttachmentStrip(
     conflicted: Set<Long>,
     adding: Boolean,
     fileOf: (Attachment) -> File,
-    onOpen: (Long) -> Unit,
+    // Null shows the files without the attachment sheet, as the Share sheet does.
+    onOpen: ((Long) -> Unit)?,
 ) {
     if (attachments.isEmpty() && !adding) return
     val stripLabel = stringResource(R.string.media_strip)
@@ -147,7 +148,7 @@ fun AttachmentStrip(
                     Modifier
                         .size(72.dp)
                         .clip(RoundedCornerShape(8.dp))
-                        .clickable(onClickLabel = editLabel) { onOpen(attachment.id) }
+                        .then(if (onOpen != null) Modifier.clickable(onClickLabel = editLabel) { onOpen(attachment.id) } else Modifier)
                         .semantics(mergeDescendants = true) { contentDescription = description }
                         .testTag(AttachmentTags.item(attachment.id)),
                 ) {
@@ -337,7 +338,7 @@ private fun Modifier.pointerInputFocus(onFocus: (Float, Float) -> Unit): Modifie
     )
 
 @Composable
-private fun conflictName(kind: ConflictKind): String = stringResource(
+fun conflictName(kind: ConflictKind): String = stringResource(
     when (kind) {
         ConflictKind.TOO_MANY_FILES -> R.string.media_conflict_too_many_files
         ConflictKind.UNSUPPORTED_TYPE -> R.string.media_conflict_unsupported_type

@@ -14,10 +14,11 @@ import org.evsyukov.post.send.schedule.QueueActions
 import org.evsyukov.post.send.schedule.ScheduleCheckWorker
 import org.evsyukov.post.send.schedule.ScheduleRestorer
 import org.evsyukov.post.send.schedule.SchedulingHost
+import org.evsyukov.post.share.DirectShare
 import java.time.Instant
 
-class PostApplication : Application(), LimitsRefresherHost, PublisherHost, SchedulingHost {
-    lateinit var container: AppContainer
+class PostApplication : Application(), AppContainerHost, LimitsRefresherHost, PublisherHost, SchedulingHost {
+    override lateinit var container: AppContainer
         private set
 
     override val limitsRefresher: LimitsRefresher get() = container.limitsRefresher
@@ -44,6 +45,8 @@ class PostApplication : Application(), LimitsRefresherHost, PublisherHost, Sched
         // M1, M4: the alarm follows the queue, and a periodic check restores it.
         container.startQueueHooks()
         ScheduleCheckWorker.schedule(WorkManager.getInstance(this))
+        // R23: the Direct Share shortcut, published again whenever the default targets change.
+        DirectShare.follow(container)
         // R31: records older than the retention setting go at start.
         container.scope.launch {
             try {

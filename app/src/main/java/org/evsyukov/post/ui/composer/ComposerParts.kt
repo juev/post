@@ -86,7 +86,13 @@ fun Account.chipLabel(): String = label.ifBlank { handle }
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun TargetsRow(accounts: List<Account>, selected: List<Long>, onToggle: (Long) -> Unit, onOptions: (Long) -> Unit) {
+fun TargetsRow(
+    accounts: List<Account>,
+    selected: List<Long>,
+    onToggle: (Long) -> Unit,
+    // Null leaves out the options of the post per account, as the Share sheet does.
+    onOptions: ((Long) -> Unit)?,
+) {
     if (accounts.isEmpty()) {
         Text(
             stringResource(R.string.composer_no_accounts),
@@ -109,7 +115,7 @@ fun TargetsRow(accounts: List<Account>, selected: List<Long>, onToggle: (Long) -
         groups.entries.forEachIndexed { index, (network, list) ->
             if (index > 0) VerticalDivider(Modifier.height(24.dp))
             for (account in list) {
-                TargetChip(account, network, account.id in selected, { onToggle(account.id) }, { onOptions(account.id) })
+                TargetChip(account, network, account.id in selected, { onToggle(account.id) }, onOptions?.let { { it(account.id) } })
             }
         }
     }
@@ -117,7 +123,7 @@ fun TargetsRow(accounts: List<Account>, selected: List<Long>, onToggle: (Long) -
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun TargetChip(account: Account, network: Network, isSelected: Boolean, onToggle: () -> Unit, onOptions: () -> Unit) {
+private fun TargetChip(account: Account, network: Network, isSelected: Boolean, onToggle: () -> Unit, onOptions: (() -> Unit)?) {
     val scheme = MaterialTheme.colorScheme
     val networkLabel = networkName(network)
     val description = stringResource(R.string.composer_target_description, networkLabel, account.chipLabel())
@@ -127,11 +133,16 @@ private fun TargetChip(account: Account, network: Network, isSelected: Boolean, 
         color = if (isSelected) scheme.secondaryContainer else scheme.surface,
         modifier = Modifier
             .border(1.dp, if (isSelected) scheme.secondaryContainer else scheme.outline, RoundedCornerShape(8.dp))
-            .combinedClickable(onClick = onToggle, onLongClick = onOptions, onLongClickLabel = optionsLabel, role = Role.Checkbox)
+            .combinedClickable(
+                onClick = onToggle,
+                onLongClick = onOptions,
+                onLongClickLabel = if (onOptions != null) optionsLabel else null,
+                role = Role.Checkbox,
+            )
             .semantics(mergeDescendants = true) {
                 contentDescription = description
                 selected = isSelected
-                customActions = listOf(CustomAccessibilityAction(optionsLabel) { onOptions(); true })
+                if (onOptions != null) customActions = listOf(CustomAccessibilityAction(optionsLabel) { onOptions(); true })
             }
             .testTag(ComposerTags.target(account.id)),
     ) {

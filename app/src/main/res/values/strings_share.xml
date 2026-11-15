@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Share sheet (product.md R19–R22, screens.md Share sheet). -->
+    <string name="share_title">Share to</string>
+    <string name="share_text">Text</string>
+    <string name="share_close">Close without posting</string>
+    <string name="share_open_composer">Open in composer</string>
+    <string name="share_send_later">Send later</string>
+    <string name="share_send">Send</string>
+    <!-- The action of a long press on Send later. -->
+    <string name="share_more_times">More times</string>
+    <!-- Read out on the action the settings make the default (R18). -->
+    <string name="share_default_action">Default action</string>
+    <string name="share_copying">Copying the shared files…</string>
+    <string name="share_no_target">No account selected</string>
+    <!-- What the default fixes of the settings change (media.md A12). %1$s is a network, %2$s the conflict, %3$s the fix. -->
+    <string name="share_will_change">What will change</string>
+    <string name="share_change">%1$s: %2$s. %3$s</string>
+    <!-- A problem that keeps Send disabled (R22, A13). %1$s names the accounts, %2$s their network, %3$s the problem. -->
+    <string name="share_problem">%1$s (%2$s): %3$s</string>
+    <string name="share_problem_too_long">a word or link is longer than %1$d characters and cannot be split</string>
+    <string name="share_problem_too_many_parts">the thread would need %1$d parts, %2$d are allowed</string>
+    <string name="share_problem_spoiler">the content warning leaves no room for the text</string>
+    <string name="share_problem_alt_missing">Alt text is required for every file</string>
+    <string name="share_problem_alt_too_long">Alt text is longer than allowed</string>
+    <string name="share_problem_poll">The poll breaks a server limit</string>
+    <string name="share_problem_empty">There is nothing to post</string>
+    <string name="share_problem_no_target">Choose at least one account</string>
+    <string name="share_resolve_in_composer">Open in composer to fix it.</string>
+    <!-- The long label of the Direct Share shortcut (R23). %1$s names the default targets. -->
+    <string name="share_shortcut_long">Post to %1$s</string>
+</resources>

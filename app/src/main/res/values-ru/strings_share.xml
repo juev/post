@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="share_title">Опубликовать в</string>
+    <string name="share_text">Текст</string>
+    <string name="share_close">Закрыть без публикации</string>
+    <string name="share_open_composer">Открыть в редакторе</string>
+    <string name="share_send_later">Позже</string>
+    <string name="share_send">Отправить</string>
+    <string name="share_more_times">Другое время</string>
+    <string name="share_default_action">Действие по умолчанию</string>
+    <string name="share_copying">Копирую файлы…</string>
+    <string name="share_no_target">Аккаунт не выбран</string>
+    <string name="share_will_change">Что изменится</string>
+    <string name="share_change">%1$s: %2$s. %3$s</string>
+    <string name="share_problem">%1$s (%2$s): %3$s</string>
+    <string name="share_problem_too_long">слово или ссылка длиннее %1$d символов и не делится на части</string>
+    <string name="share_problem_too_many_parts">для треда нужно частей: %1$d, допустимо: %2$d</string>
+    <string name="share_problem_spoiler">предупреждение о содержимом не оставляет места для текста</string>
+    <string name="share_problem_alt_missing">Нужно описание для каждого файла</string>
+    <string name="share_problem_alt_too_long">Описание длиннее допустимого</string>
+    <string name="share_problem_poll">Опрос нарушает ограничение сервера</string>
+    <string name="share_problem_empty">Публиковать нечего</string>
+    <string name="share_problem_no_target">Выберите хотя бы один аккаунт</string>
+    <string name="share_resolve_in_composer">Исправить можно в редакторе.</string>
+    <string name="share_shortcut_long">Опубликовать в %1$s</string>
+</resources>
