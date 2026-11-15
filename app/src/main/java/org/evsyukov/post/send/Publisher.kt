@@ -64,6 +64,8 @@ class Publisher(
      * a held post is not sent.
      */
     private val beforeSend: suspend (now: Instant) -> Unit = {},
+    /** Runs after every run: the alarm is set for the next pending time (scheduling.md M1). */
+    private val afterRun: suspend () -> Unit = {},
 ) {
     private val executors: Map<Network, DeliveryExecutor> = executors.associateBy { it.network }
     private val files = FilesDirAttachmentFiles(filesDir)
@@ -89,6 +91,7 @@ class Publisher(
         if (order.any { it.hasLargeMedia() }) showForeground(foreground, SendProgress())
         for (post in order) publishPost(post, foreground)
         posts.earliestRetry()?.let(scheduleRetry)
+        afterRun()
     }
 
     /**

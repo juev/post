@@ -10,9 +10,13 @@ import org.evsyukov.post.accounts.LimitsRefresherHost
 import org.evsyukov.post.send.PublishScheduler
 import org.evsyukov.post.send.Publisher
 import org.evsyukov.post.send.PublisherHost
+import org.evsyukov.post.send.schedule.QueueActions
+import org.evsyukov.post.send.schedule.ScheduleCheckWorker
+import org.evsyukov.post.send.schedule.ScheduleRestorer
+import org.evsyukov.post.send.schedule.SchedulingHost
 import java.time.Instant
 
-class PostApplication : Application(), LimitsRefresherHost, PublisherHost {
+class PostApplication : Application(), LimitsRefresherHost, PublisherHost, SchedulingHost {
     lateinit var container: AppContainer
         private set
 
@@ -22,6 +26,14 @@ class PostApplication : Application(), LimitsRefresherHost, PublisherHost {
 
     override val publishScheduler: PublishScheduler get() = container.publishScheduler
 
+    override val scheduleRestorer: ScheduleRestorer get() = container.scheduleRestorer
+
+    override val queueActions: QueueActions get() = container.queueActions
+
+    override fun launchInBackground(block: suspend () -> Unit) {
+        container.scope.launch { block() }
+    }
+
     override fun onCreate() {
         super.onCreate()
         container = AppContainer(this)
@@ -29,6 +41,9 @@ class PostApplication : Application(), LimitsRefresherHost, PublisherHost {
         LimitsRefreshWorker.schedule(WorkManager.getInstance(this))
         // Posts due while the process was gone, and deliveries it left sending, go out now (R27, R30).
         container.publishTrigger.publishNow()
+        // M1, M4: the alarm follows the queue, and a periodic check restores it.
+        container.startQueueHooks()
+        ScheduleCheckWorker.schedule(WorkManager.getInstance(this))
         // R31: records older than the retention setting go at start.
         container.scope.launch {
             try {

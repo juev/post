@@ -43,6 +43,18 @@ import org.evsyukov.post.send.PublishScheduler
 import org.evsyukov.post.send.Publisher
 import org.evsyukov.post.send.bluesky.BlueskyExecutor
 import org.evsyukov.post.send.bluesky.LinkCardFetcher
+import org.evsyukov.post.send.schedule.AndroidLateNotifier
+import org.evsyukov.post.send.schedule.LateHolder
+import org.evsyukov.post.send.schedule.PublishAlarms
+import org.evsyukov.post.send.schedule.QueueActions
+import org.evsyukov.post.send.schedule.ScheduleRestorer
+import org.evsyukov.post.send.schedule.pendingWakeTimes
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
+import org.evsyukov.post.data.db.PostState
+import java.time.ZoneId
 import org.evsyukov.post.text.AndroidTextSegmenter
 import java.io.File
 import java.util.concurrent.TimeUnit
@@ -161,7 +173,60 @@ class AppContainer(
             notifier = sendNotifier,
             scheduleRetry = { publishScheduler.scheduleRetry(it) },
             trigger = this.publishTrigger,
+            beforeSend = { lateHolder.holdLate(it) },
+            afterRun = { refreshAlarm() },
         )
+    }
+
+    /** The one exact alarm for the earliest pending time (scheduling.md M1). */
+    val publishAlarms: PublishAlarms by lazy { PublishAlarms(this.context, posts, WorkManager.getInstance(this.context)) }
+
+    /** The notification about late posts (Q6). */
+    val lateNotifier: AndroidLateNotifier by lazy { AndroidLateNotifier(this.context) }
+
+    /** Puts late posts on hold before the job sends (Q4, Q5). */
+    val lateHolder: LateHolder by lazy {
+        LateHolder(posts, settings = { settings.current() }, schedule = { schedule.get() }, notifier = lateNotifier)
+    }
+
+    /** Queue, Schedule and notification actions on queued posts (S6–S10, Q3, Q6, Q7). */
+    val queueActions: QueueActions by lazy { QueueActions(posts, schedule, this.publishTrigger, lateNotifier) }
+
+    /** Boot, time and zone changes, app updates and the periodic check (M3, M4). */
+    val scheduleRestorer: ScheduleRestorer by lazy {
+        ScheduleRestorer(
+            posts,
+            refreshAlarm = { refreshAlarm() },
+            runJob = { publishScheduler.enqueue() },
+            // R31: expired history goes on the periodic check too, not only at start.
+            housekeeping = { history.purgeExpired(java.time.Instant.now()) },
+        )
+    }
+
+    /** Sets the alarm again; a failure is logged and the next change or check tries again. */
+    suspend fun refreshAlarm() {
+        try {
+            publishAlarms.refresh()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            android.util.Log.e("PostAlarm", "cannot set the alarm", e)
+        }
+    }
+
+    /**
+     * Follows the queue for as long as the process lives (M1, Q6): the alarm is set again whenever a pending time
+     * changes, and the late notification goes once no post is held any more.
+     */
+    fun startQueueHooks() {
+        scope.launch {
+            posts.observeQueue().map { pendingWakeTimes(it, ZoneId.systemDefault()) }.distinctUntilChanged().collect { refreshAlarm() }
+        }
+        scope.launch {
+            posts.observeQueue().map { list -> list.count { it.state == PostState.HELD } }.distinctUntilChanged().collect { held ->
+                if (held == 0) lateNotifier.cancelLate()
+            }
+        }
     }
 
     companion object {
