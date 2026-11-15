@@ -1,0 +1,25 @@
+{
+  "_source": "GoToSocial 257aad74: internal/typeutils/internaltofrontend.go InstanceToAPIV2Instance and internal/api/model/instancev2.go; characters_reserved_per_url 25, statuses.supported_mime_types text/plain + text/markdown, matrix and frame rate limits math.MaxInt32, no api_versions; size and count values illustrative",
+  "domain": "gts.example",
+  "account_domain": "gts.example",
+  "title": "GoToSocial example",
+  "version": "0.20.0",
+  "source_url": "https://codeberg.org/superseriousbusiness/gotosocial",
+  "description": "",
+  "usage": {"users": {"active_month": 0}},
+  "thumbnail": {"url": "https://gts.example/assets/logo.webp"},
+  "languages": ["en"],
+  "configuration": {
+    "urls": {"streaming": "wss://gts.example", "about": "https://gts.example/about", "privacy_policy": null, "terms_of_service": "https://gts.example/about#rules"},
+    "accounts": {"allow_custom_css": false, "max_featured_tags": 10, "max_profile_fields": 6},
+    "statuses": {"max_characters": 5000, "max_media_attachments": 6, "characters_reserved_per_url": 25, "supported_mime_types": ["text/plain", "text/markdown"]},
+    "media_attachments": {"supported_mime_types": ["image/jpeg", "image/gif", "image/png", "image/webp", "video/mp4"], "image_size_limit": 41943040, "image_matrix_limit": 2147483647, "video_size_limit": 41943040, "video_frame_rate_limit": 2147483647, "video_matrix_limit": 2147483647, "description_limit": 1500},
+    "polls": {"max_options": 6, "max_characters_per_option": 50, "min_expiration": 300, "max_expiration": 2629746},
+    "translation": {"enabled": false},
+    "emojis": {"emoji_size_limit": 51200},
+    "vapid": {"public_key": "BPLACEHOLDER"}
+  },
+  "registrations": {"enabled": false, "approval_required": true, "message": null, "min_age": null, "reason_required": true},
+  "contact": {"email": ""},
+  "rules": []
+}

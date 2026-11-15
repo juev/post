@@ -1,0 +1,32 @@
+{
+  "_source": "docs.joinmastodon.org entities/Instance example (mastodon/documentation main, 2026-11-15), trimmed; api_versions.mastodon set to 7 and version to 4.5.0; description_limit 10000 as MediaAttachment::MAX_DESCRIPTION_LENGTH of mastodon/mastodon main",
+  "domain": "mastodon.social",
+  "title": "Mastodon",
+  "version": "4.5.0",
+  "source_url": "https://github.com/mastodon/mastodon",
+  "description": "The original server operated by the Mastodon gGmbH non-profit",
+  "usage": {"users": {"active_month": 279347}},
+  "languages": ["en"],
+  "configuration": {
+    "urls": {"streaming": "wss://streaming.mastodon.social", "status": "https://status.mastodon.social", "about": "https://mastodon.social/about", "privacy_policy": "https://mastodon.social/privacy-policy", "terms_of_service": null},
+    "vapid": {"public_key": "BCk-QqERU0q-CfYZjcuB6lnyyOYfJ2AifKqfeGIm7Z-HiTU5T9eTG5GxVA0_OH5mMlI4UkkDTpaZwozy0TzdZ2M="},
+    "accounts": {"max_display_name_length": 30, "max_note_length": 500, "max_featured_tags": 10, "max_pinned_statuses": 5, "max_profile_fields": 4, "profile_field_name_limit": 255, "profile_field_value_limit": 255},
+    "statuses": {"max_characters": 500, "max_media_attachments": 4, "characters_reserved_per_url": 23},
+    "media_attachments": {
+      "description_limit": 10000,
+      "image_matrix_limit": 33177600,
+      "image_size_limit": 16777216,
+      "supported_mime_types": ["image/jpeg", "image/png", "image/gif", "image/webp", "video/webm", "video/mp4", "video/quicktime", "video/ogg", "audio/wave", "audio/wav", "audio/x-wav", "audio/x-pn-wave", "audio/vnd.wave", "audio/ogg", "audio/vorbis", "audio/mpeg", "audio/mp3", "audio/webm", "audio/flac", "audio/aac", "audio/m4a", "audio/x-m4a", "audio/mp4", "audio/3gpp", "video/x-ms-asf"],
+      "video_frame_rate_limit": 120,
+      "video_matrix_limit": 8294400,
+      "video_size_limit": 103809024
+    },
+    "polls": {"max_options": 4, "max_characters_per_option": 50, "min_expiration": 300, "max_expiration": 2629746},
+    "translation": {"enabled": true},
+    "limited_federation": false
+  },
+  "registrations": {"enabled": true, "approval_required": false, "reason_required": false, "message": null, "min_age": 16, "url": null, "oauth": true},
+  "api_versions": {"mastodon": 7},
+  "contact": {"email": "staff@mastodon.social", "account": null},
+  "rules": []
+}

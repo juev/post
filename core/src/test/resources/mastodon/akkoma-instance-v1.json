@@ -1,0 +1,22 @@
+{
+  "_source": "Akkoma 3e9ad30e lib/pleroma/web/mastodon_api/views/instance_view.ex render(show.json): no configuration block, no max_media_attachments; max_toot_chars, poll_limits, upload_limit, description_limit and pleroma.metadata.post_formats; values are config.exs defaults; Akkoma has no /api/v2/instance view",
+  "uri": "akkoma.example",
+  "title": "Akkoma example",
+  "description": "An Akkoma instance",
+  "short_description": "An Akkoma instance",
+  "version": "2.7.2 (compatible; Akkoma 3.15.2)",
+  "email": "admin@akkoma.example",
+  "urls": {"streaming_api": "wss://akkoma.example"},
+  "stats": {"domain_count": 10, "status_count": 100, "user_count": 3},
+  "languages": ["en"],
+  "registrations": false,
+  "approval_required": false,
+  "max_toot_chars": 5000,
+  "poll_limits": {"max_options": 20, "max_option_chars": 200, "min_expiration": 0, "max_expiration": 31536000},
+  "upload_limit": 16000000,
+  "description_limit": 5000,
+  "pleroma": {
+    "metadata": {"account_activation_required": false, "features": ["pleroma_api", "mastodon_api"], "post_formats": ["text/plain", "text/html", "text/markdown", "text/bbcode", "text/x.misskeymarkdown"]},
+    "stats": {"mau": 3}
+  }
+}

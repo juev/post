@@ -1,0 +1,17 @@
+{
+  "_source": "docs.joinmastodon.org entities/V1_Instance: attributes added before 3.4.2 only (configuration arrived in 3.4.2, /api/v2/instance in 4.0); values illustrative",
+  "uri": "old.example",
+  "title": "Old Mastodon",
+  "short_description": "",
+  "description": "",
+  "email": "admin@old.example",
+  "version": "3.3.3",
+  "urls": {"streaming_api": "wss://old.example"},
+  "stats": {"user_count": 10, "status_count": 100, "domain_count": 10},
+  "thumbnail": "https://old.example/packs/media/images/preview.jpg",
+  "languages": ["en"],
+  "registrations": false,
+  "approval_required": false,
+  "invites_enabled": false,
+  "contact_account": null
+}

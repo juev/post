@@ -1,0 +1,24 @@
+{
+  "_source": "Pleroma cf6b7096 lib/pleroma/web/mastodon_api/views/instance_view.ex render(show2.json): configuration2 with characters_reserved_per_url 0 and media supported_mime_types [application/octet-stream], no statuses.supported_mime_types, no description_limit in configuration; limits are config.exs defaults (limit 5000, upload_limit 16000000, max_media_attachments 1000, poll_limits 20/200/0/31536000)",
+  "domain": "pleroma.example",
+  "source_url": "https://git.pleroma.social/pleroma/pleroma",
+  "description": "A Pleroma instance",
+  "usage": {"users": {"active_month": 3}},
+  "thumbnail": {"url": "https://pleroma.example/instance/thumbnail.jpeg"},
+  "languages": ["en"],
+  "rules": [],
+  "title": "Pleroma example",
+  "version": "2.7.2 (compatible; Pleroma 2.9.1)",
+  "configuration": {
+    "accounts": {"max_featured_tags": 0, "max_pinned_statuses": 1, "max_profile_fields": 10, "profile_field_name_limit": 512, "profile_field_value_limit": 2048},
+    "statuses": {"max_characters": 5000, "max_media_attachments": 1000, "characters_reserved_per_url": 0},
+    "media_attachments": {"image_size_limit": 16000000, "video_size_limit": 16000000, "supported_mime_types": ["application/octet-stream"]},
+    "polls": {"max_options": 20, "max_characters_per_option": 200, "min_expiration": 0, "max_expiration": 31536000},
+    "urls": {"streaming": "wss://pleroma.example", "status": null},
+    "vapid": {"public_key": "BPLACEHOLDER"},
+    "translation": {"enabled": false}
+  },
+  "registrations": {"enabled": true, "approval_required": false, "message": null, "url": null},
+  "contact": {"email": "admin@pleroma.example", "account": null},
+  "pleroma": {"metadata": {"post_formats": ["text/plain", "text/html", "text/markdown", "text/bbcode", "text/x.misskeymarkdown"], "description_limit": 5000}, "stats": {"mau": 3}}
+}

@@ -1,0 +1,24 @@
+{
+  "_source": "hometown-fork/hometown branch hometown-1.0.8-security app/serializers/rest/instance_serializer.rb: max_toot_chars and configuration (statuses, media_attachments without description_limit, polls); no /api/v2/instance on this Mastodon 3.x base; MAX_TOOT_CHARS=1000 and mime list illustrative",
+  "uri": "hometown.example",
+  "title": "Hometown example",
+  "short_description": "",
+  "description": "",
+  "email": "admin@hometown.example",
+  "version": "3.4.6+hometown-1.0.8",
+  "urls": {"streaming_api": "wss://hometown.example"},
+  "stats": {"user_count": 50, "status_count": 1000, "domain_count": 100},
+  "thumbnail": "https://hometown.example/packs/media/images/preview.jpg",
+  "max_toot_chars": 1000,
+  "languages": ["en"],
+  "registrations": false,
+  "approval_required": false,
+  "invites_enabled": true,
+  "configuration": {
+    "statuses": {"max_characters": 1000, "max_media_attachments": 4, "characters_reserved_per_url": 23},
+    "media_attachments": {"supported_mime_types": ["image/jpeg", "image/png", "image/gif", "video/webm", "video/mp4", "video/quicktime", "video/ogg", "audio/wave", "audio/ogg", "audio/mpeg"], "image_size_limit": 10485760, "image_matrix_limit": 16777216, "video_size_limit": 41943040, "video_frame_rate_limit": 60, "video_matrix_limit": 2304000},
+    "polls": {"max_options": 4, "max_characters_per_option": 50, "min_expiration": 300, "max_expiration": 2629746}
+  },
+  "contact_account": null,
+  "rules": []
+}
