@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application>
+        <!-- Another app for the Share tests. The test APK is a package of its own, so its provider serves fixtures
+             that Post may read only with the grant of a share intent, and its activity sends that intent, as a
+             gallery or a file manager would. -->
+        <provider
+            android:name="org.evsyukov.post.share.TestShareProvider"
+            android:authorities="org.evsyukov.post.test.share"
+            android:exported="false"
+            android:grantUriPermissions="true" />
+        <activity
+            android:name="org.evsyukov.post.share.SenderActivity"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:theme="@android:style/Theme.Material.Light.NoActionBar" />
+    </application>
+
+</manifest>
