@@ -112,6 +112,7 @@ class SendFixture(withBluesky: Boolean = false) : Closeable {
         clock = clock,
         zone = { ZoneOffset.UTC },
         beforeSend = { beforeSend(it) },
+        history = { history.get(it) },
     )
 
     fun run() = runBlocking { publisher.run { foregrounds += it } }

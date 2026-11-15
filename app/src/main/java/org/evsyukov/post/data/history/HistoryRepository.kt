@@ -9,6 +9,7 @@ import org.evsyukov.post.core.media.Network
 import org.evsyukov.post.data.db.DbJson
 import org.evsyukov.post.data.db.HistoryEntity
 import org.evsyukov.post.data.db.PostDatabase
+import org.evsyukov.post.data.posts.MastodonStatusOptions
 import org.evsyukov.post.data.posts.PostOptions
 import org.evsyukov.post.data.posts.PublishedPart
 import org.evsyukov.post.data.settings.HistoryRetention
@@ -26,6 +27,8 @@ data class HistoryItem(
     val server: String,
     val handle: String,
     val parts: List<PublishedPart>,
+    /** The Mastodon status options the parts were published with; an edit sends them only when they change. */
+    val mastodon: MastodonStatusOptions? = null,
 )
 
 /** A record of the Sent tab (R31, R38). Media files are not kept, only their server ids and alt text. */
