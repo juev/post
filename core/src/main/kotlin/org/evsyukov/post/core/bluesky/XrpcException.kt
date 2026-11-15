@@ -96,6 +96,7 @@ class XrpcException(
         private const val MAX_ERROR_BODY = 16L * 1024
         private const val MAX_MESSAGE = 500
         private const val REDACTED = "<redacted>"
+        private const val MIN_SECRET_LENGTH = 8
 
         /** Network failures and transient XRPC answers; anything else will fail the same way again. */
         fun isTransient(failure: Throwable): Boolean = when (failure) {
@@ -118,13 +119,15 @@ class XrpcException(
                 null
             }
             val fields = body?.let { parseObjectOrNull(it) }
-            val error = fields?.optString("error")?.let { scrub(it, secrets) }
+            // The error name is an identifier the classification depends on: it is never rewritten.
+            val error = fields?.optString("error")
             val message = fields?.optString("message")?.let { scrub(it, secrets).take(MAX_MESSAGE) }
             return XrpcException(response.code, error, message, rateLimitReset(response, nowMillis))
         }
 
+        /** Replaces echoed credentials. Shorter strings are not credentials and would mangle ordinary words. */
         private fun scrub(text: String, secrets: List<String>): String =
-            secrets.filter { it.isNotEmpty() }.fold(text) { acc, secret -> acc.replace(secret, REDACTED) }
+            secrets.filter { it.length >= MIN_SECRET_LENGTH }.fold(text) { acc, secret -> acc.replace(secret, REDACTED) }
 
         /**
          * The reference PDS sends `RateLimit-Reset` in epoch seconds and, on 429, `Retry-After` in

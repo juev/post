@@ -53,6 +53,21 @@ class XrpcExceptionTest {
     }
 
     @Test
+    fun shortCredentialDoesNotMangleTheErrorNameOrMessage() {
+        // A one-letter "token" occurs inside ordinary words; scrubbing it would break classification.
+        val e = failureOf(jsonResponse("""{"error":"ExpiredToken","message":"Token has expired"}""", 400), token = "t")
+        assertThat(e.error).isEqualTo("ExpiredToken")
+        assertThat(e.message).isEqualTo("Token has expired")
+        assertThat(e.isExpiredToken).isTrue()
+    }
+
+    @Test
+    fun errorNameIsNeverRewrittenEvenIfItEqualsTheToken() {
+        val e = failureOf(jsonResponse("""{"error":"InvalidToken","message":"no"}""", 400), token = "InvalidToken")
+        assertThat(e.isInvalidToken).isTrue()
+    }
+
+    @Test
     fun retryAfterInSecondsBecomesAnEpochTime() {
         val e = failureOf(MockResponse.Builder().code(429).addHeader("Retry-After", "120").build())
         assertThat(e.rateLimitResetEpochSeconds).isEqualTo(now / 1000 + 120)
