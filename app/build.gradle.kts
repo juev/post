@@ -71,6 +71,8 @@ android {
 
     buildFeatures {
         compose = true
+        // BuildConfig.DEBUG lets debug builds reach local test servers; VERSION_NAME goes into the User-Agent.
+        buildConfig = true
     }
 
     testOptions {

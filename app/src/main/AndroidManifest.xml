@@ -3,6 +3,18 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <!-- Package visibility (API 30+): find the browser that offers Custom Tabs and Auth Tab. -->
+    <queries>
+        <intent>
+            <action android:name="android.support.customtabs.action.CustomTabsService" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.BROWSABLE" />
+            <data android:scheme="https" />
+        </intent>
+    </queries>
+
     <application
         android:name=".PostApplication"
         android:allowBackup="false"
@@ -19,6 +31,25 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+        <!-- The Mastodon OAuth redirect after a Custom Tab (networks.md N4). Exported for the browser; a
+             redirect whose state Post did not issue is rejected without any request. -->
+        <activity
+            android:name=".oauth.OAuthRedirectActivity"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:noHistory="true"
+            android:theme="@android:style/Theme.NoDisplay">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:host="oauth"
+                    android:path="/mastodon"
+                    android:scheme="org.evsyukov.post" />
             </intent-filter>
         </activity>
     </application>

@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Settings root (screens.md, Settings) -->
+    <string name="settings_accounts">Accounts</string>
+    <string name="settings_accounts_summary">Mastodon and Bluesky accounts</string>
+    <string name="settings_defaults">Defaults</string>
+    <string name="settings_defaults_summary">Targets, Share action, media fixes</string>
+    <string name="settings_sending">Sending</string>
+    <string name="settings_sending_summary">Notifications, history, threads, video</string>
+    <string name="settings_schedule_summary">Weekly slots for Send later</string>
+    <string name="settings_about">About</string>
+    <string name="settings_about_summary">Version, source code, privacy</string>
+    <string name="settings_placeholder">This section is coming in this version.</string>
+
+    <!-- Accounts list -->
+    <string name="network_mastodon">Mastodon</string>
+    <string name="network_bluesky">Bluesky</string>
+    <string name="accounts_empty">No accounts yet. Add a Mastodon or Bluesky account to start posting.</string>
+    <string name="accounts_add">Add account</string>
+    <string name="accounts_choose_network">Which network?</string>
+    <string name="accounts_needs_sign_in">Needs sign-in</string>
+    <string name="account_menu">Options for %1$s</string>
+    <string name="account_move_up">Move up</string>
+    <string name="account_move_down">Move down</string>
+    <string name="account_avatar">Avatar</string>
+    <string name="cancel">Cancel</string>
+
+    <!-- Add Mastodon account -->
+    <string name="add_mastodon_title">Add Mastodon account</string>
+    <string name="sign_in_again_title">Sign in again</string>
+    <string name="add_mastodon_instance">Instance</string>
+    <string name="add_mastodon_instance_hint">mastodon.social or @you@mastodon.social</string>
+    <string name="add_mastodon_explain">Post opens the sign-in page of your instance in the browser. Your password stays with your instance.</string>
+    <string name="add_mastodon_continue">Continue in the browser</string>
+    <string name="add_mastodon_in_browser">Sign in on the page the browser opened, then come back here.</string>
+    <string name="signing_in">Signing in…</string>
+    <string name="try_again">Try again</string>
+
+    <!-- Add Bluesky account -->
+    <string name="add_bluesky_title">Add Bluesky account</string>
+    <string name="add_bluesky_handle">Handle</string>
+    <string name="add_bluesky_handle_hint">you.bsky.social</string>
+    <string name="add_bluesky_password">App password</string>
+    <string name="add_bluesky_password_hint">Use an app password, not the password of your account. An app password can post but cannot change your account, and you can revoke it at any time. Post keeps only the session, never the password.</string>
+    <string name="add_bluesky_password_link">Create an app password on bsky.app</string>
+    <string name="add_bluesky_password_warning">This does not look like an app password (xxxx-xxxx-xxxx-xxxx).</string>
+    <string name="show_password">Show password</string>
+    <string name="hide_password">Hide password</string>
+    <string name="add_bluesky_code">Code from the e-mail</string>
+    <string name="add_bluesky_code_hint">Bluesky sent a sign-in code to the e-mail of this account.</string>
+    <string name="add_bluesky_sign_in">Sign in</string>
+
+    <!-- Sign-in problems -->
+    <string name="problem_invalid_address">Enter the address of a Mastodon instance, such as mastodon.social. Only HTTPS servers are supported.</string>
+    <string name="problem_not_mastodon">This server does not answer as a Mastodon server.</string>
+    <string name="problem_network">The server could not be reached. Check the connection and try again.</string>
+    <string name="problem_server">The server refused the sign-in or answered something unexpected.</string>
+    <string name="problem_unknown_state">This sign-in link was not started by Post, so it was ignored.</string>
+    <string name="problem_denied">The sign-in was cancelled.</string>
+    <string name="problem_client_rejected">The server does not accept Post\'s registration.</string>
+    <string name="problem_no_browser">No browser can open the sign-in page.</string>
+    <string name="problem_invalid_handle">Enter a handle such as you.bsky.social, or a DID.</string>
+    <string name="problem_handle_not_found">No Bluesky account has this handle.</string>
+    <string name="problem_handle_mismatch">The account\'s identity does not confirm this handle.</string>
+    <string name="problem_no_pds">The account names no HTTPS server to sign in to.</string>
+    <string name="problem_wrong_password">The handle or the app password is wrong.</string>
+    <string name="problem_wrong_code">The code is wrong or has expired.</string>
+    <string name="problem_account_inactive">This account is deactivated or suspended.</string>
+    <string name="problem_account_taken_down">This account has been taken down.</string>
+    <string name="problem_rate_limited">Too many sign-in attempts. Wait a few minutes and try again.</string>
+
+    <!-- Account details -->
+    <string name="account_details_title">Account</string>
+    <string name="account_label">Label</string>
+    <string name="account_label_hint">Shown in the target picker</string>
+    <string name="account_defaults">Default options</string>
+    <string name="visibility">Visibility</string>
+    <string name="visibility_public">Public</string>
+    <string name="visibility_unlisted">Quiet public</string>
+    <string name="visibility_private">Followers only</string>
+    <string name="visibility_direct">Mentioned people only</string>
+    <string name="language">Language</string>
+    <string name="language_hint">A code such as en or ru; empty to let the server decide</string>
+    <string name="languages">Languages</string>
+    <string name="languages_hint">Up to three codes separated by commas, such as en, ru</string>
+    <string name="content_warning">Content warning</string>
+    <string name="sensitive_media">Mark media as sensitive</string>
+    <string name="who_can_reply">Who can reply</string>
+    <string name="reply_everyone">Everyone</string>
+    <string name="reply_some">Only these people</string>
+    <string name="reply_nobody">Nobody</string>
+    <string name="reply_mentioned">Mentioned users</string>
+    <string name="reply_followers">Your followers</string>
+    <string name="reply_following">People you follow</string>
+    <string name="allow_quotes">Allow quotes</string>
+    <string name="limits">Limits</string>
+    <string name="limits_characters">Characters per post: %1$d</string>
+    <string name="limits_media">Files per post: %1$d</string>
+    <string name="limits_image">Image size: up to %1$s</string>
+    <string name="limits_video">Video size: up to %1$s</string>
+    <string name="limits_image_formats">Image formats: %1$s</string>
+    <string name="limits_post_formats">Post formats: %1$s</string>
+    <string name="limits_read_at">Read from the server on %1$s</string>
+    <string name="limits_never">Not read from the server yet; the usual Mastodon limits apply.</string>
+    <string name="limits_bluesky_fixed">Bluesky limits are the same for every account.</string>
+    <string name="limits_gallery">Images in a gallery: up to %1$d</string>
+    <string name="sign_in_again">Sign in again</string>
+    <string name="remove_account">Remove account</string>
+    <string name="remove_account_title">Remove this account?</string>
+    <string name="remove_account_text">Posts waiting for this account will fail with the reason \"account removed\". For Mastodon, Post also revokes its access on the server.</string>
+    <string name="remove">Remove</string>
+</resources>
