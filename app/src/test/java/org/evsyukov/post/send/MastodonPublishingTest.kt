@@ -335,6 +335,33 @@ class MastodonPublishingTest {
     }
 
     @Test
+    fun aLostAnswerIsRetriedWithTheSameKeyAndTheServerDoesNotDuplicate() {
+        val alice = f.mastodon()
+        var drops = 1
+        f.dropAnswer = { request -> request.url.encodedPath == "/api/v1/statuses" && drops-- > 0 }
+        val id = f.queue("Hello", listOf(alice))
+
+        f.run()
+
+        // The server made the status; the app does not know it and waits to try again (R29).
+        assertThat(server.statuses).hasSize(1)
+        val delivery = f.post(id)!!.deliveries.single()
+        assertThat(delivery.state).isEqualTo(DeliveryState.WAITING)
+        assertThat(delivery.nextAttemptAt).isEqualTo(f.clock.now.plusSeconds(30))
+        assertThat(delivery.progress.parts.single().unknownSince).isEqualTo(f.clock.now.toEpochMilli())
+
+        f.clock.advance(Duration.ofSeconds(30))
+        f.run()
+
+        // N11: the same key, so the server answers with the status it made.
+        assertThat(server.keys).hasSize(2)
+        assertThat(server.keys.toSet()).hasSize(1)
+        assertThat(server.statuses).hasSize(1)
+        assertThat(f.post(id)!!.state).isEqualTo(PostState.SENT)
+        assertThat(f.post(id)!!.deliveries.single().progress.parts.single().published!!.id).isEqualTo("s1")
+    }
+
+    @Test
     fun anUnknownOutcomeOlderThanAnHourIsFoundAmongTheLatestStatusesAndNotPostedAgain() {
         val alice = f.mastodon()
         // The server made the status (s1) but the answer was lost.

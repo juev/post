@@ -65,12 +65,24 @@ class SendFixture : Closeable {
 
     var beforeSend: suspend (Instant) -> Unit = {}
 
+    /** When it says so for a request, the server gets the request and answers, but the answer is lost. */
+    var dropAnswer: (okhttp3.Request) -> Boolean = { false }
+
+    private val dropping = servers.http.newBuilder().addInterceptor { chain ->
+        val response = chain.proceed(chain.request())
+        if (dropAnswer(chain.request())) {
+            response.close()
+            throw java.io.IOException("connection reset")
+        }
+        response
+    }.build()
+
     val publisher = Publisher(
         posts = posts,
         accounts = accounts,
         settings = { settings },
         freezer = PlanFreezer(AndroidTextSegmenter()),
-        executors = listOf(MastodonExecutor(servers.http, sessions, accounts, clock, sleep = {})),
+        executors = listOf(MastodonExecutor(dropping, sessions, accounts, clock, sleep = {})),
         preparer = preparer,
         filesDir = filesDir,
         notifier = notifier,
