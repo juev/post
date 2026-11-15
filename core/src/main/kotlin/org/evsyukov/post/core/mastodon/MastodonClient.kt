@@ -25,12 +25,12 @@ import java.io.File
 import java.io.IOException
 import java.net.URLEncoder
 import java.time.Clock
+import java.time.DateTimeException
 import java.time.Duration
 import java.time.Instant
 import java.time.OffsetDateTime
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
-import java.time.format.DateTimeParseException
 import java.util.Locale
 
 /**
@@ -80,28 +80,26 @@ class MastodonClient(
     /**
      * The NodeInfo document: `/.well-known/nodeinfo` lists schema links, and the link of the
      * highest supported schema (1.x or 2.x) is fetched. Null when the server has no NodeInfo
-     * (404 on either request, or no supported link). A link to another origin is not followed,
-     * because Post talks only to the account's server (product.md R34).
+     * (see [optionalDocument] for either request, or no supported link). A link to another
+     * origin is not followed, because Post talks only to the account's server (product.md R34).
      */
     suspend fun nodeInfo(): NodeInfo? {
-        val index = send(get(url(".well-known/nodeinfo")), accept = ::successOrNotFound)
-        if (index.code == 404) return null
-        val best = decode<NodeInfoIndex>(index).links
+        val index = optionalDocument<NodeInfoIndex>(url(".well-known/nodeinfo")) ?: return null
+        val best = index.links
             .filter { schemaRank(it.rel) != null }
             .maxByOrNull { schemaRank(it.rel)!! }
             ?: return null
         val target = best.href?.let { origin.resolve(it) } ?: return null
         if (target.scheme != origin.scheme || target.host != origin.host || target.port != origin.port) return null
-        val document = send(get(target), accept = ::successOrNotFound)
-        if (document.code == 404) return null
-        return decode(document)
+        return optionalDocument(target)
     }
 
-    /** `GET /.well-known/oauth-authorization-server` (Mastodon 4.3+). Null on 404. */
-    suspend fun authorizationServerMetadata(): AuthServerMetadata? {
-        val reply = send(get(url(".well-known/oauth-authorization-server")), accept = ::successOrNotFound)
-        return if (reply.code == 404) null else decode(reply)
-    }
+    /**
+     * `GET /.well-known/oauth-authorization-server` (Mastodon 4.3+). Null when the server has no
+     * such document (see [optionalDocument]); the caller then asks for `read:accounts` ([scopesFor]).
+     */
+    suspend fun authorizationServerMetadata(): AuthServerMetadata? =
+        optionalDocument(url(".well-known/oauth-authorization-server"))
 
     // ---- Sign-in (networks.md N4–N6) ----
 
@@ -316,12 +314,40 @@ class MastodonClient(
 
     private class ErrorBody(val error: String?, val description: String?)
 
-    /** `/` plus fixed segments, then [ids] as single encoded segments, so an id cannot change the path. */
+    /**
+     * `/` plus fixed segments, then [ids] as single encoded segments, so an id cannot change the
+     * path. OkHttp resolves `.` and `..` even as single segments, and an empty id would address
+     * the collection, so those ids are refused before any request.
+     */
     private fun url(path: String, vararg ids: String): HttpUrl = origin.newBuilder()
         .encodedPath("/")
         .addPathSegments(path)
-        .apply { ids.forEach { addPathSegment(it) } }
+        .apply {
+            ids.forEach {
+                require(it.isNotEmpty() && it != "." && it != "..") { "Not a record id: \"$it\"" }
+                addPathSegment(it)
+            }
+        }
         .build()
+
+    /**
+     * Fetches a discovery document the server may lack. Null for 404 or 410, and for a success
+     * answer that is not the document: Akkoma, and Pleroma with the same router, answer unknown
+     * `/.well-known/` paths with their web app page, `200 text/html` (Akkoma router.ex, the
+     * catch-all route of RedirectController `:redirector_with_preload`). Other errors are thrown,
+     * so the caller can tell a missing document from a server that is down.
+     */
+    private suspend inline fun <reified T> optionalDocument(target: HttpUrl): T? {
+        val reply = send(get(target), accept = { it in 200..299 || it == 404 || it == 410 })
+        if (reply.code !in 200..299) return null
+        return try {
+            json.decodeFromString<T>(reply.body)
+        } catch (_: SerializationException) {
+            null
+        } catch (_: IllegalArgumentException) {
+            null
+        }
+    }
 
     private fun get(target: HttpUrl, token: String? = null): Request =
         Request.Builder().url(target).apply { if (token != null) auth(token) }.get().build()
@@ -366,7 +392,7 @@ class MastodonClient(
             status = reply.code,
             error = body.error,
             description = body.description,
-            retryAfterSeconds = retryAfterSeconds(reply.headers),
+            retryAfterSeconds = retryAfterSeconds(reply.code, reply.headers),
             authError = reply.headers["WWW-Authenticate"]?.let { AUTH_ERROR.find(it)?.groupValues?.get(1) },
         )
     }
@@ -397,41 +423,58 @@ class MastodonClient(
     }
 
     /**
-     * Seconds until the server accepts calls again: `Retry-After` (seconds or an HTTP date,
-     * RFC 9110 §10.2.3), else `X-RateLimit-Reset` (an ISO 8601 time in Mastodon; a Unix time or
-     * a delay in seconds in some other servers). Dates are compared with the answer's `Date` header, so a wrong
-     * device clock does not matter; without it, with [clock].
+     * Seconds until the server accepts calls again.
+     *
+     * `Retry-After` (seconds or an HTTP date, RFC 9110 §10.2.3) counts with any status.
+     * `X-RateLimit-Reset` counts only with 429: Mastodon sends the `X-RateLimit-*` headers with
+     * every rate-limited API answer (Api::RateLimitHeaders), and for creating or editing a
+     * status the reset is the end of the 3-hour window of the statuses family (RateLimiter), so
+     * on a 503 or 422 it says nothing about when to retry. Mastodon writes it as ISO 8601; some
+     * other servers send a Unix time or a delay in seconds.
+     *
+     * Dates are compared with the answer's `Date` header, so a wrong device clock does not
+     * matter; without it, with [clock]. A value that cannot be read, or is out of the range of
+     * [Instant], gives null.
      */
-    private fun retryAfterSeconds(headers: Headers): Long? {
+    private fun retryAfterSeconds(status: Int, headers: Headers): Long? {
         val now = headers["Date"]?.let(::parseHttpDate) ?: clock.instant()
         headers["Retry-After"]?.trim()?.let { value ->
             value.toLongOrNull()?.let { return it.coerceAtLeast(0) }
             parseHttpDate(value)?.let { return secondsUntil(now, it) }
         }
+        if (status != 429) return null
         headers["X-RateLimit-Reset"]?.trim()?.let { value ->
             val number = value.toLongOrNull()
             // A small number is a delay in seconds, a large one a Unix time.
             if (number != null && number < UNIX_TIME_THRESHOLD) return number.coerceAtLeast(0)
-            val reset = number?.let { Instant.ofEpochSecond(it) } ?: parseIsoDate(value)
+            val reset = if (number != null) epochSecondOrNull(number) else parseIsoDate(value)
             if (reset != null) return secondsUntil(now, reset)
         }
         return null
     }
 
+    /** Whole seconds from [now] to [then], rounded up, 0 when [then] has passed. Cannot overflow. */
     private fun secondsUntil(now: Instant, then: Instant): Long {
-        val millis = Duration.between(now, then).toMillis().coerceAtLeast(0)
-        return (millis + 999) / 1000
+        val duration = Duration.between(now, then)
+        if (duration.isNegative) return 0
+        return if (duration.nano > 0) duration.seconds + 1 else duration.seconds
+    }
+
+    private fun epochSecondOrNull(seconds: Long): Instant? = try {
+        Instant.ofEpochSecond(seconds)
+    } catch (_: DateTimeException) {
+        null
     }
 
     private fun parseHttpDate(value: String): Instant? = try {
         ZonedDateTime.parse(value, DateTimeFormatter.RFC_1123_DATE_TIME).toInstant()
-    } catch (_: DateTimeParseException) {
+    } catch (_: DateTimeException) {
         null
     }
 
     private fun parseIsoDate(value: String): Instant? = try {
         OffsetDateTime.parse(value).toInstant()
-    } catch (_: DateTimeParseException) {
+    } catch (_: DateTimeException) {
         null
     }
 

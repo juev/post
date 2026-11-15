@@ -184,7 +184,7 @@ class MastodonCapabilitiesTest {
             .containsExactly(TEXT_PLAIN, TEXT_MARKDOWN).inOrder()
         // An empty list counts as not listed.
         val emptyList = glitch.copy(
-            configuration = glitch.configuration!!.copy(statuses = glitch.configuration!!.statuses!!.copy(supportedMimeTypes = emptyList())),
+            configuration = glitch.configuration!!.copy(statuses = glitch.configuration.statuses!!.copy(supportedMimeTypes = emptyList())),
         )
         assertThat(MastodonCapabilities.from(emptyList, null, akkomaNodeInfo).postFormats).containsExactly(TEXT_PLAIN, TEXT_MARKDOWN).inOrder()
     }

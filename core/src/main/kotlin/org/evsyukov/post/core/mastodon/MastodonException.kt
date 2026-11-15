@@ -19,7 +19,8 @@ sealed class MastodonException(message: String, cause: Throwable? = null) : Exce
      * @property error the `error` field of the JSON body (a code such as `invalid_client`
      *   on OAuth endpoints, a human-readable message elsewhere), or null for a non-JSON body.
      * @property description the `error_description` field, mostly sent by OAuth endpoints.
-     * @property retryAfterSeconds seconds to wait, from `Retry-After` or else `X-RateLimit-Reset`.
+     * @property retryAfterSeconds seconds to wait: from `Retry-After` with any status, or for a
+     *   429 without it from `X-RateLimit-Reset`. Null when the server gave no such hint.
      * @property authError the `error` parameter of `WWW-Authenticate` (RFC 6750 §3), such as
      *   `invalid_token` or `insufficient_scope`.
      */
@@ -41,10 +42,20 @@ sealed class MastodonException(message: String, cause: Throwable? = null) : Exce
      */
     class Malformed(message: String) : MastodonException(message)
 
-    /** 401, or 403 whose error is `invalid_token`. A 401 `invalid_client` is [isInvalidClient] instead. */
+    /**
+     * The server rejected the token (product.md R5): 401, or 403 whose error is `invalid_token`
+     * (body or `WWW-Authenticate`), or 403 `Invalid credentials.` A 401 `invalid_client` is
+     * [isInvalidClient] instead.
+     *
+     * Pleroma and Akkoma do not answer 401 to an unknown or revoked token: their OAuthPlug leaves
+     * the request without a user, and EnsureAuthenticatedPlug of the `:authenticated_api` pipeline
+     * (statuses, media, verify_credentials) answers `403 {"error":"Invalid credentials."}`. The
+     * text goes through gettext, so a request with another `Accept-Language` gets it translated
+     * and is not recognized.
+     */
     val isUnauthorized: Boolean
         get() = this is Http && !isInvalidClient &&
-            (status == 401 || (status == 403 && (error == INVALID_TOKEN || authError == INVALID_TOKEN)))
+            (status == 401 || (status == 403 && (error == INVALID_TOKEN || authError == INVALID_TOKEN || isInvalidCredentials(error))))
 
     /** 429. [Http.retryAfterSeconds] says when the limit resets, when the server tells. */
     val isRateLimited: Boolean get() = this is Http && status == 429
@@ -61,12 +72,19 @@ sealed class MastodonException(message: String, cause: Throwable? = null) : Exce
     /**
      * 401 with error `invalid_client` (`POST /oauth/token`): the server no longer knows the app
      * registration, which servers before 4.3 could remove, so the app registers again.
+     * Akkoma answers `400 "Invalid credentials"` both for an unknown client and for a bad code
+     * (o_auth_controller.ex, render_invalid_credentials_error), so that answer is not counted:
+     * it would register the app again after every failed sign-in.
      */
     val isInvalidClient: Boolean get() = this is Http && status == 401 && error == INVALID_CLIENT
 
     private companion object {
         const val INVALID_TOKEN = "invalid_token"
         const val INVALID_CLIENT = "invalid_client"
+        const val INVALID_CREDENTIALS = "Invalid credentials"
+
+        fun isInvalidCredentials(error: String?): Boolean =
+            error?.trim()?.removeSuffix(".")?.equals(INVALID_CREDENTIALS, ignoreCase = true) == true
 
         fun httpMessage(status: Int, error: String?, description: String?): String =
             listOfNotNull("HTTP $status", error, description).joinToString(": ")
