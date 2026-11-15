@@ -49,6 +49,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
@@ -59,6 +60,8 @@ import org.evsyukov.post.R
 import org.evsyukov.post.accounts.mastodonCapabilities
 import org.evsyukov.post.core.bluesky.ContentLabel
 import org.evsyukov.post.core.mastodon.Visibility
+import org.evsyukov.post.core.media.ConflictKind
+import org.evsyukov.post.core.media.FixKind
 import org.evsyukov.post.core.media.Network
 import org.evsyukov.post.core.render.TextIssue
 import org.evsyukov.post.core.render.TextRenderer
@@ -118,6 +121,10 @@ fun DetailsSheet(
     formattingRemoved: Boolean,
     onPreview: () -> Unit,
     onDismiss: () -> Unit,
+    media: List<NetworkMedia> = emptyList(),
+    chosenFixes: ChosenFixes = emptyMap(),
+    onFix: (Network, ConflictKind, FixKind) -> Unit = { _, _, _ -> },
+    onUndoFix: (Network, ConflictKind) -> Unit = { _, _ -> },
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(
@@ -140,11 +147,19 @@ fun DetailsSheet(
                     Blocker.NoTarget -> Text(stringResource(R.string.composer_blocker_no_target), color = MaterialTheme.colorScheme.error)
                     Blocker.EmptyPost -> Text(stringResource(R.string.composer_blocker_empty), color = MaterialTheme.colorScheme.error)
                     is Blocker.Poll -> Text(pollProblemText(blocker.problem), color = MaterialTheme.colorScheme.error)
-                    is Blocker.Text -> Unit // shown with its profile above
+                    is Blocker.AltMissing -> Text(
+                        pluralStringResource(R.plurals.media_alt_missing, blocker.ids.size, blocker.ids.size),
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                    is Blocker.AltTooLong -> Text(stringResource(R.string.media_alt_too_long_blocker, blocker.limit), color = MaterialTheme.colorScheme.error)
+                    is Blocker.Text, is Blocker.Media -> Unit // shown with its profile above, or with the media below
                 }
             }
             if (formattingRemoved) Text(stringResource(R.string.composer_formatting_removed), color = MaterialTheme.colorScheme.onSurfaceVariant)
-            // Media conflicts and their fixes (media.md A10) are added here by the attachments step.
+            // Media conflicts and their fixes, per network (media.md A10, A12).
+            for (network in media) {
+                MediaSection(network, chosenFixes, onFix = { kind, fix -> onFix(network.network, kind, fix) }, onUndo = { onUndoFix(network.network, it) })
+            }
             if (renders.isNotEmpty()) {
                 OutlinedButton(onClick = onPreview, modifier = Modifier.testTag(ComposerTags.DETAILS_PREVIEW)) {
                     Text(stringResource(R.string.composer_preview))
@@ -201,6 +216,14 @@ fun PreviewSheet(renders: List<ProfileRender>, onDismiss: () -> Unit) {
                                 Text(stringResource(R.string.composer_preview_cw, spoiler), style = MaterialTheme.typography.labelLarge)
                             }
                             Text(part.text, style = MaterialTheme.typography.bodyMedium)
+                            val files = render.assembled?.parts?.getOrNull(index)?.mediaItemIds.orEmpty()
+                            if (files.isNotEmpty()) {
+                                Text(
+                                    "📎 " + pluralStringResource(R.plurals.media_preview_part, files.size, files.size),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.primary,
+                                )
+                            }
                         }
                     }
                 }

@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Attach menu (R9) -->
+    <string name="media_attach_media">Фото и видео</string>
+    <string name="media_attach_files">Файлы</string>
+    <string name="media_adding">Добавляю файлы…</string>
+    <plurals name="media_import_failed">
+        <item quantity="one">Не удалось добавить %d файл</item>
+        <item quantity="few">Не удалось добавить %d файла</item>
+        <item quantity="many">Не удалось добавить %d файлов</item>
+        <item quantity="other">Не удалось добавить %d файла</item>
+    </plurals>
+
+    <!-- Attachment strip (screens.md) -->
+    <string name="media_strip">Вложения</string>
+    <string name="media_item_image">Картинка %1$d</string>
+    <string name="media_item_gif">GIF %1$d</string>
+    <string name="media_item_video">Видео %1$d</string>
+    <string name="media_item_audio">Аудио %1$d</string>
+    <string name="media_no_alt">Нет описания</string>
+    <string name="media_has_conflict">Для одной из сетей нужно исправление</string>
+    <string name="media_edit">Изменить вложение</string>
+
+    <!-- Attachment sheet -->
+    <string name="media_sheet_title">Вложение</string>
+    <string name="media_alt_text">Описание</string>
+    <string name="media_alt_hint">Опишите картинку для тех, кто её не видит</string>
+    <string name="media_alt_counter">%1$s %2$d/%3$d</string>
+    <string name="media_alt_over">Слишком длинно для %1$s (предел: %2$d)</string>
+    <string name="media_focus_hint">Нажмите на картинку, чтобы задать точку фокуса: вокруг неё Mastodon обрезает миниатюры</string>
+    <string name="media_focus_point">Точка фокуса %1$d%%, %2$d%%</string>
+    <string name="media_preview">Просмотр вложения</string>
+    <string name="media_remove">Удалить вложение</string>
+    <string name="media_audio_file">Аудиофайл</string>
+
+    <!-- Details sheet: conflicts and fixes (media.md) -->
+    <string name="media_section">Вложения для %1$s</string>
+    <string name="media_conflict_too_many_files">Файлов больше, чем помещается в один пост</string>
+    <string name="media_conflict_unsupported_type">Тип файла, который сеть не принимает</string>
+    <string name="media_conflict_mixed_types">Видео или аудио вместе с картинками</string>
+    <string name="media_conflict_video_too_long">Видео длиннее допустимого</string>
+    <string name="media_conflict_video_quota">Дневной лимит видео исчерпан</string>
+    <string name="media_conflict_poll_with_media">Опрос нельзя отправить вместе с медиа</string>
+    <string name="media_conflict_cannot_fit">Файл не удаётся уложить в лимит</string>
+    <string name="media_conflict_alt_too_long">Описание длиннее допустимого</string>
+    <plurals name="media_conflict_files">
+        <item quantity="one">%1$s (%2$d файл)</item>
+        <item quantity="few">%1$s (%2$d файла)</item>
+        <item quantity="many">%1$s (%2$d файлов)</item>
+        <item quantity="other">%1$s (%2$d файла)</item>
+    </plurals>
+    <string name="media_fix_move_to_reply">Перенести в ответ</string>
+    <string name="media_fix_remove_files">Убрать лишние файлы здесь</string>
+    <string name="media_fix_remove_account">Убрать аккаунт</string>
+    <string name="media_fix_send_without_file">Отправить без файла</string>
+    <string name="media_fix_move_video_to_reply">Перенести видео в ответ</string>
+    <string name="media_fix_remove_video">Убрать файл здесь</string>
+    <string name="media_fix_remove_images">Убрать картинки здесь</string>
+    <string name="media_fix_remove_poll">Убрать опрос</string>
+    <string name="media_fix_remove_media">Убрать медиа здесь</string>
+    <string name="media_fix_move_media_to_reply">Перенести медиа в ответ</string>
+    <string name="media_fix_send_later">Отправить позже</string>
+    <string name="media_resolved">%1$s: %2$s</string>
+    <string name="media_fix_undo">Отменить</string>
+    <plurals name="media_converted">
+        <item quantity="one">%d файл будет преобразован под лимиты</item>
+        <item quantity="few">%d файла будут преобразованы под лимиты</item>
+        <item quantity="many">%d файлов будут преобразованы под лимиты</item>
+        <item quantity="other">%d файла будут преобразованы под лимиты</item>
+    </plurals>
+    <plurals name="media_alt_missing">
+        <item quantity="one">У %d вложения нет описания</item>
+        <item quantity="few">У %d вложений нет описания</item>
+        <item quantity="many">У %d вложений нет описания</item>
+        <item quantity="other">У %d вложения нет описания</item>
+    </plurals>
+    <string name="media_alt_too_long_blocker">Описание длиннее предела выбранного сервера Mastodon (%1$d), сервер его отклонит</string>
+    <plurals name="media_preview_part">
+        <item quantity="one">%d вложение</item>
+        <item quantity="few">%d вложения</item>
+        <item quantity="many">%d вложений</item>
+        <item quantity="other">%d вложения</item>
+    </plurals>
+</resources>

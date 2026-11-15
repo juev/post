@@ -86,6 +86,8 @@ android {
     sourceSets {
         // MigrationTestHelper reads the exported Room schemas from the assets of the test APK.
         getByName("androidTest").assets.directories.add("$projectDir/schemas")
+        // The media fixtures of the JVM tests, for the device tests of the importer and the screenshots.
+        getByName("androidTest").assets.directories.add("$projectDir/src/test/resources/media")
     }
 }
 

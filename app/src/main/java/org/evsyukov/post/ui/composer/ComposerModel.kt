@@ -1,5 +1,6 @@
 package org.evsyukov.post.ui.composer
 
+import android.net.Uri
 import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.foundation.text.input.clearText
 import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
@@ -25,9 +26,12 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.evsyukov.post.AppContainer
+import org.evsyukov.post.core.media.ConflictKind
+import org.evsyukov.post.core.media.FixKind
 import org.evsyukov.post.core.media.Network
 import org.evsyukov.post.data.accounts.Account
 import org.evsyukov.post.data.posts.AccountPostOptions
+import org.evsyukov.post.data.posts.Attachment
 import org.evsyukov.post.data.posts.DraftInput
 import org.evsyukov.post.data.posts.PollDraft
 import org.evsyukov.post.data.posts.PostOptions
@@ -44,7 +48,12 @@ data class ComposerContent(
     val targets: List<Long>,
     val accountOptions: Map<Long, AccountPostOptions>,
     val poll: PollDraft?,
+    val attachments: List<SavedAttachment> = emptyList(),
+    val chosenFixes: ChosenFixes = emptyMap(),
 )
+
+/** What of an attachment the composer saves; the file path stands for the file, whatever its id. */
+data class SavedAttachment(val path: String, val pieceIndex: Int, val alt: String, val focusX: Float?, val focusY: Float?)
 
 /**
  * The state of the composer: the draft being edited, its targets and options, and the counters of the
@@ -67,6 +76,24 @@ class ComposerModel(private val container: AppContainer, initialDraftId: Long?) 
         private set
     var poll by mutableStateOf<PollDraft?>(null)
         private set
+
+    /**
+     * The attachments of the draft in order (R9). A saved one has its database id; one added since the last
+     * save has a negative id of its own, which the planner and the strip use as its key and which is saved
+     * as a new row.
+     */
+    var attachments by mutableStateOf<List<Attachment>>(emptyList())
+        private set
+
+    /** The fixes the user chose for media conflicts, per network (media.md A10). */
+    var chosenFixes by mutableStateOf<ChosenFixes>(emptyMap())
+        private set
+
+    /** Imports running now; the strip shows progress while any runs. */
+    var importing by mutableStateOf(0)
+        private set
+
+    private var nextNewId = -1L
 
     /** The post being edited, or null for a new one that was never saved. */
     var draftId by mutableStateOf(initialDraftId)
@@ -110,10 +137,27 @@ class ComposerModel(private val container: AppContainer, initialDraftId: Long?) 
         spoilerText = if (spoilerShown) spoiler.text.toString() else "",
         language = language,
         targets = targets,
+        attachments = attachments,
+        chosenFixes = chosenFixes,
+        hasPoll = poll != null,
     )
 
     private suspend fun render(input: RenderInput, accounts: List<Account>, settings: Settings): List<ProfileRender> =
-        withContext(Dispatchers.Default) { renderTargets(input, accounts, settings, container.textSegmenter) }
+        withContext(Dispatchers.Default) {
+            renderTargets(input, accounts, settings, container.textSegmenter, mediaOf(input, accounts, settings))
+        }
+
+    /** The media plan of each selected network for [input] (media.md A2, A3). */
+    private fun mediaOf(input: RenderInput, accounts: List<Account>, settings: Settings): List<NetworkMedia> {
+        val byId = accounts.associateBy { it.id }
+        return planMedia(input.attachments, pieceCount(input.text), input.targets.mapNotNull { byId[it] }, settings, input.chosenFixes, input.hasPoll)
+    }
+
+    /** The media plans of the selected networks for the draft as it is now. */
+    fun currentMedia(): List<NetworkMedia> {
+        val settings = settings.value ?: return emptyList()
+        return mediaOf(renderInput().copy(targets = liveTargets()), accounts.value.orEmpty(), settings)
+    }
 
     /** The selected accounts in the order of the targets. */
     fun selectedAccounts(): List<Account> {
@@ -124,8 +168,10 @@ class ComposerModel(private val container: AppContainer, initialDraftId: Long?) 
     fun pollLimits(): PollLimits = PollLimits.of(selectedAccounts())
 
     /** What keeps Send disabled for the counters shown now. */
-    fun currentBlockers(): List<Blocker> =
-        blockers(liveTargets(), text.text.toString(), renders?.second.orEmpty(), poll, pollLimits())
+    fun currentBlockers(): List<Blocker> = blockers(
+        liveTargets(), text.text.toString(), renders?.second.orEmpty(), poll, pollLimits(),
+        attachments, currentMedia(), settings.value?.requireAltText == true,
+    )
 
     /** The targets that still exist: an account removed while selected is dropped. */
     private fun liveTargets(): List<Long> {
@@ -150,6 +196,8 @@ class ComposerModel(private val container: AppContainer, initialDraftId: Long?) 
             targets = post.targets
             accountOptions = post.options.accounts
             poll = post.options.poll
+            attachments = post.attachments
+            chosenFixes = post.options.chosenFixes
         }
         saved = content()
         loaded = true
@@ -169,6 +217,8 @@ class ComposerModel(private val container: AppContainer, initialDraftId: Long?) 
         targets = defaults
         accountOptions = emptyMap()
         poll = null
+        attachments = emptyList()
+        chosenFixes = emptyMap()
     }
 
     private fun defaultLanguage(selected: List<Account>): String =
@@ -181,6 +231,8 @@ class ComposerModel(private val container: AppContainer, initialDraftId: Long?) 
         targets = targets,
         accountOptions = accountOptions,
         poll = poll,
+        attachments = attachments.map { SavedAttachment(it.path, it.pieceIndex, it.alt, it.focusX, it.focusY) },
+        chosenFixes = chosenFixes,
     )
 
     /**
@@ -191,7 +243,8 @@ class ComposerModel(private val container: AppContainer, initialDraftId: Long?) 
         if (!loaded) return false
         val now = content()
         if (now == saved) return false
-        return draftId != null || now.text.isNotBlank() || !now.spoilerText.isNullOrBlank() || now.poll != null
+        return draftId != null || now.text.isNotBlank() || !now.spoilerText.isNullOrBlank() || now.poll != null ||
+            now.attachments.isNotEmpty()
     }
 
     private fun options() = PostOptions(
@@ -199,21 +252,36 @@ class ComposerModel(private val container: AppContainer, initialDraftId: Long?) 
         spoilerText = if (spoilerShown) spoiler.text.toString() else "",
         accounts = accountOptions.filterKeys { it in targets },
         poll = poll,
+        chosenFixes = chosenFixes,
     )
 
-    private fun draftInput() = DraftInput(id = draftId, text = text.text.toString(), options = options(), targets = liveTargets())
+    private fun draftInput() = DraftInput(
+        id = draftId,
+        text = text.text.toString(),
+        options = options(),
+        targets = liveTargets(),
+        // A new attachment is saved as a new row (id 0); a saved one keeps its id.
+        attachments = attachments.map { if (it.id < 0) it.copy(id = 0) else it },
+    )
 
-    /** Saves the draft and remembers it as saved; the composer keeps editing it. */
+    /**
+     * Saves the draft and remembers it as saved; the composer keeps editing it. The attachments are read back
+     * so that the new ones carry their database ids from now on.
+     */
     suspend fun saveDraft(): Long {
-        val content = content()
         val id = container.posts.saveDraft(draftInput())
         draftId = id
-        saved = content
+        container.posts.get(id)?.let { attachments = it.attachments }
+        saved = content()
         return id
     }
 
-    /** Drops the changes since the last save: a saved draft comes back as saved, a new one starts empty. */
+    /**
+     * Drops the changes since the last save: a saved draft comes back as saved, a new one starts empty. The
+     * files of attachments added since the last save are deleted (R9); the saved ones stay with the draft.
+     */
     suspend fun discardChanges() {
+        deleteUnsavedFiles()
         val id = draftId
         if (id != null && container.posts.get(id) != null) {
             load(id)
@@ -222,10 +290,99 @@ class ComposerModel(private val container: AppContainer, initialDraftId: Long?) 
         }
     }
 
+    /** Clear in the ⋯ menu: a new empty draft; files added since the last save are deleted, a saved draft stays. */
+    suspend fun clearDraft() {
+        deleteUnsavedFiles()
+        startNew()
+    }
+
     /** Starts a new empty draft with the defaults; a draft saved before stays in Drafts. */
     suspend fun startNew() {
         newDraft(accounts.filterNotNull().first(), settings.filterNotNull().first())
         saved = content()
+    }
+
+    private suspend fun deleteUnsavedFiles() {
+        val paths = attachments.filter { it.id < 0 }.map { it.path }
+        if (paths.isNotEmpty()) withContext(Dispatchers.IO) { container.attachmentFiles.delete(paths) }
+    }
+
+    // Attachments (R9, R10, R11)
+
+    /** The piece of the text the cursor is in, where new attachments go and whose attachments the strip shows (T14). */
+    fun currentPiece(): Int {
+        val source = text.text.toString()
+        return pieceAt(source, text.selection.min).coerceAtMost(pieceCount(source) - 1)
+    }
+
+    /** The attachments of [piece], in order. */
+    fun attachmentsOf(piece: Int): List<Attachment> {
+        val pieces = pieceCount(text.text.toString())
+        return attachments.filter { effectivePiece(it, pieces) == piece }
+    }
+
+    /**
+     * Copies [uris] into app storage at once (R9) and adds them to the piece the cursor is in (T14). Returns
+     * the number of files that could not be added.
+     */
+    suspend fun addAttachments(uris: List<Uri>): Int {
+        if (uris.isEmpty()) return 0
+        val piece = currentPiece()
+        importing++
+        try {
+            val result = container.attachmentImporter.import(uris, piece)
+            attachments = attachments + result.attachments.map { it.copy(id = nextNewId--) }
+            return result.failures.size
+        } finally {
+            importing--
+        }
+    }
+
+    /**
+     * [addAttachments] on the model's own scope, so a rotation of the screen does not cancel the copy;
+     * [onDone] gets the number of files that could not be added.
+     */
+    fun attach(uris: List<Uri>, onDone: (Int) -> Unit) {
+        if (uris.isEmpty()) return
+        viewModelScope.launch { onDone(addAttachments(uris)) }
+    }
+
+    /**
+     * Removes the attachment [id]. The file of one added since the last save is deleted now; a saved one keeps
+     * its file until the draft is saved without it, so discarding the change brings it back.
+     */
+    suspend fun removeAttachment(id: Long) {
+        val removed = attachments.firstOrNull { it.id == id } ?: return
+        attachments = attachments - removed
+        if (removed.id < 0) withContext(Dispatchers.IO) { container.attachmentFiles.delete(listOf(removed.path)) }
+    }
+
+    fun setAlt(id: Long, alt: String) {
+        attachments = attachments.map { if (it.id == id) it.copy(alt = alt) else it }
+    }
+
+    /** The Mastodon focus point, x and y from -1 to 1 with y up (networks.md N6). */
+    fun setFocus(id: Long, x: Float, y: Float) {
+        attachments = attachments.map { if (it.id == id) it.copy(focusX = x.coerceIn(-1f, 1f), focusY = y.coerceIn(-1f, 1f)) else it }
+    }
+
+    /**
+     * Chooses [fix] for the conflicts of [kind] in [network] (A10). Removing the account takes every selected
+     * account of the network out of the targets; any other fix is kept with the post.
+     */
+    fun chooseFix(network: Network, kind: ConflictKind, fix: FixKind) {
+        if (fix == FixKind.REMOVE_ACCOUNT) {
+            val ids = accounts.value.orEmpty().filter { it.network == network }.map { it.id }.toSet()
+            targets = targets.filter { it !in ids }
+            return
+        }
+        chosenFixes = chosenFixes + (network to (chosenFixes[network].orEmpty() + (kind to fix)))
+    }
+
+    /** Forgets the fix chosen for [kind] in [network]; the default of the settings, if any, applies again. */
+    fun clearFix(network: Network, kind: ConflictKind) {
+        val left = chosenFixes[network].orEmpty() - kind
+        chosenFixes = if (left.isEmpty()) chosenFixes - network else chosenFixes + (network to left)
     }
 
     // Editing
@@ -298,7 +455,8 @@ class ComposerModel(private val container: AppContainer, initialDraftId: Long?) 
             val settings = settings.filterNotNull().first()
             val fresh = render(input, list, settings)
             renders = input to fresh
-            val blocked = blockers(input.targets, input.text, fresh, poll, pollLimits())
+            val media = mediaOf(input, list, settings)
+            val blocked = blockers(input.targets, input.text, fresh, poll, pollLimits(), attachments, media, settings.requireAltText)
             if (blocked.isNotEmpty()) return SendResult.Blocked(blocked)
             val time = schedule ?: Schedule.Now(Instant.now())
             container.posts.saveAndQueue(draftInput(), time)
