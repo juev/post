@@ -404,6 +404,21 @@ class ShareActivityTest {
         compose.onNodeWithTag(ShareTags.SEND).assertIsEnabled()
     }
 
+    /** R22: a media conflict names only the selected accounts of the network, not every account the user has there. */
+    @Test
+    fun aMediaConflictNamesOnlyTheSelectedAccounts() {
+        val me = mastodon("me")
+        mastodon("work")
+        defaults(me)
+        val images = List(5) { source("photo_exif_rot90.jpg").let { uri -> File(uri.path!!).let { f -> Uri.fromFile(f.copyTo(File(f.parentFile, "p$it.jpg"))) } } }
+        share(sendMultiple("image/*", images, "Five"))
+
+        compose.onNodeWithTag(ShareTags.SEND).assertIsNotEnabled()
+        compose.onNodeWithTag(ShareTags.problem(0)).assert(
+            hasText(string(R.string.share_problem, "me@me.example", "Mastodon", string(R.string.media_conflict_too_many_files))),
+        )
+    }
+
     /** T9, R22: a word longer than Bluesky's limit cannot be split; the sheet names the account and the limit. */
     @Test
     fun anUnsplittableTextDisablesSending() {
