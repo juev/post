@@ -119,9 +119,10 @@ class MastodonCapabilitiesTest {
         assertThat(c.preferredFormat()).isEqualTo(TEXT_MARKDOWN)
         assertThat(c.maxCharacters).isEqualTo(5000)
         assertThat(c.maxMediaAttachments).isEqualTo(1000)
-        // Reported as 0 by Pleroma's v2 view; the value is kept as the server says it.
+        // Reported as 0 by Pleroma's v2 view; the value is kept as the server says it (see the KDoc).
         assertThat(c.charactersReservedPerUrl).isEqualTo(0)
-        assertThat(c.supportedMediaMimeTypes).containsExactly("application/octet-stream")
+        // The application/octet-stream placeholder is not the only accepted type (see below).
+        assertThat(c.supportedMediaMimeTypes).isEqualTo(MastodonCapabilities.Defaults.MEDIA_MIME_TYPES)
         assertThat(c.imageSizeLimit).isEqualTo(16_000_000)
         assertThat(c.videoSizeLimit).isEqualTo(16_000_000)
         // Not in either configuration block: the top-level description_limit of v1.
@@ -132,6 +133,37 @@ class MastodonCapabilitiesTest {
         assertThat(c.pollMaxExpirationSeconds).isEqualTo(31_536_000)
         assertThat(c.softwareName).isEqualTo("pleroma")
         assertThat(c.version).isEqualTo("2.9.1")
+    }
+
+    // Pleroma cf6b7096 instance_view.ex configuration/0 lists only "application/octet-stream" in
+    // v1 and v2, while Pleroma.Upload accepts any image, audio and video type (config.exs
+    // allowed_mime_types ["image", "audio", "video"]). Taken as is, every JPEG, MP4 and MP3 would
+    // look unsupported and be converted or dropped (media.md A5, A7, "Type not supported").
+    @Test
+    fun pleromaOctetStreamPlaceholderGivesTheVanillaMediaTypes() {
+        val fromV2 = MastodonCapabilities.from(v2("pleroma-instance-v2.json"), null, null)
+        val fromV1 = MastodonCapabilities.from(null, v1("pleroma-instance-v1.json"), null)
+
+        for (c in listOf(fromV2, fromV1)) {
+            assertThat(c.supportedMediaMimeTypes).isEqualTo(MastodonCapabilities.Defaults.MEDIA_MIME_TYPES)
+            assertThat(c.supportedMediaMimeTypes).containsAtLeast("image/jpeg", "image/png", "video/mp4", "audio/mpeg")
+            assertThat(c.supportedMediaMimeTypes).doesNotContain("application/octet-stream")
+        }
+
+        // Next to real types the placeholder is dropped and the real types stay.
+        val mixed = InstanceV2(
+            configuration = InstanceConfiguration(
+                mediaAttachments = MediaConfiguration(supportedMimeTypes = listOf("image/jpeg", "Application/Octet-Stream", "video/mp4")),
+            ),
+        )
+        assertThat(MastodonCapabilities.from(mixed, null, null).supportedMediaMimeTypes).containsExactly("image/jpeg", "video/mp4").inOrder()
+
+        // A placeholder in v2 does not hide the real list of the v1 configuration.
+        val v1WithTypes = InstanceV1(
+            configuration = InstanceConfiguration(mediaAttachments = MediaConfiguration(supportedMimeTypes = listOf("image/png"))),
+        )
+        assertThat(MastodonCapabilities.from(v2("pleroma-instance-v2.json"), v1WithTypes, null).supportedMediaMimeTypes)
+            .containsExactly("image/png")
     }
 
     // Source: Akkoma 3e9ad30e, instance_view.ex show.json (no configuration) and nodeinfo.ex.
@@ -145,7 +177,9 @@ class MastodonCapabilitiesTest {
         assertThat(c.videoSizeLimit).isEqualTo(16_000_000)
         assertThat(c.pollMaxOptions).isEqualTo(20)
         assertThat(c.pollMaxCharactersPerOption).isEqualTo(200)
+        assertThat(c.pollMinExpirationSeconds).isEqualTo(0)
         assertThat(c.pollMaxExpirationSeconds).isEqualTo(31_536_000)
+        assertThat(c.supportedMediaMimeTypes).isEqualTo(MastodonCapabilities.Defaults.MEDIA_MIME_TYPES)
         // Not reported anywhere: vanilla defaults.
         assertThat(c.maxMediaAttachments).isEqualTo(4)
         assertThat(c.charactersReservedPerUrl).isEqualTo(23)
@@ -216,6 +250,11 @@ class MastodonCapabilitiesTest {
         assertThat(c.videoFrameRateLimit).isEqualTo(60)
         assertThat(c.videoMatrixLimit).isEqualTo(2_304_000)
         assertThat(c.imageSizeLimit).isEqualTo(10_485_760)
+        assertThat(c.imageMatrixLimit).isEqualTo(16_777_216)
+        assertThat(c.videoSizeLimit).isEqualTo(41_943_040)
+        assertThat(c.supportedMediaMimeTypes).containsExactly(
+            "image/jpeg", "image/png", "image/gif", "video/webm", "video/mp4", "video/quicktime", "video/ogg", "audio/wave", "audio/ogg", "audio/mpeg",
+        ).inOrder()
         // This configuration has no description_limit and no post formats.
         assertThat(c.descriptionLimit).isEqualTo(10_000)
         assertThat(c.postFormats).containsExactly(TEXT_PLAIN)
@@ -253,6 +292,61 @@ class MastodonCapabilitiesTest {
         assertThat(c.maxMediaAttachments).isEqualTo(4)
         assertThat(c.charactersReservedPerUrl).isEqualTo(23)
         assertThat(c.descriptionLimit).isEqualTo(10_000)
+    }
+
+    // The order of from(): v2 configuration, v1 configuration, legacy top-level v1 fields, default.
+    @Test
+    fun theConfigurationOfInstanceV1WinsOverItsLegacyFields() {
+        val v1 = InstanceV1(
+            configuration = InstanceConfiguration(
+                statuses = StatusesConfiguration(maxCharacters = 1000),
+                polls = PollsConfiguration(minExpiration = 600),
+            ),
+            maxTootChars = 2000,
+            pollLimits = PollLimits(minExpiration = 60),
+        )
+        val c = MastodonCapabilities.from(null, v1, null)
+        assertThat(c.maxCharacters).isEqualTo(1000)
+        assertThat(c.pollMinExpirationSeconds).isEqualTo(600)
+
+        val v2 = InstanceV2(configuration = InstanceConfiguration(statuses = StatusesConfiguration(maxCharacters = 3000)))
+        assertThat(MastodonCapabilities.from(v2, v1, null).maxCharacters).isEqualTo(3000)
+    }
+
+    @Test
+    fun apiVersionFallsBackToInstanceV1() {
+        val v1 = InstanceV1(apiVersions = ApiVersions(mastodon = 7))
+        val c = MastodonCapabilities.from(null, v1, null)
+        assertThat(c.mastodonApiVersion).isEqualTo(7)
+        assertThat(c.supportsQuotePolicy).isTrue()
+
+        val v2 = InstanceV2(apiVersions = ApiVersions(mastodon = 6))
+        assertThat(MastodonCapabilities.from(v2, v1, null).mastodonApiVersion).isEqualTo(6)
+    }
+
+    @Test
+    fun listedValuesAreTrimmedAndBlankEntriesDropped() {
+        val padded = InstanceV2(
+            configuration = InstanceConfiguration(
+                statuses = StatusesConfiguration(supportedMimeTypes = listOf(" text/markdown ", "", "text/plain")),
+                mediaAttachments = MediaConfiguration(supportedMimeTypes = listOf(" image/png", "  ")),
+            ),
+        )
+        val c = MastodonCapabilities.from(padded, null, null)
+        assertThat(c.postFormats).containsExactly(TEXT_MARKDOWN, TEXT_PLAIN).inOrder()
+        assertThat(c.supportedMediaMimeTypes).containsExactly("image/png")
+
+        // Only blank entries count as not listed: the next F1 source, then the defaults.
+        val blank = InstanceV2(
+            configuration = InstanceConfiguration(
+                statuses = StatusesConfiguration(supportedMimeTypes = listOf("", " ")),
+                mediaAttachments = MediaConfiguration(supportedMimeTypes = listOf(" ")),
+            ),
+        )
+        val fallback = MastodonCapabilities.from(blank, null, nodeInfo("akkoma-nodeinfo-2.1.json"))
+        assertThat(fallback.postFormats).containsExactly(TEXT_PLAIN, TEXT_MARKDOWN).inOrder()
+        assertThat(fallback.supportedMediaMimeTypes).isEqualTo(MastodonCapabilities.Defaults.MEDIA_MIME_TYPES)
+        assertThat(MastodonCapabilities.from(blank, null, null).postFormatsDeclared).isFalse()
     }
 
     @Test

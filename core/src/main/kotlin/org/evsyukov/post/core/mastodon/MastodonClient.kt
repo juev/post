@@ -118,7 +118,10 @@ class MastodonClient(
         return decode(send(Request.Builder().url(url("api/v1/apps")).post(form).build()))
     }
 
-    /** The address of `GET /oauth/authorize` for the browser, with PKCE S256 (networks.md N5). */
+    /**
+     * The address of `GET /oauth/authorize` for the browser, with PKCE S256 (networks.md N5).
+     * Not suspend, unlike the other calls: it only builds a URL and makes no request.
+     */
     fun authorizeUrl(
         clientId: String,
         redirectUri: String,
@@ -180,6 +183,9 @@ class MastodonClient(
      * that its extension matches the content.
      *
      * @param focus the focal point, both coordinates in -1.0..1.0.
+     * @throws IllegalArgumentException before any request when [file] is not a readable file or
+     *   [focus] is out of range: retrying cannot fix either (product.md R29). A file that
+     *   disappears while it is being sent still ends as [MastodonException.Network].
      */
     suspend fun uploadMedia(
         token: String,
@@ -188,6 +194,8 @@ class MastodonClient(
         description: String?,
         focus: Pair<Float, Float>?,
     ): MediaUpload {
+        val readable = withContext(Dispatchers.IO) { file.isFile && file.canRead() }
+        require(readable) { "Not a readable file: ${file.name}" }
         val body = MultipartBody.Builder().setType(MultipartBody.FORM)
             .addFormDataPart("file", file.name, file.asRequestBody(mime.toMediaType()))
             .apply {
@@ -331,14 +339,16 @@ class MastodonClient(
         .build()
 
     /**
-     * Fetches a discovery document the server may lack. Null for 404 or 410, and for a success
-     * answer that is not the document: Akkoma, and Pleroma with the same router, answer unknown
-     * `/.well-known/` paths with their web app page, `200 text/html` (Akkoma router.ex, the
-     * catch-all route of RedirectController `:redirector_with_preload`). Other errors are thrown,
-     * so the caller can tell a missing document from a server that is down.
+     * Fetches a discovery document the server may lack. Null for 404 or 410, for a redirect
+     * (never followed, see the class description), and for a success answer that is not the
+     * document: Akkoma, and Pleroma with the same router, answer unknown `/.well-known/` paths
+     * with their web app page, `200 text/html` (Akkoma router.ex, the catch-all route of
+     * RedirectController `:redirector_with_preload`). Without the document Post falls back to
+     * `read:accounts` and to the other F1 sources, which works on every server. Other errors are
+     * thrown, so the caller can tell a missing document from a server that is down.
      */
     private suspend inline fun <reified T> optionalDocument(target: HttpUrl): T? {
-        val reply = send(get(target), accept = { it in 200..299 || it == 404 || it == 410 })
+        val reply = send(get(target), accept = { it in 200..399 || it == 404 || it == 410 })
         if (reply.code !in 200..299) return null
         return try {
             json.decodeFromString<T>(reply.body)
@@ -394,6 +404,7 @@ class MastodonClient(
             description = body.description,
             retryAfterSeconds = retryAfterSeconds(reply.code, reply.headers),
             authError = reply.headers["WWW-Authenticate"]?.let { AUTH_ERROR.find(it)?.groupValues?.get(1) },
+            path = reply.path,
         )
     }
 
@@ -509,10 +520,13 @@ class MastodonClient(
             return String.format(Locale.ROOT, "%.2f,%.2f", x, y)
         }
 
-        /** Replaces every secret, raw or form-encoded, with `***`. */
+        /** Replaces every secret, raw, form-encoded or percent-encoded (`%20`), with `***`. */
         internal fun redact(text: String, secrets: List<String>): String = secrets
             .filter { it.isNotEmpty() }
-            .flatMap { listOf(it, URLEncoder.encode(it, Charsets.UTF_8)) }
+            .flatMap {
+                val form = URLEncoder.encode(it, Charsets.UTF_8)
+                listOf(it, form, form.replace("+", "%20"))
+            }
             .distinct()
             .sortedByDescending { it.length }
             .fold(text) { acc, secret -> acc.replace(secret, "***") }

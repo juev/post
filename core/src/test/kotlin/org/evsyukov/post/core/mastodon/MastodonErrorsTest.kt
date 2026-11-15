@@ -96,6 +96,12 @@ class MastodonErrorsTest {
         server.enqueue(json("""{"error":"Invalid credentials."}""", 403))
         assertThat(failing { client.verifyCredentials(token) }.isUnauthorized).isTrue()
 
+        // Pleroma ends the text with a dot, Akkoma's OAuth controller does not; case and spaces vary.
+        for (text in listOf("Invalid credentials", "invalid credentials.", " INVALID CREDENTIALS. ")) {
+            assertThat(createFails(json("""{"error":"$text"}""", 403)).isUnauthorized).isTrue()
+        }
+        assertThat(createFails(json("""{"error":"Invalid credentials for this action"}""", 403)).isUnauthorized).isFalse()
+
         // The same plug's other refusal is not about the token.
         val twoFactor = createFails(json("""{"error":"Two-factor authentication enabled, you must use a access token."}""", 403))
         assertThat(twoFactor.isUnauthorized).isFalse()
@@ -121,6 +127,52 @@ class MastodonErrorsTest {
         assertThat(e.isUnauthorized).isFalse()
         e.assertNoSecret("csecret-456", "code-abc", "ver-789", "cid-123")
         assertThat((e as MastodonException.Http).description).isEqualTo("Unknown client *** for code *** and verifier ***")
+    }
+
+    // The task: invalid_client counts on /oauth/token only. Elsewhere a 401 rejects the token (R5).
+    @Test
+    fun invalidClientOnAnotherPathIsUnauthorized() {
+        val e = createFails(json("""{"error":"invalid_client"}""", 401))
+        assertThat(e.isInvalidClient).isFalse()
+        assertThat(e.isUnauthorized).isTrue()
+        assertThat((e as MastodonException.Http).path).isEqualTo("/api/v1/statuses")
+
+        server.enqueue(json("""{"error":"invalid_client"}""", 401))
+        val revoke = failing { client.revokeToken("cid", "csecret", token) }
+        assertThat(revoke.isInvalidClient).isFalse()
+    }
+
+    // Servers may quote a form field as it was sent: form-encoded (`+` for a space) or with `%20`.
+    @Test
+    fun anEncodedSecretEchoedByTheServerIsRedacted() {
+        val secret = "s3cr+et/x=y z"
+        server.enqueue(
+            json(
+                """{"error":"invalid_client","error_description":"raw=$secret form=s3cr%2Bet%2Fx%3Dy+z pct=s3cr%2Bet%2Fx%3Dy%20z"}""",
+                401,
+            ),
+        )
+
+        val e = failing { client.exchangeCode("cid", secret, REDIRECT_URI, "code-1", "verifier-1", "read") }
+
+        e.assertNoSecret(secret, "s3cr%2Bet%2Fx%3Dy+z", "s3cr%2Bet%2Fx%3Dy%20z")
+        assertThat((e as MastodonException.Http).description).isEqualTo("raw=*** form=*** pct=***")
+        assertThat(e.isInvalidClient).isTrue()
+    }
+
+    // A server may send a whole page as the error; the text kept for the user is bounded.
+    @Test
+    fun longErrorTextsAreCutTo1000Characters() {
+        val long = "x".repeat(3000)
+        val e = createFails(json("""{"error":"$long","error_description":"$long"}""", 422)) as MastodonException.Http
+        assertThat(e.error).isEqualTo("x".repeat(1000))
+        assertThat(e.description).isEqualTo("x".repeat(1000))
+    }
+
+    @Test
+    fun aNegativeRetryAfterMeansRetryNow() {
+        val e = createFails(MockResponse.Builder().code(429).setHeader("Retry-After", "-5").build()) as MastodonException.Http
+        assertThat(e.retryAfterSeconds).isEqualTo(0)
     }
 
     @Test

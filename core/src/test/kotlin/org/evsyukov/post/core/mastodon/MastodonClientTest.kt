@@ -8,6 +8,7 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
+import mockwebserver3.MockResponse
 import mockwebserver3.MockWebServer
 import mockwebserver3.RecordedRequest
 import okhttp3.HttpUrl.Companion.toHttpUrl
@@ -159,6 +160,38 @@ class MastodonClientTest {
         // A server that is down is not a server without metadata.
         server.enqueue(html(AKKOMA_INDEX_HTML, 503))
         assertThat(assertThrows(MastodonException::class.java) { runBlocking { client.authorizationServerMetadata() } }.isTransient).isTrue()
+    }
+
+    // product.md R34: another port or scheme is another origin, even on the same host.
+    @Test
+    fun nodeInfoDoesNotFollowALinkToAnotherPortOrScheme() = runBlocking<Unit> {
+        val origin = server.url("/")
+        val otherPort = origin.newBuilder().port(if (origin.port == 1) 2 else 1).encodedPath("/nodeinfo/2.1").build()
+        val otherScheme = origin.newBuilder().scheme("https").encodedPath("/nodeinfo/2.1").build()
+        for (href in listOf(otherPort, otherScheme)) {
+            server.enqueue(json("""{"links":[{"rel":"http://nodeinfo.diaspora.software/ns/schema/2.1","href":"$href"}]}"""))
+            assertThat(client.nodeInfo()).isNull()
+        }
+        assertThat(server.requestCount).isEqualTo(2)
+    }
+
+    // A redirect is never followed (class description), and without the document Post falls back
+    // to read:accounts and to the other F1 sources, so it counts as no document.
+    @Test
+    fun aRedirectOnADiscoveryDocumentMeansNoDocument() = runBlocking<Unit> {
+        server.enqueue(MockResponse.Builder().code(301).setHeader("Location", "https://elsewhere.example/.well-known/nodeinfo").build())
+        assertThat(client.nodeInfo()).isNull()
+
+        server.enqueue(json("""{"links":[{"rel":"http://nodeinfo.diaspora.software/ns/schema/2.0","href":"/nodeinfo/2.0"}]}"""))
+        server.enqueue(MockResponse.Builder().code(308).setHeader("Location", "/nodeinfo/2.0.json").build())
+        assertThat(client.nodeInfo()).isNull()
+
+        server.enqueue(MockResponse.Builder().code(302).setHeader("Location", "/").build())
+        val meta = client.authorizationServerMetadata()
+        assertThat(meta).isNull()
+        assertThat(scopesFor(meta)).isEqualTo("write:statuses write:media read:statuses read:accounts")
+
+        assertThat(server.requestCount).isEqualTo(4)
     }
 
     // The same fallback page on either NodeInfo request means no NodeInfo.
@@ -329,6 +362,20 @@ class MastodonClientTest {
         val file = tmp.newFile("x.jpg")
         assertThrows(IllegalArgumentException::class.java) {
             runBlocking { client.uploadMedia(token, file, "image/jpeg", null, 1.5f to 0f) }
+        }
+        assertThat(server.requestCount).isEqualTo(0)
+    }
+
+    // product.md R29: a missing local file is not a network failure that a retry could fix.
+    @Test
+    fun aMissingOrUnreadableFileIsRejectedBeforeAnyRequest() {
+        val missing = java.io.File(tmp.root, "gone.jpg")
+        val directory = tmp.newFolder("dir.jpg")
+        for (file in listOf(missing, directory)) {
+            val e = assertThrows(IllegalArgumentException::class.java) {
+                runBlocking { client.uploadMedia(token, file, "image/jpeg", "alt", null) }
+            }
+            assertThat(e.message).doesNotContain(token)
         }
         assertThat(server.requestCount).isEqualTo(0)
     }
@@ -517,6 +564,20 @@ class MastodonClientTest {
         assertThat(body.keys).doesNotContain("media_attributes")
         assertThat(body["quote_approval_policy"]!!.jsonPrimitive.content).isEqualTo("nobody")
         assertThat(body["content_type"]!!.jsonPrimitive.content).isEqualTo("text/plain")
+    }
+
+    // N28: Api::V1::StatusesController#update always passes :text, and UpdateStatusService sets
+    // the text to '' when it is absent, so a media-only edit sends the empty text explicitly.
+    @Test
+    fun editStatusWithoutTextSendsAnEmptyText() = runBlocking<Unit> {
+        server.enqueue(json(STATUS_JSON))
+
+        client.editStatus(token, "109", StatusEditParams(status = null, mediaIds = listOf("m1")))
+
+        val body = take().jsonBody()
+        assertThat(body["status"]!!.jsonPrimitive.content).isEqualTo("")
+        assertThat(body["spoiler_text"]!!.jsonPrimitive.content).isEqualTo("")
+        assertThat(body["media_ids"]!!.jsonArray.map { it.jsonPrimitive.content }).containsExactly("m1")
     }
 
     @Test
