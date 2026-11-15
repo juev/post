@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  The master of the launcher icon of Post: the whole 108dp grid of the adaptive icon with its full-bleed
+  background. The gradient repeats app/src/main/res/drawable/ic_launcher_background.xml and the white
+  shapes repeat ic_launcher_foreground.xml; LauncherIconTest checks that they stay the same.
+  Launchers show the central 72dp, so scripts/render-icon.sh crops 18..90 for docs/icon.png and docs/icon-512.png.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="108" height="108" viewBox="0 0 108 108">
+  <defs>
+    <linearGradient id="background" x1="0" y1="108" x2="108" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#303F9F"/>
+      <stop offset="1" stop-color="#8E5BD0"/>
+    </linearGradient>
+  </defs>
+  <rect x="0" y="0" width="108" height="108" fill="url(#background)"/>
+  <g id="foreground">
+    <path fill="#FFFFFF" d="M76,32L36,47L55,53.5Z"/>
+    <path fill="#FFFFFF" d="M76,32L57.5,56L62.5,71Z"/>
+    <path fill="none" stroke="#FFFFFF" stroke-width="3.5" stroke-linecap="round" d="M47,58.5C44.25,59.65 41.12,60.67 37.81,61.49M33.35,62.43C31.42,62.77 29.46,63.03 27.5,63.2"/>
+    <path fill="none" stroke="#FFFFFF" stroke-width="3.5" stroke-linecap="round" d="M52.5,64C51.6,66.75 50.62,69.62 49.61,72.5M48.26,76.28C47.68,77.88 47.09,79.46 46.5,81"/>
+  </g>
+</svg>
