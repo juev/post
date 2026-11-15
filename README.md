@@ -6,7 +6,7 @@
 
 Post is an Android app that publishes one message to several Bluesky and Mastodon accounts at once. You write the text in Markdown, attach images, video or audio once, and the app adapts the post to each account: it converts the formatting to what the server accepts, splits long text into a thread, and resizes or transcodes media to fit the network's limits. A post goes out right away, at a time you pick, or in the next free slot of a weekly schedule. Post has no server of its own: it talks to your accounts' servers directly.
 
-[![Get it on Obtainium](https://raw.githubusercontent.com/ImranR98/Obtainium/main/assets/graphics/badge_obtainium.png)](https://apps.obtainium.imranr.dev/redirect?r=obtainium://add/https://github.com/juev/post)
+<a href="https://apps.obtainium.imranr.dev/redirect?r=obtainium://add/https://github.com/juev/post"><img src="docs/badge_obtainium.png" width="161" height="48" alt="Get it on Obtainium"></a>
 
 ## Features
 
@@ -53,12 +53,12 @@ Every release APK is signed with the same key. The SHA-256 fingerprint of its ce
 0D:06:40:FD:9B:05:E2:B4:82:B9:26:0A:D2:D2:6D:1A:C7:54:1F:8D:D5:D9:89:45:23:9B:DA:59:CB:24:FF:57
 ```
 
-To check a downloaded APK yourself, run `apksigner verify --print-certs post-<version>.apk` from the Android SDK build tools: the line `Signer #1 certificate SHA-256 digest` shows the same value in lowercase without colons.
+To check a downloaded APK yourself, run `apksigner verify --print-certs post-<version>.apk` from the Android SDK build tools: the line with `certificate SHA-256 digest` shows the same value in lowercase without colons.
 
 ## Signing in
 
-- **Mastodon.** Enter the address of your server. Post opens its sign-in page in the browser, and you allow access there. Post never sees your password: the server gives it a token with access limited to posting and reading your profile.
-- **Bluesky.** Enter your handle and an app password. Create the app password at [bsky.app/settings/app-passwords](https://bsky.app/settings/app-passwords). An app password is separate from your main password: you can revoke it at any time without changing the main one, and Post never learns the main one. Post keeps only the session tokens it gets with the app password, not the password itself. Sign-in with Bluesky OAuth is planned for a later version.
+- **Mastodon.** Enter the address of your server. Post opens its sign-in page in the browser, and you allow access there. Post never sees your password: the server gives it a token. The token allows posting and uploading media, reading your profile, and reading posts (`read:statuses`). Post reads only your own recent posts, to check whether a post went out when the server's answer was lost, so a retry does not publish it twice.
+- **Bluesky.** Enter your handle and an app password. Create the app password at [bsky.app/settings/app-passwords](https://bsky.app/settings/app-passwords). An app password is separate from your main password: you can revoke it at any time without changing the main one, and Post never learns the main one. Post keeps only the session tokens it gets with the app password, not the password itself. Post does not support Bluesky OAuth sign-in.
 
 Tokens are stored on the device, encrypted with a key in Android Keystore.
 
