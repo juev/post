@@ -91,6 +91,10 @@ internal class PartConverter(
         label == null -> body
         body.isEmpty() -> label
         profile.format == TextFormat.MARKDOWN && endsWithCodeBlock -> "$body\n$label"
+        // The server reads Markdown beyond the subset of F3, and the number would change what such a line is.
+        profile.format == TextFormat.MARKDOWN && body.substringAfterLast('\n').let { TABLE_ROW.matches(it) } -> "$body\n\n$label"
+        profile.format == TextFormat.MARKDOWN && body.substringAfterLast('\n').let { line -> LABEL_BREAKERS.any { it.containsMatchIn(line) } } ->
+            "$body\n$label"
         profile.format == TextFormat.HTML ->
             if (body.endsWith("</p>")) body.dropLast(4) + " " + label + "</p>" else "$body<p>$label</p>"
         else -> "$body $label"
@@ -113,6 +117,21 @@ internal class PartConverter(
         return ConvertedPart(text, count, bytes, links, mentions, tags)
     }
 }
+
+/**
+ * Last lines of a Markdown part that a number appended to them would turn into something else on a server
+ * that reads full Markdown (outside the subset of F3, so they are sent as typed): a setext underline or a
+ * thematic break (`---`, `===`, `* * *`), a link reference definition (`[ref]: url`), and an ATX heading
+ * with a closing sequence (`# Title #`). The number goes on a line of its own after them.
+ */
+private val LABEL_BREAKERS = listOf(
+    Regex("""^[ >]*(?:=+|-+|(?:[-*_][ \t]*){3,})[ \t]*$"""),
+    Regex("""^[ >]*\[(?:[^\]\\]|\\.)+]:"""),
+    Regex("""^[ >]*#{1,6}[ \t].*[ \t]#+[ \t]*$"""),
+)
+
+/** A line that could be a table row: on a line of its own after it, the number would be a row too. */
+private val TABLE_ROW = Regex("""^[ >]*\|.*|.*\|[ \t]*$""")
 
 /** The width a part number ` n/n` (or `<p>n/n</p>` in HTML) of [digits] digits takes; 0 without numbers. */
 internal fun numberReserve(format: TextFormat, digits: Int): Int = when {

@@ -186,6 +186,22 @@ class TextRendererTest {
     }
 
     @Test
+    fun `T11 a Markdown part whose last line a number would change gets the number on a line of its own`() {
+        val profile = custom(TextFormat.MARKDOWN, 60, Counting.GOTOSOCIAL, numberParts = true, contentType = "text/markdown")
+        // The second paragraph fits a part alone, the two together do not, and it has only word breaks (T7).
+        val next = "\n\nAnother paragraph long enough for a part of its own"
+        // `--- 1/2` would no longer underline the heading, `[ref]: url 1/2` would no longer define the link,
+        // `# Title # 1/2` would show its closing `#`, and `| a | 1/2` would add a cell to the row.
+        for (last in listOf("Heading\n---", "Heading\n===", "[ref]: https://example.com/a", "# Title #", "| a | b |")) {
+            val result = render(last + next, profile)
+            assertValid(last + next, result)
+            assertThat(result.parts.map { it.text }.first()).isEqualTo(if ('|' in last) "$last\n\n1/2" else "$last\n1/2")
+        }
+        // Text the number does not change keeps it at the end of its last line.
+        assertThat(render("Plain words here$next", profile).parts.first().text).isEqualTo("Plain words here 1/2")
+    }
+
+    @Test
     fun `T11 an unclosed code block is closed before the number`() {
         val text = "```\n" + List(12) { "line $it of code" }.joinToString("\n")
         val profile = custom(TextFormat.MARKDOWN, maxCharacters = 120, counting = Counting.GOTOSOCIAL, numberParts = true)
