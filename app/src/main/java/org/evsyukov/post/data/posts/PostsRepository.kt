@@ -69,6 +69,15 @@ interface PostsRepository {
      */
     suspend fun queue(postId: Long, schedule: Schedule, targets: List<Long>)
 
+    /**
+     * Saves [draft] as [saveDraft] does and queues it at [schedule] for its targets as [queue] does, in one
+     * transaction (R27): the composer's Send now and Send later. Nothing is written when either step
+     * fails. Returns the id of the post.
+     *
+     * @throws IllegalArgumentException when the targets are empty, repeat an id, or name an unknown account.
+     */
+    suspend fun saveAndQueue(draft: DraftInput, schedule: Schedule): Long
+
     /** Posts queued, sending, held or failed, with their deliveries, by send time and queue order (Q8). */
     fun observeQueue(): Flow<List<Post>>
 
@@ -148,44 +157,61 @@ class RoomPostsRepository(
         requireDistinct(draft.targets)
         val now = clock.millis()
         val removedFiles = mutableListOf<String>()
+        val id = db.withTransaction { writeDraft(draft, now, removedFiles) }
+        deleteFiles(removedFiles)
+        return id
+    }
+
+    override suspend fun saveAndQueue(draft: DraftInput, schedule: Schedule): Long {
+        require(draft.targets.isNotEmpty()) { "a post needs at least one target" }
+        requireDistinct(draft.targets)
+        val now = clock.millis()
+        val removedFiles = mutableListOf<String>()
         val id = db.withTransaction {
-            val postId = if (draft.id == null) {
-                posts.insert(
-                    PostEntity(
-                        kind = draft.kind,
-                        state = PostState.DRAFT,
-                        text = draft.text,
-                        optionsJson = encodeOptions(draft.options),
-                        targetsJson = encodeTargets(draft.targets),
-                        scheduleKind = null,
-                        slotLocal = null,
-                        sendAt = null,
-                        queueOrder = 0,
-                        historyId = draft.historyId,
-                        createdAt = now,
-                        updatedAt = now,
-                    ),
-                )
-            } else {
-                val post = posts.get(draft.id) ?: throw PostNotFound(draft.id)
-                checkEditable(post)
-                posts.updateContent(
-                    id = post.id,
-                    kind = draft.kind,
-                    text = draft.text,
-                    optionsJson = encodeOptions(draft.options),
-                    targetsJson = encodeTargets(draft.targets),
-                    historyId = draft.historyId,
-                    updatedAt = now,
-                )
-                if (post.state != PostState.DRAFT) syncDeliveries(post.id, draft.targets, now)
-                post.id
-            }
-            removedFiles += saveAttachments(postId, draft.attachments, now)
+            val postId = writeDraft(draft, now, removedFiles)
+            queueInTransaction(postId, schedule, draft.targets, now)
             postId
         }
         deleteFiles(removedFiles)
         return id
+    }
+
+    /** The body of [saveDraft], run inside a transaction; the files of removed attachments go to [removedFiles]. */
+    private suspend fun writeDraft(draft: DraftInput, now: Long, removedFiles: MutableList<String>): Long {
+        val postId = if (draft.id == null) {
+            posts.insert(
+                PostEntity(
+                    kind = draft.kind,
+                    state = PostState.DRAFT,
+                    text = draft.text,
+                    optionsJson = encodeOptions(draft.options),
+                    targetsJson = encodeTargets(draft.targets),
+                    scheduleKind = null,
+                    slotLocal = null,
+                    sendAt = null,
+                    queueOrder = 0,
+                    historyId = draft.historyId,
+                    createdAt = now,
+                    updatedAt = now,
+                ),
+            )
+        } else {
+            val post = posts.get(draft.id) ?: throw PostNotFound(draft.id)
+            checkEditable(post)
+            posts.updateContent(
+                id = post.id,
+                kind = draft.kind,
+                text = draft.text,
+                optionsJson = encodeOptions(draft.options),
+                targetsJson = encodeTargets(draft.targets),
+                historyId = draft.historyId,
+                updatedAt = now,
+            )
+            if (post.state != PostState.DRAFT) syncDeliveries(post.id, draft.targets, now)
+            post.id
+        }
+        removedFiles += saveAttachments(postId, draft.attachments, now)
+        return postId
     }
 
     override suspend fun get(id: Long): Post? = posts.details(id)?.toPost()
@@ -214,14 +240,17 @@ class RoomPostsRepository(
         require(targets.isNotEmpty()) { "a post needs at least one target" }
         requireDistinct(targets)
         val now = clock.millis()
-        db.withTransaction {
-            val post = posts.get(postId) ?: throw PostNotFound(postId)
-            check(post.state == PostState.DRAFT || isWaiting(post)) { "post $postId is ${post.state} and cannot be queued" }
-            val order = if (post.state == PostState.DRAFT) posts.nextQueueOrder() else post.queueOrder
-            val time = ScheduleColumns.of(schedule, zone())
-            posts.queue(postId, PostState.QUEUED, time.kind, time.slotLocal, time.sendAt, encodeTargets(targets), order, now)
-            syncDeliveries(postId, targets, now)
-        }
+        db.withTransaction { queueInTransaction(postId, schedule, targets, now) }
+    }
+
+    /** The body of [queue], run inside a transaction. */
+    private suspend fun queueInTransaction(postId: Long, schedule: Schedule, targets: List<Long>, now: Long) {
+        val post = posts.get(postId) ?: throw PostNotFound(postId)
+        check(post.state == PostState.DRAFT || isWaiting(post)) { "post $postId is ${post.state} and cannot be queued" }
+        val order = if (post.state == PostState.DRAFT) posts.nextQueueOrder() else post.queueOrder
+        val time = ScheduleColumns.of(schedule, zone())
+        posts.queue(postId, PostState.QUEUED, time.kind, time.slotLocal, time.sendAt, encodeTargets(targets), order, now)
+        syncDeliveries(postId, targets, now)
     }
 
     override fun observeQueue(): Flow<List<Post>> = posts.observeQueue().map { list -> list.map { it.toPost() } }

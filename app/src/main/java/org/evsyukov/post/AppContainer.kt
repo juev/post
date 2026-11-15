@@ -11,6 +11,7 @@ import org.evsyukov.post.accounts.BlueskySignIn
 import org.evsyukov.post.accounts.LimitsRefresher
 import org.evsyukov.post.accounts.MastodonSignIn
 import org.evsyukov.post.accounts.ServerPolicy
+import org.evsyukov.post.core.text.TextSegmenter
 import org.evsyukov.post.data.accounts.AccountsRepository
 import org.evsyukov.post.data.accounts.MastodonAppsRepository
 import org.evsyukov.post.data.accounts.RoomAccountsRepository
@@ -31,6 +32,7 @@ import org.evsyukov.post.data.settings.AppSettings
 import org.evsyukov.post.oauth.FilePendingSignInStore
 import org.evsyukov.post.oauth.MastodonSignInFlow
 import org.evsyukov.post.oauth.PendingSignInStore
+import org.evsyukov.post.text.AndroidTextSegmenter
 import java.io.File
 import java.util.concurrent.TimeUnit
 
@@ -41,7 +43,10 @@ import java.util.concurrent.TimeUnit
  */
 class AppContainer(
     context: Context,
-    // Tests on the JVM pass a stand-in: Robolectric has no Android Keystore.
+    /** Starts publishing of due posts; the sender replaces the no-op, and tests record the calls. */
+    val publishTrigger: PublishTrigger = PublishTrigger {},
+    // Tests on the JVM pass a stand-in: Robolectric has no Android Keystore. It stays the last parameter,
+    // so `AppContainer(context) { FakeCipher() }` keeps meaning the cipher.
     private val cipher: () -> TokenCipher = { KeystoreTokenCipher() },
 ) {
     val context: Context = context.applicationContext
@@ -62,6 +67,9 @@ class AppContainer(
 
     /** HTTPS servers only; debug builds also reach local test servers over HTTP. */
     val serverPolicy = ServerPolicy(allowLocalHttp = BuildConfig.DEBUG)
+
+    /** Grapheme, word and sentence boundaries by the platform ICU, for counters and thread splits. */
+    val textSegmenter: TextSegmenter = AndroidTextSegmenter()
 
     val database: PostDatabase by lazy { PostDatabase.open(this.context) }
 
@@ -106,4 +114,12 @@ class AppContainer(
     companion object {
         val USER_AGENT = "Post/${BuildConfig.VERSION_NAME} (+https://github.com/juev/post)"
     }
+}
+
+/**
+ * Starts publishing the posts that are due, such as one just queued by Send now (R21). Saving the post
+ * comes first (R27); the trigger only wakes the sender, so calling it twice is harmless.
+ */
+fun interface PublishTrigger {
+    fun publishNow()
 }
