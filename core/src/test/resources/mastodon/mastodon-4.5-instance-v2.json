@@ -1,5 +1,5 @@
 {
-  "_source": "docs.joinmastodon.org entities/Instance example (mastodon/documentation main, 2026-11-15), trimmed; api_versions.mastodon set to 7 and version to 4.5.0; description_limit 10000 as MediaAttachment::MAX_DESCRIPTION_LENGTH of mastodon/mastodon main",
+  "_source": "docs.joinmastodon.org entities/Instance example (mastodon/documentation main, 2026-11-15), trimmed; api_versions.mastodon set to 7 and version to 4.5.0; changed to match mastodon/mastodon main app/models/media_attachment.rb: description_limit 1500 -> 10000 (MAX_DESCRIPTION_LENGTH), image/heic, image/heif and image/avif removed from media_attachments.supported_mime_types (IMAGE_MIME_TYPES: HEIC/HEIF/AVIF temporarily disabled), leaving 25 types",
   "domain": "mastodon.social",
   "title": "Mastodon",
   "version": "4.5.0",

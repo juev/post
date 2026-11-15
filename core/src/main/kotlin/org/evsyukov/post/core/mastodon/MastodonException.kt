@@ -23,6 +23,8 @@ sealed class MastodonException(message: String, cause: Throwable? = null) : Exce
      *   429 without it from `X-RateLimit-Reset`. Null when the server gave no such hint.
      * @property authError the `error` parameter of `WWW-Authenticate` (RFC 6750 §3), such as
      *   `invalid_token` or `insufficient_scope`.
+     * @property path the path of the request, such as `/oauth/token`, without the query. Null when
+     *   the exception was not built by [MastodonClient].
      */
     class Http(
         val status: Int,
@@ -30,9 +32,14 @@ sealed class MastodonException(message: String, cause: Throwable? = null) : Exce
         val description: String?,
         val retryAfterSeconds: Long?,
         val authError: String? = null,
+        val path: String? = null,
     ) : MastodonException(httpMessage(status, error, description))
 
-    /** No usable answer: no connection, a timeout, a dropped connection or a cancelled call. */
+    /**
+     * No usable answer: no connection, a timeout, a dropped connection or a cancelled call.
+     * Besides the cause it takes the message, so that the client can name the path and remove
+     * secrets from the cause's text.
+     */
     class Network(cause: IOException, message: String) : MastodonException(message, cause)
 
     /**
@@ -70,17 +77,20 @@ sealed class MastodonException(message: String, cause: Throwable? = null) : Exce
     val isNotFound: Boolean get() = this is Http && status == 404
 
     /**
-     * 401 with error `invalid_client` (`POST /oauth/token`): the server no longer knows the app
-     * registration, which servers before 4.3 could remove, so the app registers again.
+     * 401 with error `invalid_client` on `POST /oauth/token`: the server no longer knows the app
+     * registration, which servers before 4.3 could remove, so the app registers again. The same
+     * answer on another path is not about the registration and counts as [isUnauthorized].
      * Akkoma answers `400 "Invalid credentials"` both for an unknown client and for a bad code
      * (o_auth_controller.ex, render_invalid_credentials_error), so that answer is not counted:
      * it would register the app again after every failed sign-in.
      */
-    val isInvalidClient: Boolean get() = this is Http && status == 401 && error == INVALID_CLIENT
+    val isInvalidClient: Boolean
+        get() = this is Http && status == 401 && error == INVALID_CLIENT && path == TOKEN_PATH
 
     private companion object {
         const val INVALID_TOKEN = "invalid_token"
         const val INVALID_CLIENT = "invalid_client"
+        const val TOKEN_PATH = "/oauth/token"
         const val INVALID_CREDENTIALS = "Invalid credentials"
 
         fun isInvalidCredentials(error: String?): Boolean =

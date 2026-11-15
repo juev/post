@@ -6,6 +6,17 @@ import kotlinx.serialization.Serializable
  * What one Mastodon-API server accepts: limits (networks.md N1, N2) and post formats
  * (formatting.md F1). Stored with the account and refreshed once a day.
  *
+ * @property charactersReservedPerUrl the weight of one URL in the text limit, as the server reports
+ *   it, else 23. Pleroma and Akkoma have no URL weight: their CommonAPI.Utils.validate_character_limit
+ *   counts `String.length` of the whole text, so URLs and mentions count in full there. Pleroma's
+ *   `/api/v2/instance` still reports 0 (instance_view.ex configuration2/0), and Akkoma reports
+ *   nothing, so it gets 23. A counter for those servers must not rely on this value.
+ * @property supportedMediaMimeTypes media types the server is known to accept. A type outside
+ *   the set is converted before upload (media.md A5, A7). The generic `application/octet-stream`
+ *   is not a media type and is dropped: Pleroma lists it alone (instance_view.ex configuration/0)
+ *   while Pleroma.Upload accepts any `image`, `audio` and `video` type (config.exs
+ *   `allowed_mime_types`). A list left empty counts as not reported, and the vanilla list
+ *   applies, a safe subset of what Pleroma accepts.
  * @property postFormatsDeclared true when the server listed its formats in one of the F1
  *   sources; false when [postFormats] is the plain-text fallback.
  */
@@ -105,8 +116,8 @@ data class MastodonCapabilities(
                     ?: v1?.maxMediaAttachments ?: Defaults.MAX_MEDIA_ATTACHMENTS,
                 charactersReservedPerUrl = c2?.statuses?.charactersReservedPerUrl
                     ?: c1?.statuses?.charactersReservedPerUrl ?: Defaults.CHARACTERS_RESERVED_PER_URL,
-                supportedMediaMimeTypes = c2?.mediaAttachments?.supportedMimeTypes?.nonEmptySet()
-                    ?: c1?.mediaAttachments?.supportedMimeTypes?.nonEmptySet() ?: Defaults.MEDIA_MIME_TYPES,
+                supportedMediaMimeTypes = c2?.mediaAttachments?.supportedMimeTypes?.mediaTypes()
+                    ?: c1?.mediaAttachments?.supportedMimeTypes?.mediaTypes() ?: Defaults.MEDIA_MIME_TYPES,
                 imageSizeLimit = c2?.mediaAttachments?.imageSizeLimit ?: c1?.mediaAttachments?.imageSizeLimit
                     ?: v1?.uploadLimit ?: Defaults.IMAGE_SIZE_LIMIT,
                 imageMatrixLimit = c2?.mediaAttachments?.imageMatrixLimit ?: c1?.mediaAttachments?.imageMatrixLimit
@@ -136,7 +147,13 @@ data class MastodonCapabilities(
             )
         }
 
+        /** Placeholder that names no media type (see [supportedMediaMimeTypes]). */
+        private const val GENERIC_BINARY = "application/octet-stream"
+
         private fun List<String>.nonEmptySet(): Set<String>? =
             map { it.trim() }.filter { it.isNotEmpty() }.toCollection(LinkedHashSet()).takeIf { it.isNotEmpty() }
+
+        private fun List<String>.mediaTypes(): Set<String>? =
+            nonEmptySet()?.filterTo(LinkedHashSet()) { !it.equals(GENERIC_BINARY, ignoreCase = true) }?.takeIf { it.isNotEmpty() }
     }
 }
