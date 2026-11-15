@@ -257,6 +257,23 @@ class TextRendererTest {
     }
 
     @Test
+    fun `a piece that shows nothing once converted gets no empty part`() {
+        // An empty code block is no text in plain text: Mastodon refuses an empty status, so no part carries it.
+        val text = "Hello there.\n$MANUAL_BREAK\n```\n```"
+        for (profile in listOf(bluesky(), mastodon(), bluesky(numberParts = true), mastodon(numberParts = true))) {
+            val result = render(text, profile)
+            assertThat(result.parts.map { it.text }).containsExactly("Hello there.")
+        }
+        // With media of its own the piece still has its part, for the media.
+        val withMedia = render(text, mastodon(numberParts = true), mediaOnlyParts = mapOf(1 to 0))
+        assertThat(withMedia.parts.map { it.text }).containsExactly("Hello there. 1/2", "2/2").inOrder()
+        assertThat(withMedia.parts.map { it.piece }).containsExactly(0, 1).inOrder()
+        // Markdown shows the empty code block, so it stays a part there.
+        val markdown = render(text, custom(TextFormat.MARKDOWN, 500, Counting.GOTOSOCIAL, contentType = "text/markdown"))
+        assertThat(markdown.parts.map { it.text }).containsExactly("Hello there.", "```\n```").inOrder()
+    }
+
+    @Test
     fun `an empty draft still has one empty part`() {
         val result = render("", mastodon(), spoiler = "CW")
         assertThat(result.parts.single().text).isEmpty()

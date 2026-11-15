@@ -235,7 +235,8 @@ class RenderPropertiesTest {
         }
         for (piece in pieces(source)) {
             val parts = result.parts.filter { it.piece == piece.index && !it.mediaReply && it.sourceStart < it.sourceEnd }
-            if (piece.isEmpty) {
+            // A piece without text, or one that shows nothing once converted, has no part of its own.
+            if (piece.isEmpty || PartConverter(profile, segmenter, "").convert(source.substring(piece.start, piece.end)).isBlank()) {
                 assertWithMessage(message).that(parts).isEmpty()
                 continue
             }
