@@ -24,7 +24,7 @@ import java.io.File
 import java.security.KeyStore
 import java.time.Instant
 
-/** The database on a device: the exported schema opens with the entities, and tokens are sealed on disk (R4). */
+/** The database on a device: a version 1 file opens with the entities, and tokens are sealed on disk (R4). */
 @RunWith(AndroidJUnit4::class)
 class PostDatabaseDeviceTest {
     private val context: Context = ApplicationProvider.getApplicationContext()
@@ -40,9 +40,16 @@ class PostDatabaseDeviceTest {
 
     @Test
     fun aDatabaseOfTheExportedVersionOneOpensWithTheCurrentEntities() = runBlocking<Unit> {
-        // Room refuses to open a file whose identity differs from its entities, so this fails when the
-        // committed schema no longer matches them.
-        helper.createDatabase(NAME, 1).close()
+        // MigrationTestHelper builds the file from the schema JSON packed into the test APK. The Room
+        // plugin rewrites that JSON from the entities, and depending on the order of the tasks the APK
+        // gets the old or the new one. Both cases fail here: a rewritten JSON no longer has the pinned
+        // identity, and an old one does not open, because Room checks the identity against the entities.
+        helper.createDatabase(NAME, 1).use { file ->
+            file.query("SELECT identity_hash FROM room_master_table").use { cursor ->
+                assertThat(cursor.moveToFirst()).isTrue()
+                assertThat(cursor.getString(0)).isEqualTo(VERSION_1_IDENTITY)
+            }
+        }
 
         val db = Room.databaseBuilder(context, PostDatabase::class.java, NAME).build()
         try {
@@ -83,5 +90,8 @@ class PostDatabaseDeviceTest {
         const val ALIAS = "post-secrets-device-test"
         const val TOKEN = "device-access-token-0123456789"
         const val CLIENT_SECRET = "device-client-secret-9876543210"
+
+        /** The identity of version 1 as released; the JVM SchemaTest pins the same value. */
+        const val VERSION_1_IDENTITY = "7cd92fd81f0bb17c9c302716c7245eb8"
     }
 }

@@ -2,7 +2,9 @@ package org.evsyukov.post.data.db
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.google.common.truth.Truth.assertThat
+import com.google.common.truth.Truth.assertWithMessage
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -15,8 +17,13 @@ import org.junit.runner.RunWith
 import java.io.File
 
 /**
- * The schema committed under app/schemas is the one the entities build: a later version must migrate
- * from it, so a change to the entities without a new version shows up here.
+ * The schema of every database version is fixed once it is committed: an installed copy of that version
+ * must open, or migrate, with the entities of a later release.
+ *
+ * The Room Gradle plugin rewrites `app/schemas/.../<version>.json` from the entities on every build, so
+ * comparing the entities with that file alone proves nothing: both change together. The identity hash
+ * of each version is therefore pinned here. Changing the entities without a new database version
+ * changes the identity Room computes, and [theEntitiesHaveTheIdentityPinnedForTheirVersion] fails.
  */
 @RunWith(AndroidJUnit4::class)
 class SchemaTest {
@@ -25,24 +32,30 @@ class SchemaTest {
     @After
     fun tearDown() = db.close()
 
-    // Unit tests run in the module directory.
-    private val exported = File("schemas/org.evsyukov.post.data.db.PostDatabase/1.json")
+    @Test
+    fun theEntitiesHaveTheIdentityPinnedForTheirVersion() {
+        val version = db.openHelper.readableDatabase.version
+        val identity = db.rows("SELECT identity_hash FROM room_master_table").single().single()
 
-    private val schema by lazy { Json.parseToJsonElement(exported.readText()).jsonObject["database"]!!.jsonObject }
+        assertThat(PINNED_IDENTITIES).containsKey(version)
+        assertWithMessage(
+            "the identity of the entities of version $version; a schema change needs a new database " +
+                "version, a migration and its own entry in PINNED_IDENTITIES, never a new hash for $version",
+        ).that(identity).isEqualTo(PINNED_IDENTITIES.getValue(version))
+    }
 
     @Test
-    fun theExportedSchemaIsVersionOneAndHasTheIdentityOfTheEntities() {
-        assertThat(exported.isFile).isTrue()
-        assertThat(schema["version"]!!.jsonPrimitive.int).isEqualTo(1)
-
-        val identity = db.rows("SELECT identity_hash FROM room_master_table").single().single()
-        assertThat(identity).isEqualTo(schema["identityHash"]!!.jsonPrimitive.content)
-        assertThat(db.openHelper.readableDatabase.version).isEqualTo(1)
+    fun theExportedSchemaOfEveryVersionHasItsPinnedIdentity() {
+        for ((version, identity) in PINNED_IDENTITIES) {
+            val schema = exported(version)
+            assertThat(schema["version"]!!.jsonPrimitive.int).isEqualTo(version)
+            assertThat(schema["identityHash"]!!.jsonPrimitive.content).isEqualTo(identity)
+        }
     }
 
     @Test
     fun everyTableAndIndexOfTheDatabaseIsInTheExportedSchema() {
-        val entities = schema["entities"]!!.jsonArray.map { it.jsonObject }
+        val entities = exported(db.openHelper.readableDatabase.version)["entities"]!!.jsonArray.map { it.jsonObject }
         val expected = entities.associate { entity ->
             val table = entity["tableName"]!!.jsonPrimitive.content
             table to entity["createSql"]!!.jsonPrimitive.content.replace("\${TABLE_NAME}", table)
@@ -67,6 +80,23 @@ class SchemaTest {
         assertThat(indices.map { it.normalized() }).containsExactlyElementsIn(expectedIndices.map { it.normalized() })
     }
 
+    // Unit tests run in the module directory.
+    private fun exported(version: Int): JsonObject {
+        val file = File("schemas/org.evsyukov.post.data.db.PostDatabase/$version.json")
+        assertThat(file.isFile).isTrue()
+        return Json.parseToJsonElement(file.readText()).jsonObject["database"]!!.jsonObject
+    }
+
     // sqlite_master keeps the statement without IF NOT EXISTS.
     private fun String.normalized() = replace("IF NOT EXISTS ", "").replace(Regex("\\s+"), " ").trim()
+
+    private companion object {
+        /**
+         * The identity hash of each database version as released. An entry is added with a new version
+         * and never changed afterwards.
+         */
+        val PINNED_IDENTITIES = mapOf(
+            1 to "7cd92fd81f0bb17c9c302716c7245eb8",
+        )
+    }
 }
