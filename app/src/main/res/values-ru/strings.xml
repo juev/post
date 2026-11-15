@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Post</string>
+    <string name="back">Назад</string>
+    <string name="more">Ещё</string>
+    <string name="posts">Посты</string>
+    <string name="schedule">Расписание</string>
+    <string name="settings">Настройки</string>
+</resources>

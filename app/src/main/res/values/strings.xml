@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Post</string>
+    <string name="back">Back</string>
+    <string name="more">More options</string>
+    <string name="posts">Posts</string>
+    <string name="schedule">Schedule</string>
+    <string name="settings">Settings</string>
+</resources>

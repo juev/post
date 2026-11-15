@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  A temporary mark: the letter P in the 108dp adaptive icon grid, inside the central 66dp safe zone.
+  It is white on transparent, so the same layer serves as the monochrome one.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#FFFFFF"
+        android:fillType="evenOdd"
+        android:pathData="M38,30H56A16,16 0,0 1,56,62H48V78H38Z M48,40V52H56A6,6 0,0 0,56,40Z" />
+</vector>
