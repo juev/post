@@ -16,7 +16,7 @@ Decisions of 2026-11-15: the user attaches files once. The app adapts each file 
 - A5. Images. HEIC, HEIF, AVIF and other types the server does not accept are converted to JPEG (PNG when the image has transparency). An image above the size or resolution limit is downscaled and recompressed until it fits: for Bluesky to 4000 px on the long side and 2 MB, for Mastodon to the instance's `image_matrix_limit` and `image_size_limit`.
 - A6. Location data and other EXIF metadata are removed from images before upload. The orientation is applied to the pixels first. (Proposal: a setting to keep metadata, off by default.)
 - A7. Video. A video in a format the network does not accept, or above its size limit, is transcoded on the device to MP4 (H.264 video, AAC audio) with Media3 Transformer. The target bitrate is chosen from the duration and the size limit; the resolution goes down to 1080p and then 720p when the bitrate would be too low. Transcoding runs in a foreground worker with a progress notification and can be cancelled.
-- A8. A GIF goes to Mastodon as a GIF (the server converts it). It goes to Bluesky as a video with `presentation: gif` (networks.md, N21).
+- A8. A GIF goes to Mastodon as a GIF (the server converts it). Mastodon rejects a GIF larger than 1280×720 (networks.md, N6b): a still GIF above that is converted like any image (A5), and an animated one cannot fit, because the app does not convert GIF animation. A GIF goes to Bluesky as a video with `presentation: gif` (networks.md, N21).
 - A9. Alt text is shared by all networks. If it exceeds a network's limit (Mastodon's `description_limit`; 2000 characters in the official Bluesky app), the composer marks it, and the user shortens it.
 
 ## Conflicts that need a choice
