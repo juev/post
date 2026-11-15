@@ -152,6 +152,13 @@ class PlainTextTest {
     }
 
     @Test
+    fun `a bare url gives up the markers and punctuation that end it before closing markers`() {
+        // The URL ends at "a" as it does before a space, so the italic closes and the bold around it too.
+        assertThat(toPlainText("***https://example.com/a*.**")).isEqualTo("https://example.com/a.")
+        assertThat(toPlainText("***see https://example.com/a*.** next")).isEqualTo("see https://example.com/a. next")
+    }
+
+    @Test
     fun `mentions and hashtags stay as typed`() {
         assertThat(toPlainText("hi @_jane_ and @__init__@example.social #_tag_"))
             .isEqualTo("hi @_jane_ and @__init__@example.social #_tag_")
