@@ -22,7 +22,8 @@ package org.evsyukov.post.core.text
  * - A text that is empty or only whitespace counts as empty (`return '' if str.blank?`).
  * - Every URL counts as [charactersReservedPerUrl] characters. Only URLs with `http://` or `https://`
  *   count so (`extract_url_without_protocol: false`); see [TextEntities.urls]. The server's extractor
- *   drops URLs longer than 4096 code points (`Extractor::UTS58.max_length`), so those count in full.
+ *   skips URLs longer than 4096 code points (`Extractor::UTS58.max_length`), so those count in full,
+ *   except a URL that starts inside one, such as in its query.
  * - A mention counts without its domain: `@alice@example.com` counts as `@alice`
  *   (`"@#{entity[:screen_name].split('@').first}"`); see [TextEntities.mastodonMentions].
  * - Where a URL and a mention overlap, the one that starts first wins, and on a tie the URL
@@ -48,7 +49,7 @@ class MastodonCounter(
     /** [text] with every URL replaced by its placeholder and every mention cut to `@user`. */
     internal fun countableText(text: String): String {
         if (text.isBlank()) return ""
-        val urls = TextEntities.urls(text).filter { text.codePointCount(it.start, it.end) <= MAX_URL_CODE_POINTS }
+        val urls = TextEntities.urls(text, MAX_URL_CODE_POINTS)
         val entities = removeOverlapping(urls + TextEntities.mastodonMentions(text))
         if (entities.isEmpty()) return text
         val placeholder = "x".repeat(charactersReservedPerUrl)
