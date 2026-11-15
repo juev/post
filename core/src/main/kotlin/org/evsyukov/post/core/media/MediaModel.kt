@@ -7,7 +7,11 @@ import kotlinx.serialization.Serializable
 @Serializable
 enum class Network { MASTODON, BLUESKY }
 
-/** What an attachment is (product.md R9). A GIF is its own kind: Bluesky takes it as video (media.md A8). */
+/**
+ * What an attachment is (product.md R9). A GIF is its own kind: Bluesky takes it as video (media.md A8).
+ * [GIF] is an animated GIF, which the app never converts; a GIF of one frame is an [IMAGE] with
+ * `image/gif`, which the app may convert like any image (social-app classifies GIFs the same way).
+ */
 @Serializable
 enum class MediaKind { IMAGE, GIF, VIDEO, AUDIO }
 
@@ -62,7 +66,11 @@ enum class ConflictKind(
     /** A poll and media in one Mastodon status. */
     POLL_WITH_MEDIA(listOf(FixKind.REMOVE_POLL, FixKind.REMOVE_MEDIA, FixKind.MOVE_MEDIA_TO_REPLY)),
 
-    /** The file cannot be adapted to the limit without losing content, such as a 40-minute video for 99 MB. */
+    /**
+     * The file cannot be adapted to the limit without losing content, such as a 40-minute video for
+     * 99 MB, an animated GIF over 1280×720 for Mastodon, or a file whose conversion gives a type the
+     * network does not take.
+     */
     CANNOT_FIT(listOf(FixKind.REMOVE_VIDEO, FixKind.REMOVE_ACCOUNT)),
 
     /** Alt text over the network's limit (A9): the composer marks it and the user shortens it. */
@@ -90,7 +98,7 @@ enum class FixKind {
     /** Put every video (audio file, Bluesky GIF) of a mixed part into its own media-only reply. */
     MOVE_VIDEO_TO_REPLY,
 
-    /** Leave the conflicting video (or the audio file, GIF) out for this network. */
+    /** Leave the conflicting video (or the audio file, GIF, other file that cannot fit) out for this network. */
     REMOVE_VIDEO,
 
     /** Leave the images of a mixed part out for this network. */

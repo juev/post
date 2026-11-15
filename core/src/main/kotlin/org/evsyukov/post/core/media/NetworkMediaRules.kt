@@ -5,11 +5,14 @@ import kotlinx.serialization.Serializable
 /**
  * What one network (or the strictest of its target accounts, A10) accepts as attachments.
  * Values come from networks.md; a Mastodon account maps the limits read from its server (N1) into
- * this type, and [mastodonDefaults] holds the vanilla values for servers that report none.
+ * this type, and [mastodonDefaults] holds the vanilla values for servers that report none. The
+ * mapping starts from [mastodonDefaults] with `copy`, so a limit the server does not report
+ * ([maxGifPixels]) keeps its vanilla value.
  *
  * A null limit means the network has none. MIME types are compared in lower case without parameters.
  *
  * @property maxAttachments files in one post; for Bluesky the image limit of `app.bsky.embed.images`.
+ *   A network with 0 takes no files at all.
  * @property maxImagePixels width × height (Mastodon `image_matrix_limit`).
  * @property maxImageLongSide the long side social-app downscales Bluesky images to (N19).
  * @property maxVideoBytes the limit for video, and for audio where audio is allowed (Mastodon uses
@@ -24,6 +27,10 @@ import kotlinx.serialization.Serializable
  * @property maxAltLength alt text limit in characters (Unicode code points).
  * @property pollAllowedWithMedia a status may carry a poll and media together; Mastodon forbids it.
  *   Bluesky has no polls, so a poll never conflicts there.
+ * @property maxGifPixels width × height of an `image/gif` upload. Mastodon rejects a larger GIF with
+ *   422 (`Attachmentable::GIF_MATRIX_LIMIT`, 1280×720) and does not list this limit in
+ *   `/api/v2/instance`. A GIF the network converts on its side is checked against this limit; a GIF
+ *   the app converts to JPEG or PNG is not.
  */
 @Serializable
 data class NetworkMediaRules(
@@ -45,6 +52,7 @@ data class NetworkMediaRules(
     val maxAltLength: Int,
     val pollAllowedWithMedia: Boolean,
     val audioMimes: Set<String> = emptySet(),
+    val maxGifPixels: Long? = null,
 ) {
     /** The most images one part takes: a gallery where the network has one. */
     val maxImagesPerPart: Int get() = maxOf(maxAttachments, galleryMax ?: 0)
@@ -61,9 +69,10 @@ data class NetworkMediaRules(
 
         /**
          * Vanilla Mastodon (networks.md table; `MediaAttachment` of mastodon/mastodon main): 4 files,
-         * JPEG, PNG, GIF, WebP up to 16 MB and 7680×4320; MP4, WebM, QuickTime, Ogg up to 99 MB,
-         * 3840×2160 and 120 fps; audio up to 99 MB; one video or one audio file alone; alt text
-         * 10 000 characters; no poll with media.
+         * JPEG, PNG, GIF, WebP up to 16 MB and 7680×4320, a GIF up to 1280×720
+         * (`Attachmentable::GIF_MATRIX_LIMIT`, not in the networks.md table); MP4, WebM, QuickTime,
+         * Ogg up to 99 MB, 3840×2160 and 120 fps; audio up to 99 MB; one video or one audio file
+         * alone; alt text 10 000 characters; no poll with media.
          */
         fun mastodonDefaults(): NetworkMediaRules = NetworkMediaRules(
             network = Network.MASTODON,
@@ -88,6 +97,7 @@ data class NetworkMediaRules(
                 "audio/vorbis", "audio/mpeg", "audio/mp3", "audio/webm", "audio/flac", "audio/aac", "audio/m4a",
                 "audio/x-m4a", "audio/mp4", "audio/3gpp",
             ),
+            maxGifPixels = 1280L * 720,
         )
 
         /**
@@ -149,6 +159,7 @@ data class NetworkMediaRules(
                 maxAltLength = rules.minOf { it.maxAltLength },
                 pollAllowedWithMedia = rules.all { it.pollAllowedWithMedia },
                 audioMimes = audioMimes.orEmpty(),
+                maxGifPixels = minOfLimits(rules.map { it.maxGifPixels }),
             )
         }
 

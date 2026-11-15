@@ -50,6 +50,17 @@ class NetworkMediaRulesTest {
     }
 
     @Test
+    fun `R11 Mastodon defaults carry the GIF matrix limit that the server does not report`() {
+        // Attachmentable::GIF_MATRIX_LIMIT: a GIF over 1280×720 gets 422; /api/v2/instance does not list it.
+        assertThat(MASTODON.maxGifPixels).isEqualTo(1280L * 720)
+        assertThat(BLUESKY.maxGifPixels).isNull()
+        assertThat(NetworkMediaRules.strictest(listOf(MASTODON, MASTODON.copy(maxGifPixels = null))).maxGifPixels)
+            .isEqualTo(1280L * 720)
+        assertThat(NetworkMediaRules.strictest(listOf(MASTODON, MASTODON.copy(maxGifPixels = 640L * 480))).maxGifPixels)
+            .isEqualTo(640L * 480)
+    }
+
+    @Test
     fun `A10 the strictest rules take the smallest limits and the types every account takes`() {
         val fork = MASTODON.copy(
             maxAttachments = 6,

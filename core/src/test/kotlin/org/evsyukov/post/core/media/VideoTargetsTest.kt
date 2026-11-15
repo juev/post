@@ -79,6 +79,27 @@ class VideoTargetsTest {
     }
 
     @Test
+    fun `A7 the bitrate is capped at the source's own, but not below the floor of the step`() {
+        // 30 000 000 bytes in a minute are 4 000 000 bit/s; the limit alone would give the 8 Mbit/s cap.
+        assertThat(VideoTargets.target(minute, 99 * MIB, 1920, 1080, sourceBytes = 30_000_000)?.videoBitrate)
+            .isEqualTo(4_000_000)
+        // 5 000 000 bytes in a minute are under the 1080p floor, so the floor applies.
+        assertThat(VideoTargets.target(minute, 99 * MIB, 1920, 1080, sourceBytes = 5_000_000)?.videoBitrate)
+            .isEqualTo(VideoTargets.MIN_BITRATE_1080)
+        // A 720p source gets the 720p floor.
+        assertThat(VideoTargets.target(minute, 99 * MIB, 1280, 720, sourceBytes = 1_000_000)?.videoBitrate)
+            .isEqualTo(VideoTargets.MIN_BITRATE_720)
+        // A source above what the limit allows changes nothing.
+        assertThat(VideoTargets.target(minute, 21_900_000, 3840, 2160, sourceBytes = 1_000_000_000)?.videoBitrate)
+            .isEqualTo(VideoTargets.MIN_BITRATE_1080)
+        assertThat(VideoTargets.target(minute, 99 * MIB, 1920, 1080, sourceBytes = 1_000_000_000)?.videoBitrate)
+            .isEqualTo(VideoTargets.MAX_BITRATE_1080)
+        // An unknown source size caps nothing.
+        assertThat(VideoTargets.target(minute, 99 * MIB, 1920, 1080, sourceBytes = 0)?.videoBitrate)
+            .isEqualTo(VideoTargets.MAX_BITRATE_1080)
+    }
+
+    @Test
     fun `N1 a step whose output is over the pixel limit is skipped`() {
         // 12000×1200 at 1080 on the short side is 10800×1080, over 3840×2160; at 720 it is 7200×720.
         val target = VideoTargets.target(10_000, 99 * MIB, 12_000, 1200, maxPixels = 3840L * 2160)

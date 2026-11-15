@@ -21,7 +21,10 @@ import org.evsyukov.post.core.media.Conversion.TranscodeVideo
  *    ([ConflictKind.UNSUPPORTED_TYPE]), a video over the duration cap
  *    ([ConflictKind.VIDEO_TOO_LONG]) and a file no conversion fits ([ConflictKind.CANNOT_FIT]) are
  *    conflicts. A video of unknown duration that must be transcoded cannot get a bitrate, so it is
- *    a [ConflictKind.CANNOT_FIT] too.
+ *    a [ConflictKind.CANNOT_FIT] too. A conversion whose output type the network does not take is
+ *    no conversion: the file is [ConflictKind.UNSUPPORTED_TYPE] when the network does not take its
+ *    own type either, [ConflictKind.CANNOT_FIT] when it does. A network that takes no files
+ *    ([NetworkMediaRules.maxAttachments] 0) supports no type.
  * 2. The video quota ([ConflictKind.VIDEO_QUOTA]) for every file that goes to the video service.
  * 3. Each piece of the text (threads.md T13–T14) on its own: a video, an audio file or a video
  *    GIF with images ([ConflictKind.MIXED_TYPES]), then more files than one part takes
@@ -118,27 +121,41 @@ object MediaPlanner {
             return kept
         }
 
-        private fun examine(item: MediaItem): Examined = when (item.kind) {
-            MediaKind.IMAGE -> examineImage(item)
-            MediaKind.GIF -> if (rules.gifIsVideo) examineVideoGif(item) else examineImageGif(item)
-            MediaKind.VIDEO -> examineVideo(item)
-            MediaKind.AUDIO -> examineAudio(item)
+        private fun examine(item: MediaItem): Examined = when {
+            rules.maxAttachments <= 0 -> Examined.Fails(ConflictKind.UNSUPPORTED_TYPE)
+            item.kind == MediaKind.IMAGE -> examineImage(item)
+            item.kind == MediaKind.GIF -> if (rules.gifIsVideo) examineVideoGif(item) else examineImageGif(item)
+            item.kind == MediaKind.VIDEO -> examineVideo(item)
+            else -> examineAudio(item)
         }
 
         private fun examineImage(item: MediaItem): Examined {
+            val mime = normalizeMime(item.mime)
             val target = ImageTargets.target(
                 item.width, item.height, item.sizeBytes, item.mime, rules, item.hasTransparency, stripMetadata,
             )
             if (target != null) {
-                return Examined.Fits(target, "image ${item.id}: ${normalizeMime(item.mime)} → ${target.describe()}")
+                if (!rules.acceptsImage(target.targetMime)) return cannotConvert(rules.acceptsImage(mime))
+                return Examined.Fits(target, "image ${item.id}: $mime → ${target.describe()}")
             }
-            val mime = normalizeMime(item.mime)
+            val unknownSize = item.width == null || item.height == null
             return when {
                 !stripMetadata || mime == GIF_MIME -> Examined.Fits(AsIs, null)
                 // A6: the image fits, but its metadata goes; JPEG, PNG and WebP keep their type and pixels.
-                mime in REWRITABLE_IMAGE_MIMES ->
-                    Examined.Fits(ConvertImage(mime, null, null, rules.maxImageBytes, stripMetadata = true), null)
-                // A type the server takes but the device cannot write back (HEIC on a fork) becomes JPEG or PNG.
+                // With an unknown size the pass carries the resolution limits, so the converter checks
+                // the decoded image.
+                mime in REWRITABLE_IMAGE_MIMES -> Examined.Fits(
+                    ConvertImage(
+                        targetMime = mime,
+                        maxLongSide = if (unknownSize) rules.maxImageLongSide else null,
+                        maxPixels = if (unknownSize) rules.maxImagePixels else null,
+                        maxBytes = rules.maxImageBytes,
+                        stripMetadata = true,
+                    ),
+                    null,
+                )
+                // A type the server takes but the device cannot write back (HEIC on a fork) becomes JPEG
+                // or PNG. A server that takes neither gets the file as it is: it takes the original.
                 else -> {
                     val target = ConvertImage(
                         targetMime = if (item.hasTransparency) ImageTargets.PNG else ImageTargets.JPEG,
@@ -147,21 +164,33 @@ object MediaPlanner {
                         maxBytes = rules.maxImageBytes,
                         stripMetadata = true,
                     )
-                    Examined.Fits(target, "image ${item.id}: $mime → ${target.describe()}")
+                    if (rules.acceptsImage(target.targetMime)) {
+                        Examined.Fits(target, "image ${item.id}: $mime → ${target.describe()}")
+                    } else {
+                        Examined.Fits(AsIs, null)
+                    }
                 }
             }
         }
 
-        /** Mastodon: a GIF is an image the server converts; the app cannot convert it without losing the animation. */
+        /**
+         * Mastodon: a GIF is an image the server converts; the app cannot convert it without losing
+         * the animation. Its size, the image limits and the GIF matrix (1280×720) decide.
+         */
         private fun examineImageGif(item: MediaItem): Examined {
             if (!rules.acceptsImage(item.mime)) return Examined.Fails(ConflictKind.UNSUPPORTED_TYPE)
             val pixels = if (item.width != null && item.height != null) item.width.toLong() * item.height else null
             val longSide = if (item.width != null && item.height != null) maxOf(item.width, item.height) else null
             val tooBig = item.sizeBytes > rules.maxImageBytes ||
                 (pixels != null && rules.maxImagePixels != null && pixels > rules.maxImagePixels) ||
-                (longSide != null && rules.maxImageLongSide != null && longSide > rules.maxImageLongSide)
+                (longSide != null && rules.maxImageLongSide != null && longSide > rules.maxImageLongSide) ||
+                !ImageTargets.withinGifMatrix(item.width, item.height, item.mime, rules)
             return if (tooBig) Examined.Fails(ConflictKind.CANNOT_FIT) else Examined.Fits(AsIs, null)
         }
+
+        /** No conversion gives a type the network takes. */
+        private fun cannotConvert(networkTakesSourceType: Boolean): Examined =
+            Examined.Fails(if (networkTakesSourceType) ConflictKind.CANNOT_FIT else ConflictKind.UNSUPPORTED_TYPE)
 
         /** Bluesky: the GIF goes to the video service as it is (A8, N21); nothing on the device converts a GIF. */
         private fun examineVideoGif(item: MediaItem): Examined = when {
@@ -179,6 +208,7 @@ object MediaPlanner {
                 (item.frameRate != null && rules.maxVideoFrameRate != null && item.frameRate > rules.maxVideoFrameRate) ||
                 (pixels != null && rules.maxVideoPixels != null && pixels > rules.maxVideoPixels)
             if (!needsTranscoding) return Examined.Fits(AsIs, null)
+            if (!rules.acceptsVideo(VideoTargets.TARGET_MIME)) return cannotConvert(rules.acceptsVideo(item.mime))
             val duration = item.durationMs ?: return Examined.Fails(ConflictKind.CANNOT_FIT)
             val target = VideoTargets.target(
                 durationMs = duration,
@@ -186,6 +216,7 @@ object MediaPlanner {
                 width = item.width ?: 0,
                 height = item.height ?: 0,
                 maxPixels = rules.maxVideoPixels,
+                sourceBytes = item.sizeBytes,
             ) ?: return Examined.Fails(ConflictKind.CANNOT_FIT)
             val conversion = target.copy(maxFrameRate = rules.maxVideoFrameRate)
             return Examined.Fits(conversion, "video ${item.id}: ${normalizeMime(item.mime)} → ${conversion.describe()}")

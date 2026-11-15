@@ -319,6 +319,60 @@ class MediaConflictsTest {
             .containsExactly(Conflict(CANNOT_FIT, listOf(1L)))
     }
 
+    @Test
+    fun `R11 a GIF over 1280x720 cannot fit Mastodon, which rejects it, and goes to Bluesky as video`() {
+        assertThat(planOf(listOf(gif(1, width = 1280, height = 720)), MASTODON).conversions.getValue(1)).isEqualTo(Conversion.AsIs)
+        for ((width, height) in listOf(1281 to 720, 720 to 1281, 1920 to 1080, 1000 to 1000)) {
+            assertThat(planOf(listOf(gif(1, width = width, height = height)), MASTODON).conflicts)
+                .containsExactly(Conflict(CANNOT_FIT, listOf(1L)))
+        }
+        val items = listOf(image(1), gif(2, width = 1920, height = 1080))
+        val without = planOf(items, MASTODON, mapOf(CANNOT_FIT to REMOVE_VIDEO))
+        assertThat(without.parts()).containsExactly(listOf(1L))
+        assertThat(without.excluded).containsExactly(2L, REMOVE_VIDEO)
+
+        // Bluesky has no such limit: the GIF goes to the video service.
+        assertThat(planOf(listOf(gif(1, width = 1920, height = 1080)), BLUESKY).conversions.getValue(1))
+            .isEqualTo(Conversion.GifAsVideo)
+    }
+
+    @Test
+    fun `a file whose conversion gives a type the network does not take is a conflict, not a variant it rejects`() {
+        val webmOnly = MASTODON.copy(videoMimes = setOf("video/webm"))
+        assertThat(planOf(listOf(video(1, mime = "video/x-matroska")), webmOnly).conflicts)
+            .containsExactly(Conflict(UNSUPPORTED_TYPE, listOf(1L)))
+        assertThat(planOf(listOf(video(1, mime = "video/webm", size = 120 * MIB)), webmOnly).conflicts)
+            .containsExactly(Conflict(CANNOT_FIT, listOf(1L)))
+        assertThat(planOf(listOf(video(1, mime = "video/webm")), webmOnly).conversions.getValue(1)).isEqualTo(Conversion.AsIs)
+
+        val webpOnly = MASTODON.copy(imageMimes = setOf("image/webp"))
+        assertThat(planOf(listOf(image(1, mime = "image/heic")), webpOnly).conflicts)
+            .containsExactly(Conflict(UNSUPPORTED_TYPE, listOf(1L)))
+        assertThat(planOf(listOf(image(1, mime = "image/webp", size = 20 * MIB)), webpOnly).conflicts)
+            .containsExactly(Conflict(CANNOT_FIT, listOf(1L)))
+        assertThat(planOf(listOf(image(1, mime = "image/webp")), webpOnly).conversions.getValue(1))
+            .isEqualTo(Conversion.ConvertImage("image/webp", null, null, 16 * MIB, true))
+
+        // Transparency needs PNG; JPEG alone would lose it.
+        val jpegOnly = MASTODON.copy(imageMimes = setOf("image/jpeg"))
+        assertThat(planOf(listOf(image(1, mime = "image/heic", transparency = true)), jpegOnly).conflicts)
+            .containsExactly(Conflict(UNSUPPORTED_TYPE, listOf(1L)))
+
+        // A server that takes HEIC but neither JPEG nor PNG gets the HEIC as it is.
+        val heicOnly = MASTODON.copy(imageMimes = setOf("image/heic"))
+        assertThat(planOf(listOf(image(1, mime = "image/heic")), heicOnly).conversions.getValue(1)).isEqualTo(Conversion.AsIs)
+    }
+
+    @Test
+    fun `a network that takes no files supports none of them`() {
+        val noFiles = MASTODON.copy(maxAttachments = 0)
+        val items = listOf(image(1), video(2, piece = 1))
+        assertThat(planOf(items, noFiles).conflicts).containsExactly(Conflict(UNSUPPORTED_TYPE, listOf(1L, 2L)))
+        val without = planOf(items, noFiles, mapOf(UNSUPPORTED_TYPE to SEND_WITHOUT_FILE))
+        assertThat(without.partsByPiece).isEmpty()
+        assertThat(without.excluded.keys).containsExactly(1L, 2L)
+    }
+
     // Alt text
 
     @Test

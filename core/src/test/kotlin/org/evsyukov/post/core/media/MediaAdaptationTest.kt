@@ -23,8 +23,9 @@ class MediaAdaptationTest {
         assertThat(plan.conversions.getValue(1)).isEqualTo(ConvertImage("image/jpeg", null, 7680L * 4320, 16 * MIB, true))
         assertThat((plan.conversions.getValue(2) as ConvertImage).targetMime).isEqualTo("image/png")
         assertThat(plan.notes).hasSize(2)
-        // A static GIF has no EXIF block and goes as it is.
-        assertThat(planOf(listOf(image(3, mime = "image/gif")), MASTODON).conversions.getValue(3)).isEqualTo(AsIs)
+        // A static GIF within the GIF matrix (1280×720) has no EXIF block and goes as it is.
+        assertThat(planOf(listOf(image(3, mime = "image/gif", width = 1280, height = 720)), MASTODON).conversions.getValue(3))
+            .isEqualTo(AsIs)
         // Without metadata removal the accepted HEIC goes as it is.
         assertThat(planOf(listOf(image(1, mime = "image/heic")), heicServer, stripMetadata = false).conversions.getValue(1))
             .isEqualTo(AsIs)
@@ -36,6 +37,30 @@ class MediaAdaptationTest {
         assertThat(plan.conversions.getValue(1)).isEqualTo(AsIs)
         val converted = planOf(listOf(image(1, mime = "image/heic")), MASTODON, stripMetadata = false)
         assertThat((converted.conversions.getValue(1) as ConvertImage).stripMetadata).isFalse()
+    }
+
+    @Test
+    fun `A6 an image of unknown size carries the resolution limits into its metadata pass`() {
+        val webp = image(1, mime = "image/webp", width = null, height = null)
+        assertThat(planOf(listOf(webp), BLUESKY).conversions.getValue(1))
+            .isEqualTo(ConvertImage("image/webp", 4000, null, 2_000_000, true))
+        val jpeg = image(1, width = 1600, height = null)
+        assertThat(planOf(listOf(jpeg), MASTODON).conversions.getValue(1))
+            .isEqualTo(ConvertImage("image/jpeg", null, 7680L * 4320, 16 * MIB, true))
+    }
+
+    @Test
+    fun `A5 a still GIF over the Mastodon GIF matrix is converted, with a note`() {
+        val items = listOf(
+            image(1, mime = "image/gif", width = 1920, height = 1080),
+            image(2, mime = "image/gif", width = 1280, height = 720),
+        )
+        val plan = planOf(items, MASTODON)
+        assertThat(plan.ready).isTrue()
+        assertThat(plan.conversions.getValue(1)).isEqualTo(ConvertImage("image/jpeg", null, 7680L * 4320, 16 * MIB, true))
+        assertThat(plan.conversions.getValue(2)).isEqualTo(AsIs)
+        assertThat(plan.notes).hasSize(1)
+        assertThat(plan.notes.single()).contains("image/gif")
     }
 
     @Test
@@ -84,6 +109,17 @@ class MediaAdaptationTest {
         assertThat(planOf(listOf(video(1, size = 99 * MIB)), MASTODON).conversions.getValue(1)).isEqualTo(AsIs)
         assertThat(planOf(listOf(video(1, size = 99 * MIB + 1)), MASTODON).conversions.getValue(1))
             .isInstanceOf(TranscodeVideo::class.java)
+    }
+
+    @Test
+    fun `A7 a transcode does not raise the bitrate of a small source above its own`() {
+        // 30 000 000 bytes in a minute are 4 000 000 bit/s; the 99 MB limit alone would give 8 Mbit/s.
+        val mkv = video(1, mime = "video/x-matroska", size = 30_000_000)
+        assertThat((planOf(listOf(mkv), MASTODON).conversions.getValue(1) as TranscodeVideo).videoBitrate).isEqualTo(4_000_000)
+        // 5 000 000 bytes in a minute are under the 1080p floor, so the floor applies.
+        val small = video(1, mime = "video/x-matroska", size = 5_000_000)
+        assertThat((planOf(listOf(small), MASTODON).conversions.getValue(1) as TranscodeVideo).videoBitrate)
+            .isEqualTo(VideoTargets.MIN_BITRATE_1080)
     }
 
     @Test
