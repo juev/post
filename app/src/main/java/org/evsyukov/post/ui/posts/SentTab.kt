@@ -44,6 +44,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import org.evsyukov.post.R
+import org.evsyukov.post.core.markdown.MANUAL_BREAK
 import org.evsyukov.post.data.history.HistoryRecord
 import org.evsyukov.post.data.settings.HistoryRetention
 import org.evsyukov.post.ui.LocalAppContainer
@@ -192,7 +193,8 @@ private fun SentRow(record: HistoryRecord, onOpen: () -> Unit, actions: Publishe
             Column(Modifier.weight(1f)) {
                 Text(formatInstant(record.sentAt), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
                 Text(
-                    record.text.ifBlank { stringResource(R.string.posts_no_text) },
+                    // Manual breaks are markers, not text (threads.md T13).
+                    record.text.lines().filter { it.trim() != MANUAL_BREAK }.joinToString("\n").trim().ifBlank { stringResource(R.string.posts_no_text) },
                     style = MaterialTheme.typography.bodyLarge,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,

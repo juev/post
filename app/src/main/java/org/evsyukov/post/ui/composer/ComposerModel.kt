@@ -241,7 +241,8 @@ class ComposerModel(
             } else {
                 fill(record.text, record.options, accounts, emptyList())
                 editing = record
-                keptMedia = keptMediaOf(record, record.options.keptMedia)
+                // The record's own options may hold the edits of an earlier edit, by places that have moved since.
+                keptMedia = keptMediaOf(record, emptyList())
                 // R40: Mastodon copies are edited in place; a Bluesky copy is left unchanged by default (N32).
                 targets = record.items.filter { it.network == Network.MASTODON && it.accountId in existing }.map { it.accountId }
             }

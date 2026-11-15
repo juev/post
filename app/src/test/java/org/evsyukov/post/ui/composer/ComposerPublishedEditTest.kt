@@ -188,6 +188,19 @@ class ComposerPublishedEditTest {
     }
 
     @Test
+    fun aSecondEditStartsFromThePublishedFilesNotFromTheEditsOfTheFirst() {
+        // After an edit removed the first file, the second one is at place 0; the old edit must not remove it again.
+        val id = record(
+            "photo",
+            listOf(mastodonItem(alice, PublishedPart(id = "a1", text = "photo", media = listOf(PublishedMedia("m2", "second"))))),
+            PostOptions(keptMedia = listOf(KeptMedia(0, 0, "first", removed = true), KeptMedia(0, 1, "second"))),
+        )
+        show(editHistoryId = id)
+
+        assertThat(h.model.keptMedia).containsExactly(KeptMedia(0, 0, "second"))
+    }
+
+    @Test
     fun thePreviewMarksEditedAddedAndDeletedParts() {
         val id = record(
             "one\n$MANUAL_BREAK\ntwo\n$MANUAL_BREAK\nthree",
