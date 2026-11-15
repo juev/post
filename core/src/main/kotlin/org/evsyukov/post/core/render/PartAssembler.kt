@@ -76,7 +76,9 @@ object PartAssembler {
      * - [spoilerText], the draft's content warning, goes with every Mastodon part.
      *
      * [text] must have been rendered with [mediaOnlyParts] of [media] and with the same content warning;
-     * otherwise the part numbers would not match the parts, and this throws [IllegalArgumentException].
+     * otherwise the part numbers would not match the parts, and this throws [IllegalArgumentException]. A
+     * piece with media but no media-only replies may be missing from the map when it has text; a piece with
+     * media and no text needs its entry, or its media find no part and this throws too.
      */
     fun assemble(text: TextRender, media: MediaPlan?, hasPoll: Boolean, spoilerText: String): AccountRender {
         val profile = text.profile
@@ -86,7 +88,11 @@ object PartAssembler {
         if (text.issue != null) {
             return AccountRender(profile.key, profile.network, emptyList(), text.issue, mediaReady, text.manyPartsWarning)
         }
-        require(mediaOnlyParts(media) == text.mediaOnlyParts) { "The text was rendered for another media plan" }
+        // A piece without replies may be left out of the map: a piece with text gets its first part anyway.
+        // Media that then find no part (a piece with media and no text left out) fail below.
+        require(mediaOnlyParts(media).filterValues { it > 0 } == text.mediaOnlyParts.filterValues { it > 0 }) {
+            "The text was rendered for another media plan"
+        }
         val firsts = HashMap<Int, List<Long>>()
         val replies = HashMap<Int, ArrayDeque<List<Long>>>()
         for ((piece, parts) in media?.partsByPiece.orEmpty()) {

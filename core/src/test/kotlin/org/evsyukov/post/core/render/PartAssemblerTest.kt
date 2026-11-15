@@ -140,6 +140,19 @@ class PartAssemblerTest {
     }
 
     @Test
+    fun `text rendered without the pieces that have no media-only replies still takes the plan`() {
+        // The caller listed only the piece with replies; the text of piece 0 gives its first part anyway.
+        val media = plan(Network.MASTODON, mapOf(0 to listOf(PartMedia(0, listOf(1)), PartMedia(1, listOf(2))), 1 to listOf(PartMedia(0, listOf(3)))))
+        val source = "First piece.\n$MANUAL_BREAK\nSecond piece."
+        val text = render(source, mastodon(), mediaOnlyParts = mapOf(0 to 1))
+        val result = PartAssembler.assemble(text, media, hasPoll = false, spoilerText = "")
+        assertThat(result.parts.map { it.mediaItemIds }).containsExactly(listOf(1L), listOf(2L), listOf(3L)).inOrder()
+        // A piece with media and no text needs its entry, or its media find no part.
+        val empty = render("First piece.\n$MANUAL_BREAK\n", mastodon(), mediaOnlyParts = mapOf(0 to 1))
+        assertThrows(IllegalArgumentException::class.java) { PartAssembler.assemble(empty, media, false, "") }
+    }
+
+    @Test
     fun `media-only parts per piece come from the plan`() {
         val media = plan(
             Network.BLUESKY,
