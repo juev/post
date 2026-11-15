@@ -27,8 +27,9 @@ import org.evsyukov.post.core.text.TextEntities
  * (formatting.md, F9).
  *
  * Only these tags are written: `p`, `br`, `strong`, `em`, `del`, `code`, `pre`, `blockquote`, `ul`, `ol`,
- * `li` and `a` with `href` as its only attribute. Everything else is text, with `&`, `<`, `>` and `"`
- * escaped, so inline HTML in the draft reaches the reader as typed.
+ * `li`, `a` with `href` as its only attribute, and `ol` with `start` when the list does not start at 1.
+ * Everything else is text, with `&`, `<`, `>` and `"` escaped, so inline HTML in the draft reaches the
+ * reader as typed.
  *
  * - A paragraph is `<p>`; a line break inside it is `<br>`. Items of a tight list hold their text
  *   without `<p>`.
@@ -38,8 +39,8 @@ import org.evsyukov.post.core.text.TextEntities
  * - Images, reference links and their definitions, and Markdown outside the subset of F3 are text as typed;
  *   a spaced thematic break such as `* * *` is a paragraph of its own.
  * - A bare URL holding `_`, `*` or `~` is one link, as typed (see [parseMarkdown]).
- * - An ordered list is `<ol>` without `start`, because no attribute but `href` is allowed; its items are
- *   numbered from 1 by the reader.
+ * - An ordered list that starts at another number than 1 is `<ol start="n">`, so a thread part that
+ *   begins at item 3 still shows 3 (Mastodon's sanitizer keeps `start` on `ol`).
  * - Manual break lines are removed (threads.md, T13); the pieces around them are joined by a blank line.
  */
 fun toHtml(source: String): String {
@@ -66,7 +67,16 @@ private class HtmlWriter(private val source: String, private val out: StringBuil
             }
             is BlockQuote -> wrap("blockquote", node)
             is BulletList -> wrap("ul", node)
-            is OrderedList -> wrap("ol", node)
+            is OrderedList -> {
+                val start = node.markerStartNumber ?: 1
+                if (start == 1) {
+                    wrap("ol", node)
+                } else {
+                    out.append("<ol start=\"").append(start).append("\">")
+                    children(node)
+                    out.append("</ol>")
+                }
+            }
             is ListItem -> wrap("li", node)
             is FencedCodeBlock -> {
                 out.append("<pre><code>")

@@ -31,7 +31,10 @@ class HtmlTest {
     fun `quotes and lists`() {
         assertThat(toHtml("> quote **b**")).isEqualTo("<blockquote><p>quote <strong>b</strong></p></blockquote>")
         assertThat(toHtml("- a\n- b")).isEqualTo("<ul><li>a</li><li>b</li></ul>")
-        assertThat(toHtml("3. a\n4. b")).isEqualTo("<ol><li>a</li><li>b</li></ol>")
+        assertThat(toHtml("1. a\n2. b")).isEqualTo("<ol><li>a</li><li>b</li></ol>")
+        // A thread part may begin in the middle of a list: the reader must still see 3 and 4.
+        assertThat(toHtml("3. a\n4. b")).isEqualTo("<ol start=\"3\"><li>a</li><li>b</li></ol>")
+        assertThat(toHtml("0) a")).isEqualTo("<ol start=\"0\"><li>a</li></ol>")
         assertThat(toHtml("- a\n\n- b")).isEqualTo("<ul><li><p>a</p></li><li><p>b</p></li></ul>")
         assertThat(toHtml("- a\n  - b")).isEqualTo("<ul><li>a<ul><li>b</li></ul></li></ul>")
     }
