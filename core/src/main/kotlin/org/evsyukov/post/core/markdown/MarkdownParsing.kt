@@ -16,10 +16,6 @@ data class SourceRange(val start: Int, val end: Int) {
     }
 
     val length: Int get() = end - start
-
-    fun contains(offset: Int): Boolean = offset in start until end
-
-    fun overlaps(other: SourceRange): Boolean = start < other.end && other.start < end
 }
 
 /**
