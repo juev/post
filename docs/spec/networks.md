@@ -48,6 +48,7 @@ Instances and forks change the limits: glitch-soc and Hometown read the text lim
 
 ### Publishing
 
+- N6a. The Mastodon network type covers every server with the Mastodon client API: glitch-soc, Hometown, GoToSocial, Pleroma, Akkoma and others. Their differences in limits and formats are read from the server (N1, formatting.md F1).
 - N7. Media go to `POST /api/v2/media` with `description` and `focus`. Images return 200. Video and audio return 202 and are polled with `GET /api/v1/media/:id` until 200 (ready) or 422 (failed). A status with unprocessed media is rejected, so Post waits for all of them.
 - N8. Media upload is limited to 30 requests per 30 minutes. Uploaded media that are not attached to a status within a day are deleted by the server, so Post uploads media at send time, not at queue time.
 - N9. The status goes to `POST /api/v1/statuses` with `status`, `media_ids[]`, `spoiler_text`, `sensitive`, `visibility`, `language`, `poll[...]`, `in_reply_to_id` for thread parts, and `Idempotency-Key`.
@@ -76,8 +77,8 @@ OAuth for a native app requires:
 Scope `atproto transition:generic` gives app-password-level access. Video upload also needs `com.atproto.server.getServiceAuth`, which a granular scope must allow through `rpc:`.
 
 - N13. Sign-in starts from a handle. Post resolves the handle to a DID (DNS TXT `_atproto.<handle>` or `https://<handle>/.well-known/atproto-did`), checks the DID document points back to the handle, and takes the PDS from the `#atproto_pds` service.
-- N14. Proposal: OAuth as the main method, with the client metadata hosted on GitHub Pages of the repository, and app passwords as a fallback for PDSes without OAuth. Open question: the user decides the method and the metadata host.
-- N15. Because a refresh session expires after two weeks, a queued Bluesky delivery can find its account signed out. Post refreshes the session whenever the app runs and treats an expired session as R5 of product.md (needs sign-in), not as a failure of the post. (Not verified: whether the two-week limit is absolute or sliding.)
+- N14. Decision of 2026-11-15: the first version signs in with the handle and an app password (`com.atproto.server.createSession`), so Post needs no hosted file. The sign-in code keeps the method behind one interface, so OAuth can be added later without changing accounts or sending. OAuth needs a static JSON file at an HTTPS address; where to host it is decided when OAuth is added.
+- N15. Post stores the access and refresh tokens from `createSession`, not the app password, and refreshes them with `com.atproto.server.refreshSession`. When the refresh is rejected, the account needs sign-in (R5 of product.md). `createSession` is limited to 30 calls per 5 minutes per account, so Post never signs in again on its own in a loop.
 
 ### Text and facets
 

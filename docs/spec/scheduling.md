@@ -11,7 +11,7 @@ Decisions of 2026-11-15: the schedule is a set of weekly slots; scheduled posts 
 - S3. A slot is free when no queued post is assigned to it. Each slot holds at most one post.
 - S4. "Next free slot" assigns the earliest free slot that is at least one minute after now.
 - S5. A post may have an explicit time instead of a slot. Such posts do not occupy slots and may share a time with other posts.
-- S6. Changing the schedule does not move posts that already have a slot time: each queued post keeps its assigned time. The Queue screen offers "Redistribute", which reassigns all slot-based posts, in their current order, to the free slots of the new schedule.
+- S6. Changing the schedule does not move posts that already have a slot time: each queued post keeps its assigned time. The Schedule screen offers "Redistribute", which reassigns all slot-based posts, in their current order, to the free slots of the new schedule.
 - S7. Deleting or sending a slot-based post early frees its slot; later posts stay where they are.
 
 ## Queue
@@ -19,7 +19,7 @@ Decisions of 2026-11-15: the schedule is a set of weekly slots; scheduled posts 
 - Q1. A queued post has a send time, a list of target accounts and a state per delivery: waiting, sending, sent, failed.
 - Q2. A queued post can be edited until its first delivery starts. Editing re-runs the limit checks for its targets.
 - Q3. Send now on a queued post starts delivery immediately and frees its slot.
-- Q4. If the device was off or without network at the send time, the post is sent as soon as possible after it. The Queue screen shows that it is late. There is no expiry: a late post is still sent. (Open question: a setting to skip posts that are more than N hours late.)
+- Q4. If the device was off or without network at the send time, the post is sent as soon as possible after it. The Queue tab of Posts shows that it is late. There is no expiry: a late post is still sent. (Open question: a setting to skip posts that are more than N hours late.)
 - Q5. Several posts due at the same time are sent in their queue order, one after another per account, so threads and order stay intact.
 
 ## Android mechanism

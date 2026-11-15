@@ -1,6 +1,13 @@
 # Post: product specification
 
-Status: draft, nothing implemented. Network limits are in [networks.md](networks.md), the queue and schedule in [scheduling.md](scheduling.md), releases in [distribution.md](distribution.md).
+Status: draft, nothing implemented. The other files:
+
+- [screens.md](screens.md): screens and their content;
+- [networks.md](networks.md): network limits, sign-in, publishing;
+- [media.md](media.md): how attachments are adapted to each network;
+- [formatting.md](formatting.md): Markdown and its conversion per server;
+- [scheduling.md](scheduling.md): the queue and the schedule;
+- [distribution.md](distribution.md): releases.
 
 Sources: the user's requirements and decisions of 2026-11-15; the Mastodon, AT Protocol, Obtainium and Android documentation cited in the other files.
 
@@ -9,6 +16,8 @@ Sources: the user's requirements and decisions of 2026-11-15; the Mastodon, AT P
 Post is an Android app that publishes one message to several Bluesky and Mastodon accounts at once. A message has text and optional attachments. It goes out right away or later: at a time chosen for it, or in the next free slot of a weekly schedule.
 
 The app accepts content from Android's Share menu. Sharing offers two actions: send now or send later.
+
+Post is an Android app only, with no web part. The composer is its start screen.
 
 Out of scope: reading timelines, notifications, replies to other people's posts, direct messages, editing or deleting published posts, other networks. The data model must allow more network types later (see R3).
 
@@ -31,7 +40,7 @@ Android 13 (API 33) and newer. Kotlin, Jetpack Compose, Room, WorkManager, as in
 - R1. The user adds any number of accounts in each network and removes them. A removed account leaves its pending deliveries marked failed with the reason "account removed".
 - R2. Each account shows its avatar, display name, handle and network. The user sets a short label for it, shown in the target picker.
 - R3. Accounts belong to a network type through a single interface (publish, upload media, read limits, verify credentials). Adding a third network does not change the queue, composer or share flow.
-- R4. Sign-in follows the network's method from networks.md (Mastodon OAuth, Bluesky OAuth or app password). Tokens are stored encrypted with a key in Android Keystore. They are never logged and never sent to any host other than the account's server.
+- R4. Sign-in follows the network's method from networks.md: OAuth for Mastodon, an app password for Bluesky in the first version, Bluesky OAuth later. Tokens are stored encrypted with a key in Android Keystore. They are never logged and never sent to any host other than the account's server.
 - R5. When a server rejects the credentials, the account is marked "needs sign-in", its deliveries stop with that reason, and a notification asks to sign in again. Signing in again resumes them.
 
 ### Composer
@@ -41,14 +50,14 @@ Android 13 (API 33) and newer. Kotlin, Jetpack Compose, Room, WorkManager, as in
 - R8. A character counter is shown for each selected network, counted by that network's rules and limit (networks.md). If the text exceeds the limit of any selected account, the counter of that network turns red and Send is disabled. The composer offers to split the text into a thread for that network (R12).
 - R9. Attachments: images, video, GIF, and for Mastodon audio. Sources: the Android photo picker, the file picker (`ACTION_OPEN_DOCUMENT`), the Share menu. Every attachment is copied into app storage when added, so later sending does not depend on the source app's URI grant.
 - R10. Each attachment has alt text. A setting "Require alt text" (off by default) blocks sending without it.
-- R11. Before sending, the app checks every attachment against each selected account: count, type, size, resolution, duration, and allowed combinations. Images that exceed a size limit are downscaled and recompressed automatically. Video is not transcoded in the first version: a video that does not fit is reported with the network and the limit it breaks, and that account cannot be selected until the video is removed.
+- R11. The user attaches files once for all targets. The app checks every attachment against each selected account: count, type, size, resolution, duration, and allowed combinations. It converts images and transcodes video by itself when that keeps the content. When something must be dropped or moved, the composer shows the conflict for that network and offers fixes; sending waits for a fix. Rules are in [media.md](media.md).
 - R12. Thread: the user can split a message into several parts with an explicit separator. Each part is checked against the limits on its own. A thread is published as a chain of replies to the previous part, in each target account. Attachments belong to the part they were added to.
 - R13. Per-network options:
   - Mastodon: visibility (public, unlisted, followers only, direct), content warning text, sensitive media flag, language, poll (options and duration; not combined with media).
   - Bluesky: language(s), content labels for media (adult content values from networks.md), who can reply (threadgate), quotes allowed (postgate).
   - Common: language is entered once and passed to both networks.
 - R14. Links: the app does not fetch link previews in the first version for Mastodon (the server builds them). For Bluesky, the app builds a link card from the first link when the post has no media: it fetches the page's title, description and image itself. The user can remove the card.
-- R15. Leaving the composer with unsaved changes asks whether to keep the draft. Drafts are saved locally and listed on the Drafts screen.
+- R15. Leaving the composer with unsaved changes asks whether to keep the draft. Drafts are saved locally and listed on the Drafts tab of Posts.
 
 ### Defaults
 
@@ -69,7 +78,7 @@ Android 13 (API 33) and newer. Kotlin, Jetpack Compose, Room, WorkManager, as in
 Detailed rules are in [scheduling.md](scheduling.md).
 
 - R24. Send later offers: "Next free slot" (default), a date and time picker, and the slots of the next days to choose from.
-- R25. The Queue screen lists scheduled posts by time and failed deliveries. The user can open a queued post, edit it, change its time, send it now or delete it.
+- R25. The Queue tab of Posts lists scheduled posts by time and failed deliveries. The user can open a queued post, edit it, change its time, send it now or delete it.
 - R26. Settings hold the weekly schedule: for each weekday, a list of times. The schedule uses the device time zone at the moment of sending.
 
 ### Sending and history
@@ -78,7 +87,7 @@ Detailed rules are in [scheduling.md](scheduling.md).
 - R28. Deliveries to different accounts are independent: a failure in one account does not stop the others. A post is sent when every delivery has succeeded.
 - R29. Temporary errors (no network, timeout, HTTP 5xx, 429) are retried with backoff. Errors that retrying cannot fix (rejected credentials, validation error, a limit change that makes the post invalid) stop that delivery, mark it failed with the server's message and show a notification.
 - R30. A repeated send must not create a duplicate post (networks.md, Idempotency). A thread already partly published resumes from the first unpublished part.
-- R31. The History screen lists sent posts with links to each published copy. History is kept for 30 days by default (setting); attachment copies are deleted as soon as all deliveries of a post succeed.
+- R31. The Sent tab of Posts keeps a short history: text, send time and a link to each published copy, without media. Records are kept for 30 days by default; the setting offers off, 7, 30 and 90 days. History lets the user find a published copy and start a new post from an old one. Attachment copies are deleted as soon as all deliveries of a post succeed.
 - R32. Notifications: progress of a long upload, failure of a delivery, success summary (setting, off by default). On Android 13+ the permission is requested the first time the user sends.
 
 ### General
@@ -87,9 +96,12 @@ Detailed rules are in [scheduling.md](scheduling.md).
 - R34. The app sends no analytics and talks only to the account servers and, for Bluesky link cards, the linked page.
 - R35. Interface languages: English and Russian.
 
+### Formatting
+
+- R36. The composer edits Markdown with live highlighting and a formatting toolbar above the keyboard. Each account gets Markdown or HTML when its server accepts them, and plain text with the markup removed otherwise. Rules are in [formatting.md](formatting.md).
+
 ## Open questions
 
-- Bluesky sign-in: OAuth only, app password only, or both, and where the OAuth client metadata is hosted (networks.md, N14).
 - Late queued posts: whether to skip posts more than N hours late (scheduling.md, Q4).
-- Video transcoding to fit limits: not in the first version (R11); revisit after use.
+- Bluesky OAuth: when to add it and where to host its client metadata (networks.md, N14).
 - Quotes (Mastodon 4.5+, Bluesky): not in the first version.
