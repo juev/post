@@ -9,7 +9,9 @@ import androidx.navigation3.ui.NavDisplay
 import kotlinx.serialization.Serializable
 import org.evsyukov.post.core.media.Network
 import org.evsyukov.post.ui.composer.ComposerScreen
+import org.evsyukov.post.ui.posts.PostDetailsScreen
 import org.evsyukov.post.ui.posts.PostsScreen
+import org.evsyukov.post.ui.posts.SentNavigation
 import org.evsyukov.post.ui.schedule.ScheduleScreen
 import org.evsyukov.post.ui.settings.AboutScreen
 import org.evsyukov.post.ui.settings.DefaultsSettingsScreen
@@ -20,9 +22,16 @@ import org.evsyukov.post.ui.settings.accounts.AccountsScreen
 import org.evsyukov.post.ui.settings.accounts.AddBlueskyScreen
 import org.evsyukov.post.ui.settings.accounts.AddMastodonScreen
 
-/** The composer, the start screen (screens.md, Navigation); with [draftId] it opens that draft (R15). */
+/**
+ * The composer, the start screen (screens.md, Navigation); with [draftId] it opens that draft (R15), with
+ * [editHistoryId] it edits that published post (R40), with [fromHistoryId] it starts a new post from it (R31).
+ */
 @Serializable
-data class ComposerKey(val draftId: Long? = null) : NavKey
+data class ComposerKey(val draftId: Long? = null, val editHistoryId: Long? = null, val fromHistoryId: Long? = null) : NavKey
+
+/** Post details of a queued post ([postId]) or of a sent one ([historyId]). */
+@Serializable
+data class PostDetailsKey(val postId: Long? = null, val historyId: Long? = null) : NavKey
 
 /** Queue, drafts and sent posts. */
 @Serializable
@@ -86,6 +95,8 @@ fun PostApp(openOnStart: NavKey? = null) {
             entry<ComposerKey> { key ->
                 ComposerScreen(
                     draftId = key.draftId,
+                    editHistoryId = key.editHistoryId,
+                    fromHistoryId = key.fromHistoryId,
                     onOpenPosts = { open(PostsKey) },
                     onOpenSchedule = { open(ScheduleKey) },
                     onOpenSettings = { open(SettingsKey) },
@@ -93,7 +104,30 @@ fun PostApp(openOnStart: NavKey? = null) {
                     onExit = { if (backStack.size > 1) back() else activity?.finish() },
                 )
             }
-            entry<PostsKey> { PostsScreen(onBack = back, onEdit = { open(ComposerKey(it)) }, onOpenSchedule = { open(ScheduleKey) }) }
+            val sent = SentNavigation(
+                onOpen = { open(PostDetailsKey(historyId = it)) },
+                onEdit = { open(ComposerKey(editHistoryId = it)) },
+                onNewFrom = { open(ComposerKey(fromHistoryId = it)) },
+            )
+            entry<PostsKey> {
+                PostsScreen(
+                    onBack = back,
+                    onEdit = { open(ComposerKey(it)) },
+                    onOpenSchedule = { open(ScheduleKey) },
+                    onOpenDetails = { open(PostDetailsKey(postId = it)) },
+                    sent = sent,
+                )
+            }
+            entry<PostDetailsKey> { key ->
+                PostDetailsScreen(
+                    postId = key.postId,
+                    historyId = key.historyId,
+                    onBack = back,
+                    onEdit = { open(ComposerKey(it)) },
+                    onOpenSchedule = { open(ScheduleKey) },
+                    navigation = sent,
+                )
+            }
             entry<ScheduleKey> { ScheduleScreen(onBack = back, onOpenPost = { open(ComposerKey(it)) }) }
             entry<SettingsKey> {
                 SettingsScreen(

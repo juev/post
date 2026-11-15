@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="drafts_empty">Черновиков нет. Если уйти из редактора и сохранить текст, черновик появится здесь.</string>
+    <string name="drafts_deleted">Черновик удалён</string>
+    <string name="drafts_menu">Действия с черновиком</string>
+    <string name="drafts_no_targets">Аккаунты не выбраны</string>
+    <string name="drafts_open">Открыть</string>
+    <string name="drafts_saved_at">Сохранён %1$s</string>
+
+    <plurals name="sent_empty">
+        <item quantity="one">Отправленных постов пока нет. Они хранятся здесь %1$d день, потом их можно только открыть в браузере.</item>
+        <item quantity="few">Отправленных постов пока нет. Они хранятся здесь %1$d дня, потом их можно только открыть в браузере.</item>
+        <item quantity="many">Отправленных постов пока нет. Они хранятся здесь %1$d дней, потом их можно только открыть в браузере.</item>
+        <item quantity="other">Отправленных постов пока нет. Они хранятся здесь %1$d дня, потом их можно только открыть в браузере.</item>
+    </plurals>
+    <string name="sent_history_off">История выключена, отправленные посты не сохраняются. Их можно только открыть в браузере, но не изменить или удалить отсюда. Включить историю можно в Настройках, раздел «Отправка».</string>
+    <string name="sent_menu">Действия с отправленным постом</string>
+    <string name="sent_open">Открыть</string>
+    <string name="sent_copy_link">Скопировать ссылку</string>
+    <string name="sent_link_copied">Ссылка скопирована</string>
+    <string name="sent_new_from">Новый пост на его основе</string>
+    <string name="sent_pending">Правка или удаление этого поста стоит в очереди</string>
+    <string name="sent_no_browser">Нет приложения, чтобы открыть ссылку</string>
+    <string name="sent_open_on">Открыть копию в %1$s</string>
+    <string name="sent_kept_until">Хранится до %1$s</string>
+
+    <string name="details_title">Пост</string>
+    <string name="details_gone">Поста здесь больше нет. Возможно, его отправили или удалили.</string>
+    <string name="details_parts_unknown">Части будут посчитаны при отправке.</string>
+    <string name="details_edit_published">Изменить опубликованный</string>
+    <string name="details_delete_published">Удалить опубликованный</string>
+    <string name="details_kind_edit">Правка опубликованного поста</string>
+    <string name="details_kind_delete">Удаление опубликованного поста</string>
+    <string name="details_attachments">Вложения</string>
+    <string name="details_media_not_kept">После отправки файлы вложений не хранятся.</string>
+    <string name="details_sent_at">Отправлен %1$s</string>
+    <string name="details_due_at">Отправка %1$s</string>
+    <string name="details_account_gone">%1$s (аккаунт удалён)</string>
+    <string name="details_media_alt">Часть %1$d: %2$s</string>
+
+    <string name="delete_published_title">Удалить опубликованный пост?</string>
+    <string name="delete_published_text">Все части треда удаляются в выбранных аккаунтах, начиная с последней. Уже удалённая часть считается удалённой.</string>
+    <string name="delete_published_queued">Удаление поставлено в очередь</string>
+
+    <string name="edit_title">Правка</string>
+    <string name="edit_save">Сохранить</string>
+    <string name="edit_queued">Изменения поставлены в очередь</string>
+    <string name="edit_not_available">Поста больше нет в истории, изменить его нельзя</string>
+    <string name="edit_bluesky_account">Bluesky: %1$s</string>
+    <string name="edit_bluesky_leave">Оставить как есть</string>
+    <string name="edit_bluesky_repost">Удалить и опубликовать заново</string>
+    <string name="edit_bluesky_warning">Bluesky не умеет изменять посты. При повторной публикации пропадут лайки, репосты и ответы.</string>
+    <string name="edit_poll_warning">Изменение вариантов опроса обнулит голоса.</string>
+    <string name="edit_visibility_locked">Видимость опубликованного поста изменить нельзя.</string>
+    <string name="edit_kept_media">Опубликованные файлы</string>
+    <string name="edit_kept_media_item">Часть %1$d, файл %2$d</string>
+    <string name="edit_kept_media_alt">Альтернативный текст</string>
+    <string name="edit_kept_media_remove">Убрать файл из поста</string>
+    <string name="edit_kept_media_keep">Оставить файл в посте</string>
+    <string name="edit_kept_media_removed">Убран</string>
+    <string name="edit_mark_unchanged">Без изменений</string>
+    <string name="edit_mark_edited">Изменена</string>
+    <string name="edit_mark_added">Добавлена</string>
+    <plurals name="edit_mark_deleted">
+        <item quantity="one">%d опубликованная часть будет удалена</item>
+        <item quantity="few">%d опубликованные части будут удалены</item>
+        <item quantity="many">%d опубликованных частей будут удалены</item>
+        <item quantity="other">%d опубликованной части будут удалены</item>
+    </plurals>
+</resources>

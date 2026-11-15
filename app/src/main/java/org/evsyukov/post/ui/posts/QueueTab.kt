@@ -2,6 +2,7 @@ package org.evsyukov.post.ui.posts
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -92,6 +93,7 @@ object QueueTags {
     const val DELETE_CONFIRM = "queue-delete-confirm"
 
     fun row(id: Long) = "queue-row-$id"
+    fun open(id: Long) = "queue-open-$id"
     fun menu(id: Long) = "queue-menu-$id"
     fun handle(id: Long) = "queue-handle-$id"
     fun pin(id: Long) = "queue-pin-$id"
@@ -108,7 +110,7 @@ private const val WAITING_KEY = "w-"
  * Move up and Move down. A reorder offers Undo.
  */
 @Composable
-fun QueueTab(snackbar: SnackbarHostState, onEdit: (Long) -> Unit, onOpenSchedule: () -> Unit) {
+fun QueueTab(snackbar: SnackbarHostState, onEdit: (Long) -> Unit, onOpenSchedule: () -> Unit, onOpen: (Long) -> Unit = {}) {
     val container = LocalAppContainer.current
     val actions = container.queueActions
     val resources = LocalResources.current
@@ -209,7 +211,7 @@ fun QueueTab(snackbar: SnackbarHostState, onEdit: (Long) -> Unit, onOpenSchedule
                     }
                 }
                 items(groups.late, key = { "l-${it.id}" }) { post ->
-                    QueueRow(post, accountsById, handle = null, menu = { dismiss -> RowMenu(post, null, null, dismiss, ::act, onEdit, { changing = it }, { deleting = it }) })
+                    QueueRow(post, accountsById, onOpen = onOpen, handle = null, menu = { dismiss -> RowMenu(post, null, null, dismiss, ::act, onEdit, { changing = it }, { deleting = it }) })
                 }
             }
             if (groups.failed.isNotEmpty()) {
@@ -220,6 +222,7 @@ fun QueueTab(snackbar: SnackbarHostState, onEdit: (Long) -> Unit, onOpenSchedule
                     QueueRow(
                         post,
                         accountsById,
+                        onOpen = onOpen,
                         handle = null,
                         menu = { dismiss -> RowMenu(post, null, null, dismiss, ::act, onEdit, { changing = it }, { deleting = it }) },
                         failures = {
@@ -248,6 +251,7 @@ fun QueueTab(snackbar: SnackbarHostState, onEdit: (Long) -> Unit, onOpenSchedule
                             QueueRow(
                                 post,
                                 accountsById,
+                                onOpen = onOpen,
                                 handle = handle,
                                 menu = { dismiss ->
                                     RowMenu(
@@ -333,7 +337,8 @@ private fun RowMenu(
     val waiting = !post.started
     if (waiting) MenuEntry(R.string.posts_send_now, QueueTags.MENU_SEND_NOW, dismiss) { act { container.queueActions.sendNow(post.id) } }
     if (waiting) MenuEntry(R.string.posts_change_time, QueueTags.MENU_CHANGE_TIME, dismiss) { onChangeTime(post.id) }
-    if (waiting) MenuEntry(R.string.posts_edit, QueueTags.MENU_EDIT, dismiss) { onEdit(post.id) }
+    // A deletion of a published post has nothing to edit.
+    if (waiting && post.kind != org.evsyukov.post.data.db.PostKind.DELETE) MenuEntry(R.string.posts_edit, QueueTags.MENU_EDIT, dismiss) { onEdit(post.id) }
     if (post.deliveries.any { it.state == DeliveryState.FAILED }) {
         MenuEntry(R.string.posts_retry, QueueTags.MENU_RETRY, dismiss) { act { container.publisher.retryPost(post.id) } }
     }
@@ -363,6 +368,7 @@ private fun MenuEntry(text: Int, tag: String, dismiss: () -> Unit, onClick: () -
 private fun QueueRow(
     post: Post,
     accounts: Map<Long, Account>,
+    onOpen: (Long) -> Unit,
     handle: Modifier?,
     menu: @Composable (dismiss: () -> Unit) -> Unit,
     failures: @Composable () -> Unit = {},
@@ -370,8 +376,10 @@ private fun QueueRow(
     var open by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxWidth().testTag(QueueTags.row(post.id))) {
         Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
+            // screens.md: Post details open from any row of the queue; the handle and the menu keep their own taps.
+            Column(Modifier.weight(1f).clickable { onOpen(post.id) }.testTag(QueueTags.open(post.id))) {
                 Text(timeLabel(post), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                kindLabel(post)?.let { Text(stringResource(it), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.tertiary) }
                 Text(
                     firstLine(post.text).ifEmpty { stringResource(R.string.posts_no_text) },
                     style = MaterialTheme.typography.bodyLarge,
@@ -425,6 +433,13 @@ private fun QueueRow(
         Column(Modifier.padding(start = 16.dp, end = 16.dp)) { failures() }
         HorizontalDivider()
     }
+}
+
+/** An edit or a deletion of a published post is marked as such (R41: it waits and fails like a post). */
+private fun kindLabel(post: Post): Int? = when (post.kind) {
+    org.evsyukov.post.data.db.PostKind.NEW -> null
+    org.evsyukov.post.data.db.PostKind.EDIT -> R.string.details_kind_edit
+    org.evsyukov.post.data.db.PostKind.DELETE -> R.string.details_kind_delete
 }
 
 /** When the post goes: the slot, or the explicit or Send now time. */

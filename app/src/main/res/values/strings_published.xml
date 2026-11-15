@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Drafts tab (R15; screens.md, Posts). -->
+    <string name="drafts_empty">No drafts. When you leave the composer and keep the text, the draft waits here.</string>
+    <string name="drafts_deleted">Draft deleted</string>
+    <string name="drafts_menu">Actions for this draft</string>
+    <string name="drafts_no_targets">No accounts chosen</string>
+    <string name="drafts_open">Open</string>
+    <!-- %1$s is the date and time the draft was saved. -->
+    <string name="drafts_saved_at">Saved %1$s</string>
+
+    <!-- Sent tab (R31, R37). %1$d is the number of days records are kept. -->
+    <plurals name="sent_empty">
+        <item quantity="one">No sent posts yet. Sent posts are kept here for %1$d day; after that they can only be opened in the browser.</item>
+        <item quantity="other">No sent posts yet. Sent posts are kept here for %1$d days; after that they can only be opened in the browser.</item>
+    </plurals>
+    <string name="sent_history_off">History is off, so sent posts are not kept. They can only be opened in the browser, not edited or deleted here. Turn history on in Settings, Sending.</string>
+    <string name="sent_menu">Actions for this sent post</string>
+    <string name="sent_open">Open</string>
+    <string name="sent_copy_link">Copy link</string>
+    <string name="sent_link_copied">Link copied</string>
+    <string name="sent_new_from">New post from this</string>
+    <string name="sent_pending">An edit or a deletion of this post is in the queue</string>
+    <string name="sent_no_browser">No app can open this link</string>
+    <!-- %1$s is the account handle. -->
+    <string name="sent_open_on">Open the copy on %1$s</string>
+    <!-- %1$s is the date and time the record is deleted. -->
+    <string name="sent_kept_until">Kept until %1$s</string>
+
+    <!-- Post details (screens.md, Post details). -->
+    <string name="details_title">Post details</string>
+    <string name="details_gone">This post is no longer here. It may have been sent or deleted.</string>
+    <string name="details_parts_unknown">The parts are counted when the post is sent.</string>
+    <string name="details_edit_published">Edit published</string>
+    <string name="details_delete_published">Delete published</string>
+    <string name="details_kind_edit">Edit of a published post</string>
+    <string name="details_kind_delete">Deletion of a published post</string>
+    <string name="details_attachments">Attachments</string>
+    <string name="details_media_not_kept">Media files are not kept after sending.</string>
+    <!-- %1$s is a date and time. -->
+    <string name="details_sent_at">Sent %1$s</string>
+    <string name="details_due_at">Due %1$s</string>
+    <!-- %1$s is the account handle. -->
+    <string name="details_account_gone">%1$s (account removed)</string>
+    <!-- %1$d is the part number, %2$s the alt text. -->
+    <string name="details_media_alt">Part %1$d: %2$s</string>
+
+    <!-- Delete published (R39). -->
+    <string name="delete_published_title">Delete the published post?</string>
+    <string name="delete_published_text">Every part of the thread is deleted on the chosen accounts, last part first. A part that is already gone counts as deleted.</string>
+    <string name="delete_published_queued">Deletion queued</string>
+
+    <!-- Editing a published post (R40; networks.md N28–N32). -->
+    <string name="edit_title">Editing</string>
+    <string name="edit_save">Save</string>
+    <string name="edit_queued">Changes queued</string>
+    <string name="edit_not_available">This post is no longer in history and cannot be edited</string>
+    <!-- %1$s is the Bluesky account handle. -->
+    <string name="edit_bluesky_account">Bluesky: %1$s</string>
+    <string name="edit_bluesky_leave">Leave unchanged</string>
+    <string name="edit_bluesky_repost">Delete and post again</string>
+    <string name="edit_bluesky_warning">Bluesky cannot edit a post. Posting again loses its likes, reposts and replies.</string>
+    <string name="edit_poll_warning">Changing the poll options resets its votes.</string>
+    <string name="edit_visibility_locked">The visibility of a published post cannot change.</string>
+    <string name="edit_kept_media">Published media</string>
+    <!-- %1$d is the part number, %2$d the file number. -->
+    <string name="edit_kept_media_item">Part %1$d, file %2$d</string>
+    <string name="edit_kept_media_alt">Alt text</string>
+    <string name="edit_kept_media_remove">Remove this file from the post</string>
+    <string name="edit_kept_media_keep">Keep this file in the post</string>
+    <string name="edit_kept_media_removed">Removed</string>
+    <string name="edit_mark_unchanged">Unchanged</string>
+    <string name="edit_mark_edited">Edited</string>
+    <string name="edit_mark_added">Added</string>
+    <plurals name="edit_mark_deleted">
+        <item quantity="one">%d published part will be deleted</item>
+        <item quantity="other">%d published parts will be deleted</item>
+    </plurals>
+</resources>

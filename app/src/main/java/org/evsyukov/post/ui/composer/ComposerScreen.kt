@@ -62,6 +62,7 @@ import kotlinx.coroutines.launch
 import org.evsyukov.post.R
 import org.evsyukov.post.core.markdown.HighlightSpan
 import org.evsyukov.post.core.markdown.highlight
+import org.evsyukov.post.core.media.Network
 import org.evsyukov.post.data.posts.Schedule
 import org.evsyukov.post.ui.schedule.SendLaterSheet
 import org.evsyukov.post.ui.schedule.rememberSendLaterOptions
@@ -122,7 +123,18 @@ object ComposerTags {
     const val TIME_CONFIRM = "composer-time-confirm"
     const val DATE_CONFIRM = "composer-date-confirm"
 
+    const val VISIBILITY_LOCKED = "composer-visibility-locked"
+    const val EDIT_POLL_WARNING = "composer-edit-poll-warning"
+    const val EDIT_UNAVAILABLE = "composer-edit-unavailable"
+    const val KEPT_MEDIA = "composer-kept-media"
+
     fun target(id: Long) = "composer-target-$id"
+    fun previewMark(profile: Int, part: Int) = "composer-preview-mark-$profile-$part"
+    fun previewDeleted(profile: Int) = "composer-preview-deleted-$profile"
+    fun blueskyLeave(id: Long) = "composer-bluesky-leave-$id"
+    fun blueskyRepost(id: Long) = "composer-bluesky-repost-$id"
+    fun keptMedia(part: Int, index: Int) = "composer-kept-media-$part-$index"
+    fun keptMediaToggle(part: Int, index: Int) = "composer-kept-media-toggle-$part-$index"
     fun breakRemove(index: Int) = "composer-break-remove-$index"
     fun statusEntry(index: Int) = "composer-status-$index"
     fun previewPart(profile: Int, part: Int) = "composer-preview-$profile-$part"
@@ -131,6 +143,13 @@ object ComposerTags {
     fun pollOptionRemove(index: Int) = "composer-poll-option-remove-$index"
     fun pollDuration(seconds: Long) = "composer-poll-duration-$seconds"
     fun optionsAccount(id: Long) = "composer-options-account-$id"
+}
+
+/** The key of the composer's model: one per draft, published post being edited, or sent post started from. */
+fun composerModelKey(draftId: Long?, editHistoryId: Long? = null, fromHistoryId: Long? = null): String = when {
+    editHistoryId != null -> "composer-edit-$editHistoryId"
+    fromHistoryId != null -> "composer-from-$fromHistoryId"
+    else -> "composer-${draftId ?: "new"}"
 }
 
 /** Where the composer goes when the user leaves it. */
@@ -158,9 +177,15 @@ fun ComposerScreen(
     onOpenSchedule: () -> Unit,
     onOpenSettings: () -> Unit,
     onExit: () -> Unit = {},
+    /** Edit the published post of this history record (R40). */
+    editHistoryId: Long? = null,
+    /** A new post from this history record (R31). */
+    fromHistoryId: Long? = null,
 ) {
     val container = LocalAppContainer.current
-    val model: ComposerModel = viewModel(key = "composer-${draftId ?: "new"}") { ComposerModel(container, draftId) }
+    val model: ComposerModel = viewModel(key = composerModelKey(draftId, editHistoryId, fromHistoryId)) {
+        ComposerModel(container, draftId, editHistoryId, fromHistoryId)
+    }
     ComposerContent(model, onOpenPosts, onOpenSchedule, onOpenSettings, onExit)
 }
 
@@ -266,7 +291,7 @@ private fun ComposerContent(
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(R.string.app_name)) },
+                title = { Text(stringResource(if (model.editing != null || model.editUnavailable) R.string.edit_title else R.string.app_name)) },
                 actions = {
                     val postsLabel = if (lateCount > 0) {
                         pluralStringResource(R.plurals.schedule_late_title, lateCount, lateCount)
@@ -314,12 +339,29 @@ private fun ComposerContent(
         },
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).imePadding()) {
+            val editing = model.editing
+            // R40: an edit lists only the accounts that hold the post; Bluesky ones choose below (N32).
+            val holders = model.holders.toSet()
             TargetsRow(
-                accounts = accounts.orEmpty(),
+                accounts = if (editing == null) accounts.orEmpty() else accounts.orEmpty().filter { it.id in holders && it.network == Network.MASTODON },
                 selected = model.targets,
                 onToggle = model::toggleTarget,
                 onOptions = { sheet = Sheet.AccountOptions(it) },
             )
+            if (editing != null) {
+                BlueskyEditChoices(
+                    accounts = accounts.orEmpty().filter { it.id in holders && it.network == Network.BLUESKY },
+                    targets = model.targets,
+                    onToggle = model::toggleTarget,
+                )
+            }
+            if (model.editUnavailable) {
+                Text(
+                    stringResource(R.string.edit_not_available),
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp).testTag(ComposerTags.EDIT_UNAVAILABLE),
+                )
+            }
             HorizontalDivider()
             Column(
                 Modifier
@@ -350,6 +392,23 @@ private fun ComposerContent(
                         limits = model.pollLimits(),
                         onChange = model::changePoll,
                         onRemove = { model.changePoll(null) },
+                        modifier = Modifier.padding(top = 16.dp),
+                    )
+                    if (model.editing?.options?.poll != null) {
+                        // N28: changing the options of a published poll resets its votes.
+                        Text(
+                            stringResource(R.string.edit_poll_warning),
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(top = 4.dp).testTag(ComposerTags.EDIT_POLL_WARNING),
+                        )
+                    }
+                }
+                if (model.editing != null) {
+                    KeptMediaList(
+                        kept = model.keptMedia,
+                        onAlt = model::setKeptMediaAlt,
+                        onToggle = model::toggleKeptMedia,
                         modifier = Modifier.padding(top = 16.dp),
                     )
                 }
@@ -415,6 +474,7 @@ private fun ComposerContent(
                     }
                 },
                 savesQueued = model.editingQueued,
+                savesPublished = model.editing != null || model.editUnavailable,
             )
         }
     }
@@ -435,7 +495,15 @@ private fun ComposerContent(
             onPreview = { sheet = Sheet.Preview },
             onDismiss = { sheet = null },
         )
-        Sheet.Preview -> PreviewSheet(renders = model.renders?.second.orEmpty(), onDismiss = { sheet = null })
+        Sheet.Preview -> {
+            val renders = model.renders?.second.orEmpty()
+            val record = model.editing
+            PreviewSheet(
+                renders = renders,
+                onDismiss = { sheet = null },
+                marks = if (record == null) emptyList() else editMarks(renders, record, model.keptMedia),
+            )
+        }
         Sheet.OptionsList -> OptionsListSheet(
             accounts = model.selectedAccounts(),
             onPick = { sheet = Sheet.AccountOptions(it) },
@@ -470,6 +538,7 @@ private fun ComposerContent(
                     options = model.optionsFor(account),
                     onChange = { model.setOptions(account.id, it) },
                     onDismiss = { sheet = null },
+                    visibilityLocked = model.editing != null,
                 )
             }
         }

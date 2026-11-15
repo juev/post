@@ -174,7 +174,7 @@ fun DetailsSheet(
 /** The parts of each selected profile exactly as they are published, with counters and numbers (F7, T12). */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun PreviewSheet(renders: List<ProfileRender>, onDismiss: () -> Unit) {
+fun PreviewSheet(renders: List<ProfileRender>, onDismiss: () -> Unit, marks: List<EditMarks?> = emptyList()) {
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         LazyColumn(
             Modifier.fillMaxWidth().padding(horizontal = 16.dp).testTag(ComposerTags.PREVIEW),
@@ -195,6 +195,7 @@ fun PreviewSheet(renders: List<ProfileRender>, onDismiss: () -> Unit) {
                     return@forEachIndexed
                 }
                 val total = render.render.parts.size
+                val mark = marks.getOrNull(profileIndex)
                 items(render.render.parts.withIndex().toList()) { (index, part) ->
                     OutlinedCard(Modifier.fillMaxWidth().testTag(ComposerTags.previewPart(profileIndex, index))) {
                         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -212,6 +213,7 @@ fun PreviewSheet(renders: List<ProfileRender>, onDismiss: () -> Unit) {
                                 }
                                 Text(counter, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
+                            mark?.parts?.getOrNull(index)?.let { EditMarkLabel(it, ComposerTags.previewMark(profileIndex, index)) }
                             val spoiler = render.render.spoilerText
                             if (spoiler.isNotEmpty() && render.network == Network.MASTODON) {
                                 Text(stringResource(R.string.composer_preview_cw, spoiler), style = MaterialTheme.typography.labelLarge)
@@ -226,6 +228,16 @@ fun PreviewSheet(renders: List<ProfileRender>, onDismiss: () -> Unit) {
                                 )
                             }
                         }
+                    }
+                }
+                if (mark != null && mark.deleted > 0) {
+                    item {
+                        Text(
+                            pluralStringResource(R.plurals.edit_mark_deleted, mark.deleted, mark.deleted),
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.labelLarge,
+                            modifier = Modifier.testTag(ComposerTags.previewDeleted(profileIndex)),
+                        )
                     }
                 }
             }
@@ -338,7 +350,14 @@ object AccountOptionsTags {
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AccountOptionsSheet(account: Account, options: AccountPostOptions, onChange: (AccountPostOptions) -> Unit, onDismiss: () -> Unit) {
+fun AccountOptionsSheet(
+    account: Account,
+    options: AccountPostOptions,
+    onChange: (AccountPostOptions) -> Unit,
+    onDismiss: () -> Unit,
+    /** N28: a published post keeps its visibility. */
+    visibilityLocked: Boolean = false,
+) {
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(
             Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp).testTag(ComposerTags.ACCOUNT_OPTIONS),
@@ -349,10 +368,20 @@ fun AccountOptionsSheet(account: Account, options: AccountPostOptions, onChange:
             when (account.network) {
                 Network.MASTODON -> {
                     Text(stringResource(R.string.visibility), style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 8.dp))
-                    Column(Modifier.selectableGroup()) {
-                        for (value in Visibility.entries) {
-                            Choice(stringResource(visibilityName(value)), options.visibility == value, AccountOptionsTags.visibility(value)) {
-                                onChange(options.copy(visibility = value))
+                    if (visibilityLocked) {
+                        Text(stringResource(visibilityName(options.visibility)), style = MaterialTheme.typography.bodyLarge)
+                        Text(
+                            stringResource(R.string.edit_visibility_locked),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.testTag(ComposerTags.VISIBILITY_LOCKED),
+                        )
+                    } else {
+                        Column(Modifier.selectableGroup()) {
+                            for (value in Visibility.entries) {
+                                Choice(stringResource(visibilityName(value)), options.visibility == value, AccountOptionsTags.visibility(value)) {
+                                    onChange(options.copy(visibility = value))
+                                }
                             }
                         }
                     }

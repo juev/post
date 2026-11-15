@@ -3,7 +3,6 @@
     <string name="posts_tab_queue">Очередь</string>
     <string name="posts_tab_drafts">Черновики</string>
     <string name="posts_tab_sent">Отправленные</string>
-    <string name="posts_tab_coming">Здесь пока ничего нет</string>
     <string name="posts_queue_empty">В очереди нет постов. Здесь ждут посты, отправленные на потом.</string>
 
     <string name="posts_group_late">Опоздавшие</string>
