@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="composer_hint">What is happening?</string>
+    <string name="composer_no_accounts">Add an account in Settings to choose where to post.</string>
+    <string name="composer_target_description">%1$s, %2$s</string>
+    <string name="composer_account_options">Options for this post</string>
+    <string name="composer_account_options_menu">Account options</string>
+    <string name="composer_options_for">Options for %1$s</string>
+
+    <string name="composer_attach">Attach</string>
+    <string name="composer_bold">Bold</string>
+    <string name="composer_italic">Italic</string>
+    <string name="composer_strikethrough">Strikethrough</string>
+    <string name="composer_code">Code</string>
+    <string name="composer_quote">Quote</string>
+    <string name="composer_list">List</string>
+    <string name="composer_link">Link</string>
+    <string name="composer_language_description">Language: %1$s</string>
+    <string name="composer_more">More actions</string>
+    <string name="composer_add_poll">Add poll</string>
+    <string name="composer_remove_poll">Remove poll</string>
+    <string name="composer_break_here">Break here</string>
+    <string name="composer_remove_break">Remove break</string>
+    <string name="composer_preview">Preview</string>
+    <string name="composer_save_draft">Save draft</string>
+    <string name="composer_clear">Clear</string>
+    <string name="composer_send">Send</string>
+    <string name="composer_send_later">Later</string>
+
+    <string name="composer_status_count">%1$s %2$d/%3$d</string>
+    <plurals name="composer_status_parts">
+        <item quantity="one">%1$s %2$d part</item>
+        <item quantity="other">%1$s %2$d parts</item>
+    </plurals>
+    <string name="composer_status_issue">%1$s ⚠ cannot be sent</string>
+    <string name="composer_status_no_target">No account selected</string>
+    <string name="composer_details">Details</string>
+    <string name="composer_issue_too_long">“%1$s” is longer than one part may be (limit: %2$d) and cannot be split. Shorten it or add spaces.</string>
+    <string name="composer_issue_too_many_parts">Parts the thread would need: %1$d; allowed: %2$d.</string>
+    <string name="composer_issue_spoiler_too_long">The content warning leaves no room for the text.</string>
+    <string name="composer_many_parts">A long thread: %1$d.</string>
+    <string name="composer_blocker_no_target">Choose at least one account.</string>
+    <string name="composer_blocker_empty">Write something to send.</string>
+    <string name="composer_formatting_removed">None of the selected accounts keeps formatting: it will be removed on publishing.</string>
+    <string name="composer_part_number">Part %1$d of %2$d</string>
+    <string name="composer_preview_cw">CW: %1$s</string>
+
+    <string name="composer_link_title">Add link</string>
+    <string name="composer_link_address">Address</string>
+    <string name="composer_link_from_clipboard">Use %1$s</string>
+    <string name="composer_link_insert">Insert</string>
+
+    <string name="composer_quote_policy">Who can quote</string>
+    <string name="composer_quote_anyone">Anyone</string>
+    <string name="composer_quote_followers">Followers</string>
+    <string name="composer_quote_nobody">Nobody</string>
+    <string name="composer_link_card">Link card</string>
+    <string name="composer_content_labels">Content labels</string>
+    <string name="composer_content_labels_hint">Labels apply to images and videos only.</string>
+    <string name="composer_label_sexual">Suggestive</string>
+    <string name="composer_label_nudity">Nudity</string>
+    <string name="composer_label_porn">Adult</string>
+    <string name="composer_label_graphic">Graphic media</string>
+
+    <string name="composer_poll_title">Poll</string>
+    <string name="composer_poll_option">Option %1$d</string>
+    <string name="composer_poll_remove_option">Remove option %1$d</string>
+    <string name="composer_poll_add_option">Add option</string>
+    <string name="composer_poll_duration">Duration</string>
+    <string name="composer_poll_multiple">Multiple choice</string>
+    <string name="composer_poll_mastodon_only">Polls go to Mastodon only.</string>
+    <string name="composer_poll_too_few">A poll needs at least two options.</string>
+    <string name="composer_poll_too_many">The poll has more options than a selected server allows.</string>
+    <string name="composer_poll_empty_option">Fill in every poll option.</string>
+    <string name="composer_poll_option_too_long">A poll option is longer than a selected server allows.</string>
+    <string name="composer_poll_bad_duration">Choose a poll duration that every selected server allows.</string>
+    <plurals name="composer_minutes">
+        <item quantity="one">%1$d minute</item>
+        <item quantity="other">%1$d minutes</item>
+    </plurals>
+    <plurals name="composer_hours">
+        <item quantity="one">%1$d hour</item>
+        <item quantity="other">%1$d hours</item>
+    </plurals>
+    <plurals name="composer_days">
+        <item quantity="one">%1$d day</item>
+        <item quantity="other">%1$d days</item>
+    </plurals>
+
+    <plurals name="composer_sending_to">
+        <item quantity="one">Sending to %1$d account</item>
+        <item quantity="other">Sending to %1$d accounts</item>
+    </plurals>
+    <string name="composer_queued_for">Queued for %1$s</string>
+    <string name="composer_time_in_past">Choose a time in the future.</string>
+    <string name="composer_draft_saved">Draft saved</string>
+    <string name="composer_next">Next</string>
+    <string name="composer_pick_time">Time</string>
+    <string name="composer_send_later_confirm">Queue</string>
+    <plurals name="composer_posts_queued">
+        <item quantity="one">Posts, %1$d queued</item>
+        <item quantity="other">Posts, %1$d queued</item>
+    </plurals>
+
+    <string name="composer_leave_title">Keep the draft?</string>
+    <string name="composer_leave_text">The post has unsaved changes.</string>
+    <string name="composer_keep_draft">Keep draft</string>
+    <string name="composer_discard">Discard</string>
+    <string name="composer_clear_title">Clear the post?</string>
+    <string name="composer_clear_text">The text, options and poll are removed. A saved draft stays in Drafts.</string>
+</resources>

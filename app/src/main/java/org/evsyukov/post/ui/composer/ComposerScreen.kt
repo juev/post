@@ -1,73 +1,268 @@
 package org.evsyukov.post.ui.composer
 
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.input.TextFieldLineLimits
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.List
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.launch
 import org.evsyukov.post.R
+import org.evsyukov.post.core.markdown.HighlightSpan
+import org.evsyukov.post.core.markdown.highlight
+import org.evsyukov.post.data.posts.Schedule
+import org.evsyukov.post.ui.LocalAppContainer
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
 
 object ComposerTags {
     const val SCREEN = "composer"
     const val POSTS = "composer-posts"
+    const val POSTS_BADGE = "composer-posts-badge"
     const val SETTINGS = "composer-settings"
     const val MORE = "composer-more"
     const val SCHEDULE = "composer-schedule"
+    const val EDITOR = "composer-editor"
+    const val SPOILER = "composer-spoiler"
+    const val TARGETS = "composer-targets"
+    const val STATUS = "composer-status"
+    const val TOOLBAR = "composer-toolbar"
+    const val ATTACH = "composer-attach"
+    const val BOLD = "composer-bold"
+    const val ITALIC = "composer-italic"
+    const val STRIKE = "composer-strike"
+    const val CODE = "composer-code"
+    const val QUOTE = "composer-quote"
+    const val LIST = "composer-list"
+    const val LINK = "composer-link"
+    const val CW = "composer-cw"
+    const val LANGUAGE = "composer-language"
+    const val OVERFLOW = "composer-overflow"
+    const val MENU_POLL = "composer-menu-poll"
+    const val MENU_BREAK = "composer-menu-break"
+    const val MENU_PREVIEW = "composer-menu-preview"
+    const val MENU_OPTIONS = "composer-menu-options"
+    const val MENU_SAVE = "composer-menu-save"
+    const val MENU_CLEAR = "composer-menu-clear"
+    const val SEND = "composer-send"
+    const val SEND_LATER = "composer-send-later"
+    const val LINK_URL = "composer-link-url"
+    const val LINK_CLIPBOARD = "composer-link-clipboard"
+    const val LINK_INSERT = "composer-link-insert"
+    const val LEAVE_KEEP = "composer-leave-keep"
+    const val LEAVE_DISCARD = "composer-leave-discard"
+    const val LEAVE_CANCEL = "composer-leave-cancel"
+    const val CLEAR_CONFIRM = "composer-clear-confirm"
+    const val DETAILS = "composer-details"
+    const val DETAILS_PREVIEW = "composer-details-preview"
+    const val PREVIEW = "composer-preview"
+    const val ACCOUNT_OPTIONS = "composer-account-options"
+    const val OPTIONS_LIST = "composer-options-list"
+    const val POLL = "composer-poll"
+    const val POLL_ADD = "composer-poll-add"
+    const val POLL_MULTIPLE = "composer-poll-multiple"
+    const val POLL_REMOVE = "composer-poll-remove"
+    const val TIME_CONFIRM = "composer-time-confirm"
+    const val DATE_CONFIRM = "composer-date-confirm"
+
+    fun target(id: Long) = "composer-target-$id"
+    fun breakRemove(index: Int) = "composer-break-remove-$index"
+    fun statusEntry(index: Int) = "composer-status-$index"
+    fun previewPart(profile: Int, part: Int) = "composer-preview-$profile-$part"
+    fun language(code: String) = "composer-language-$code"
+    fun pollOption(index: Int) = "composer-poll-option-$index"
+    fun pollOptionRemove(index: Int) = "composer-poll-option-remove-$index"
+    fun pollDuration(seconds: Long) = "composer-poll-duration-$seconds"
+    fun optionsAccount(id: Long) = "composer-options-account-$id"
+}
+
+/** Where the composer goes when the user leaves it. */
+enum class LeaveAction { EXIT, POSTS, SETTINGS }
+
+/** The sheets of the composer; one is open at a time. */
+private sealed interface Sheet {
+    data object Details : Sheet
+    data object Preview : Sheet
+    data object OptionsList : Sheet
+    data class AccountOptions(val accountId: Long) : Sheet
 }
 
 /**
- * The start screen. Its top bar leads to Posts and Settings, and to Schedule through the overflow menu
- * (screens.md, Composer). The editor itself comes later.
+ * The start screen (screens.md, Composer): targets, the Markdown editor, the status line of counters and
+ * the toolbar above the keyboard. [draftId] opens a saved draft; null starts a new one with the default
+ * targets. [onExit] leaves the composer by the system back, after the R15 question when something is
+ * unsaved. [onAttach] is the attach button, which the attachments step wires.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ComposerScreen(
+    draftId: Long? = null,
     onOpenPosts: () -> Unit,
     onOpenSchedule: () -> Unit,
     onOpenSettings: () -> Unit,
+    onExit: () -> Unit = {},
+    onAttach: () -> Unit = {},
 ) {
-    var menu by rememberSaveable { mutableStateOf(false) }
+    val container = LocalAppContainer.current
+    val model: ComposerModel = viewModel(key = "composer-${draftId ?: "new"}") { ComposerModel(container, draftId) }
+    ComposerContent(model, onOpenPosts, onOpenSchedule, onOpenSettings, onExit, onAttach)
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ComposerContent(
+    model: ComposerModel,
+    onOpenPosts: () -> Unit,
+    onOpenSchedule: () -> Unit,
+    onOpenSettings: () -> Unit,
+    onExit: () -> Unit,
+    onAttach: () -> Unit,
+) {
+    val container = LocalAppContainer.current
+    val context = LocalContext.current
+    val resources = LocalResources.current
+    val scope = rememberCoroutineScope()
+    val snackbar = remember { SnackbarHostState() }
+    val accounts by model.accounts.collectAsStateWithLifecycle()
+    val settings by model.settings.collectAsStateWithLifecycle()
+    val queueCount by model.queueCount.collectAsStateWithLifecycle()
+
+    var topMenu by rememberSaveable { mutableStateOf(false) }
+    var sheet by remember { mutableStateOf<Sheet?>(null) }
+    var leaving by remember { mutableStateOf<LeaveAction?>(null) }
+    var linkDialog by remember { mutableStateOf(false) }
+    var languageDialog by remember { mutableStateOf(false) }
+    var clearDialog by remember { mutableStateOf(false) }
+    var sendLater by remember { mutableStateOf(false) }
+
+    val unsaved by remember { derivedStateOf { model.hasUnsavedChanges() } }
+    val blockers by remember { derivedStateOf { model.currentBlockers() } }
+
+    val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
+
+    // R32: the first send asks for notifications once; the send does not wait for the answer.
+    fun askNotificationsOnce() {
+        val current = settings ?: return
+        if (current.notificationPermissionAsked) return
+        container.scope.launch { container.settings.setNotificationPermissionAsked(true) }
+        val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+        if (!granted) permission.launch(Manifest.permission.POST_NOTIFICATIONS)
+    }
+
+    fun send(schedule: Schedule?) {
+        scope.launch {
+            when (val result = model.send(schedule)) {
+                is ComposerModel.SendResult.Blocked -> sheet = Sheet.Details
+                is ComposerModel.SendResult.Queued -> {
+                    askNotificationsOnce()
+                    val message = when (val time = result.schedule) {
+                        is Schedule.Explicit -> resources.getString(
+                            R.string.composer_queued_for,
+                            DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM, FormatStyle.SHORT)
+                                .withZone(ZoneId.systemDefault()).format(time.at),
+                        )
+                        else -> resources.getQuantityString(R.plurals.composer_sending_to, result.accounts, result.accounts)
+                    }
+                    snackbar.showSnackbar(message)
+                }
+            }
+        }
+    }
+
+    fun perform(action: LeaveAction) = when (action) {
+        LeaveAction.EXIT -> onExit()
+        LeaveAction.POSTS -> onOpenPosts()
+        LeaveAction.SETTINGS -> onOpenSettings()
+    }
+
+    // R15: leaving with unsaved changes asks first.
+    fun guard(action: LeaveAction) {
+        if (model.hasUnsavedChanges()) leaving = action else perform(action)
+    }
+
+    BackHandler(enabled = unsaved) { leaving = LeaveAction.EXIT }
+
     Scaffold(
         modifier = Modifier.testTag(ComposerTags.SCREEN),
+        snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
             TopAppBar(
                 title = { Text(stringResource(R.string.app_name)) },
                 actions = {
-                    IconButton(onClick = onOpenPosts, modifier = Modifier.testTag(ComposerTags.POSTS)) {
-                        Icon(Icons.AutoMirrored.Outlined.List, contentDescription = stringResource(R.string.posts))
+                    val postsLabel = if (queueCount > 0) {
+                        pluralStringResource(R.plurals.composer_posts_queued, queueCount, queueCount)
+                    } else {
+                        stringResource(R.string.posts)
                     }
-                    IconButton(onClick = onOpenSettings, modifier = Modifier.testTag(ComposerTags.SETTINGS)) {
+                    IconButton(onClick = { guard(LeaveAction.POSTS) }, modifier = Modifier.testTag(ComposerTags.POSTS)) {
+                        BadgedBox(badge = {
+                            if (queueCount > 0) Badge(Modifier.testTag(ComposerTags.POSTS_BADGE)) { Text(queueCount.toString()) }
+                        }) {
+                            Icon(Icons.AutoMirrored.Outlined.List, contentDescription = postsLabel)
+                        }
+                    }
+                    IconButton(onClick = { guard(LeaveAction.SETTINGS) }, modifier = Modifier.testTag(ComposerTags.SETTINGS)) {
                         Icon(Icons.Outlined.Settings, contentDescription = stringResource(R.string.settings))
                     }
                     Box {
-                        IconButton(onClick = { menu = true }, modifier = Modifier.testTag(ComposerTags.MORE)) {
+                        IconButton(onClick = { topMenu = true }, modifier = Modifier.testTag(ComposerTags.MORE)) {
                             Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.more))
                         }
-                        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                        DropdownMenu(expanded = topMenu, onDismissRequest = { topMenu = false }) {
                             DropdownMenuItem(
                                 text = { Text(stringResource(R.string.schedule)) },
                                 leadingIcon = { Icon(Icons.Outlined.Schedule, contentDescription = null) },
                                 onClick = {
-                                    menu = false
+                                    topMenu = false
                                     onOpenSchedule()
                                 },
                                 modifier = Modifier.testTag(ComposerTags.SCHEDULE),
@@ -78,6 +273,204 @@ fun ComposerScreen(
             )
         },
     ) { padding ->
-        Box(Modifier.fillMaxSize().padding(padding))
+        Column(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).imePadding()) {
+            TargetsRow(
+                accounts = accounts.orEmpty(),
+                selected = model.targets,
+                onToggle = model::toggleTarget,
+                onOptions = { sheet = Sheet.AccountOptions(it) },
+            )
+            HorizontalDivider()
+            Column(
+                Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+            ) {
+                if (model.spoilerShown) {
+                    OutlinedTextField(
+                        state = model.spoiler,
+                        label = { Text(stringResource(R.string.content_warning)) },
+                        lineLimits = TextFieldLineLimits.SingleLine,
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp).testTag(ComposerTags.SPOILER),
+                    )
+                }
+                // The field appears once the draft or the defaults are in place, so nothing typed is overwritten.
+                if (model.loaded) MarkdownEditor(
+                    state = model.text,
+                    onRemoveBreak = { range ->
+                        model.apply(MarkdownEdits.removeBreak(model.text.text.toString(), range.start, range.end))
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                model.poll?.let { poll ->
+                    PollEditor(
+                        poll = poll,
+                        limits = model.pollLimits(),
+                        onChange = model::changePoll,
+                        onRemove = { model.changePoll(null) },
+                        modifier = Modifier.padding(top = 16.dp),
+                    )
+                }
+            }
+            StatusLine(
+                renders = model.renders?.second,
+                hasTargets = model.targets.isNotEmpty(),
+                onClick = { sheet = Sheet.Details },
+            )
+            ComposerToolbar(
+                canSend = blockers.isEmpty(),
+                spoilerShown = model.spoilerShown,
+                language = model.language,
+                hasPoll = model.poll != null,
+                onAttach = onAttach,
+                onWrap = { marker ->
+                    val sel = model.selection()
+                    model.apply(MarkdownEdits.wrap(model.text.text.toString(), sel.start, sel.end, marker))
+                },
+                onPrefix = { prefix ->
+                    val sel = model.selection()
+                    model.apply(MarkdownEdits.toggleLinePrefix(model.text.text.toString(), sel.start, sel.end, prefix))
+                },
+                onLink = { linkDialog = true },
+                onSpoiler = { model.showSpoiler(!model.spoilerShown) },
+                onLanguage = { languageDialog = true },
+                onPoll = { if (model.poll == null) model.addPoll() else model.changePoll(null) },
+                onBreak = { model.apply(MarkdownEdits.insertBreak(model.text.text.toString(), model.selection().max)) },
+                onPreview = { sheet = Sheet.Preview },
+                onOptions = { sheet = Sheet.OptionsList },
+                onSaveDraft = {
+                    scope.launch {
+                        model.saveDraft()
+                        snackbar.showSnackbar(resources.getString(R.string.composer_draft_saved))
+                    }
+                },
+                onClear = { clearDialog = true },
+                onSendLater = { if (blockers.isEmpty()) sendLater = true else sheet = Sheet.Details },
+                onSend = { if (blockers.isEmpty()) send(null) else sheet = Sheet.Details },
+            )
+        }
+    }
+
+    when (val open = sheet) {
+        null -> Unit
+        Sheet.Details -> DetailsSheet(
+            source = model.text.text.toString(),
+            renders = model.renders?.second.orEmpty(),
+            blockers = blockers,
+            formattingRemoved = model.targets.isNotEmpty() && model.renders?.second.orEmpty().let { list ->
+                list.isNotEmpty() && list.none { it.render.profile.keepsFormatting }
+            } && hasFormatting(model.text.text.toString()),
+            onPreview = { sheet = Sheet.Preview },
+            onDismiss = { sheet = null },
+        )
+        Sheet.Preview -> PreviewSheet(renders = model.renders?.second.orEmpty(), onDismiss = { sheet = null })
+        Sheet.OptionsList -> OptionsListSheet(
+            accounts = model.selectedAccounts(),
+            onPick = { sheet = Sheet.AccountOptions(it) },
+            onDismiss = { sheet = null },
+        )
+        is Sheet.AccountOptions -> {
+            val account = accounts.orEmpty().firstOrNull { it.id == open.accountId }
+            if (account == null) {
+                sheet = null
+            } else {
+                AccountOptionsSheet(
+                    account = account,
+                    options = model.optionsFor(account),
+                    onChange = { model.setOptions(account.id, it) },
+                    onDismiss = { sheet = null },
+                )
+            }
+        }
+    }
+
+    if (linkDialog) {
+        LinkDialog(
+            onInsert = { url ->
+                linkDialog = false
+                val sel = model.selection()
+                model.apply(MarkdownEdits.link(model.text.text.toString(), sel.start, sel.end, url))
+            },
+            onDismiss = { linkDialog = false },
+        )
+    }
+    if (languageDialog) {
+        LanguageDialog(
+            current = model.language,
+            onPick = {
+                languageDialog = false
+                model.chooseLanguage(it)
+            },
+            onDismiss = { languageDialog = false },
+        )
+    }
+    if (sendLater) {
+        SendLaterPicker(
+            onPick = { at ->
+                sendLater = false
+                if (at.isAfter(Instant.now())) {
+                    send(Schedule.Explicit(at))
+                } else {
+                    scope.launch { snackbar.showSnackbar(resources.getString(R.string.composer_time_in_past)) }
+                }
+            },
+            onDismiss = { sendLater = false },
+        )
+    }
+    if (clearDialog) {
+        AlertDialog(
+            onDismissRequest = { clearDialog = false },
+            title = { Text(stringResource(R.string.composer_clear_title)) },
+            text = { Text(stringResource(R.string.composer_clear_text)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        clearDialog = false
+                        scope.launch { model.startNew() }
+                    },
+                    modifier = Modifier.testTag(ComposerTags.CLEAR_CONFIRM),
+                ) { Text(stringResource(R.string.composer_clear)) }
+            },
+            dismissButton = { TextButton(onClick = { clearDialog = false }) { Text(stringResource(R.string.cancel)) } },
+        )
+    }
+    leaving?.let { action ->
+        AlertDialog(
+            onDismissRequest = { leaving = null },
+            title = { Text(stringResource(R.string.composer_leave_title)) },
+            text = { Text(stringResource(R.string.composer_leave_text)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        leaving = null
+                        scope.launch {
+                            model.saveDraft()
+                            perform(action)
+                        }
+                    },
+                    modifier = Modifier.testTag(ComposerTags.LEAVE_KEEP),
+                ) { Text(stringResource(R.string.composer_keep_draft)) }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        leaving = null
+                        scope.launch {
+                            model.discardChanges()
+                            perform(action)
+                        }
+                    },
+                    modifier = Modifier.testTag(ComposerTags.LEAVE_DISCARD),
+                ) { Text(stringResource(R.string.composer_discard)) }
+                TextButton(onClick = { leaving = null }, modifier = Modifier.testTag(ComposerTags.LEAVE_CANCEL)) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+        )
     }
 }
+
+/** Whether [text] has markup that a plain-text account loses (F6); a manual break is not formatting. */
+fun hasFormatting(text: String): Boolean = highlight(text).any { it.kind != HighlightSpan.Kind.BREAK_MARKER }

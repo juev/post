@@ -1,5 +1,6 @@
 package org.evsyukov.post.ui
 
+import androidx.activity.compose.LocalActivity
 import androidx.compose.runtime.Composable
 import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.entryProvider
@@ -19,9 +20,9 @@ import org.evsyukov.post.ui.settings.accounts.AccountsScreen
 import org.evsyukov.post.ui.settings.accounts.AddBlueskyScreen
 import org.evsyukov.post.ui.settings.accounts.AddMastodonScreen
 
-/** The composer, the start screen (screens.md, Navigation). */
+/** The composer, the start screen (screens.md, Navigation); with [draftId] it opens that draft (R15). */
 @Serializable
-data object ComposerKey : NavKey
+data class ComposerKey(val draftId: Long? = null) : NavKey
 
 /** Queue, drafts and sent posts. */
 @Serializable
@@ -66,7 +67,8 @@ data object AboutKey : NavKey
  */
 @Composable
 fun PostApp() {
-    val backStack = rememberNavBackStack(ComposerKey)
+    val backStack = rememberNavBackStack(ComposerKey())
+    val activity = LocalActivity.current
     // A second tap on an action while its screen slides in would stack the screen twice.
     val open: (NavKey) -> Unit = { key -> if (backStack.lastOrNull() != key) backStack.add(key) }
     // A second tap on a back arrow while the screen slides out would pop the composer itself.
@@ -80,11 +82,14 @@ fun PostApp() {
         backStack = backStack,
         onBack = back,
         entryProvider = entryProvider {
-            entry<ComposerKey> {
+            entry<ComposerKey> { key ->
                 ComposerScreen(
+                    draftId = key.draftId,
                     onOpenPosts = { open(PostsKey) },
                     onOpenSchedule = { open(ScheduleKey) },
                     onOpenSettings = { open(SettingsKey) },
+                    // The R15 question has been answered: leave as the system back would.
+                    onExit = { if (backStack.size > 1) back() else activity?.finish() },
                 )
             }
             entry<PostsKey> { PostsScreen(onBack = back) }
