@@ -110,7 +110,10 @@ interface PostsRepository {
      */
     suspend fun deliveryFailed(id: Long, error: String, retryAt: Instant?): Boolean
 
-    /** Retry from Post details: the failed deliveries of [postId] wait again; returns how many. */
+    /**
+     * Retry from Post details: the failed deliveries of [postId] wait again; returns how many. A delivery
+     * of a removed account stays failed with its reason (R1).
+     */
     suspend fun retryFailed(postId: Long): Int
 
     /** Deliveries left SENDING by a process that died wait again; returns how many. */
@@ -121,7 +124,9 @@ interface PostsRepository {
      * changes, and its attachments and variants go with their files. A NEW post gets a history record
      * with [items] unless history is off; an EDIT post replaces text, options and items of its record;
      * a DELETE post keeps [items] as what remains published, and with none the record goes (R39).
-     * Returns the id of the record written, or null.
+     * The SENT post stays only while a record points to it, that is a NEW post with history on; any
+     * other post leaves with its deliveries at once (R31, R37). Returns the id of the record written,
+     * or null.
      *
      * @throws IllegalStateException when a delivery has not succeeded.
      */
@@ -337,6 +342,8 @@ class RoomPostsRepository(
             posts.updateState(postId, PostState.SENT, sentAt.toEpochMilli())
             val paths = attachments.pathsOfPost(postId) + attachments.variantPathsOfPost(postId)
             attachments.deleteForPost(postId)
+            // With no record pointing to it (history off, an edit or a deletion), the post goes now.
+            posts.deleteUnrecordedSent()
             historyId to paths
         }
         deleteFiles(paths)

@@ -1,5 +1,8 @@
 package org.evsyukov.post.data.accounts
 
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.evsyukov.post.data.db.MastodonAppEntity
 import org.evsyukov.post.data.db.PostDatabase
 import org.evsyukov.post.data.secrets.MastodonClientSecret
@@ -40,15 +43,21 @@ interface MastodonAppsRepository {
     suspend fun delete(origin: String): Boolean
 }
 
-class RoomMastodonAppsRepository(db: PostDatabase, private val secrets: SecretStore) : MastodonAppsRepository {
+class RoomMastodonAppsRepository(
+    db: PostDatabase,
+    private val secrets: SecretStore,
+    // The Keystore answers over binder and makes its key on first use: never on the caller's thread.
+    private val cipherDispatcher: CoroutineDispatcher = Dispatchers.IO,
+) : MastodonAppsRepository {
     private val dao = db.mastodonAppDao()
 
     override suspend fun get(origin: String): MastodonApp? {
         val entity = dao.get(origin) ?: return null
+        val clientSecret = withContext(cipherDispatcher) { secrets.unsealClientSecret(entity.clientSecret) }
         return MastodonApp(
             origin = entity.origin,
             clientId = entity.clientId,
-            clientSecret = secrets.unsealClientSecret(entity.clientSecret).value,
+            clientSecret = clientSecret.value,
             redirectUri = entity.redirectUri,
             scopes = entity.scopes,
             createdAt = Instant.ofEpochMilli(entity.createdAt),
@@ -56,11 +65,12 @@ class RoomMastodonAppsRepository(db: PostDatabase, private val secrets: SecretSt
     }
 
     override suspend fun put(app: MastodonApp) {
+        val sealed = withContext(cipherDispatcher) { secrets.seal(MastodonClientSecret(app.clientSecret)) }
         dao.put(
             MastodonAppEntity(
                 origin = app.origin,
                 clientId = app.clientId,
-                clientSecret = secrets.seal(MastodonClientSecret(app.clientSecret)),
+                clientSecret = sealed,
                 redirectUri = app.redirectUri,
                 scopes = app.scopes,
                 createdAt = app.createdAt.toEpochMilli(),

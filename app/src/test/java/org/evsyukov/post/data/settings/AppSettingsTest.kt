@@ -142,6 +142,14 @@ class AppSettingsTest {
     }
 
     @Test
+    fun aFileThatCannotBeReadGivesTheDefaultsInsteadOfFailing() = runBlocking<Unit> {
+        // A directory in place of the file: every read is an IOException, not a damaged file.
+        assertThat(file.mkdirs()).isTrue()
+
+        assertThat(open().current()).isEqualTo(Settings())
+    }
+
+    @Test
     fun aDamagedFileGivesTheDefaultsInsteadOfFailing() = runBlocking<Unit> {
         file.writeBytes(byteArrayOf(0x0A, 0x7F, 0x01, 0x02, 0x03))
 

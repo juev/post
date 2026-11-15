@@ -1,8 +1,11 @@
 package org.evsyukov.post.data.accounts
 
 import androidx.room.withTransaction
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.withContext
 import org.evsyukov.post.core.media.Network
 import org.evsyukov.post.data.db.AccountEntity
 import org.evsyukov.post.data.db.AccountState
@@ -39,7 +42,12 @@ interface AccountsRepository {
 
     suspend fun setLabel(id: Long, label: String)
 
-    /** Puts the accounts of [orderedIds] in this order; the others keep their places. */
+    /**
+     * Puts the accounts of [orderedIds] first in their network, in this order; the other accounts of that
+     * network follow in their current order, so no two accounts share a place.
+     *
+     * @throws AccountNotFound when an id names no account; nothing changes then.
+     */
     suspend fun reorder(orderedIds: List<Long>)
 
     suspend fun setState(id: Long, state: AccountState)
@@ -69,6 +77,8 @@ class RoomAccountsRepository(
     private val db: PostDatabase,
     private val secrets: SecretStore,
     private val clock: Clock = Clock.systemUTC(),
+    // The Keystore answers over binder and makes its key on first use: never on the caller's thread.
+    private val cipherDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) : AccountsRepository {
     private val dao = db.accountDao()
 
@@ -78,7 +88,7 @@ class RoomAccountsRepository(
 
     override suspend fun add(account: NewAccount, secret: AccountSecret): Long {
         requireMatches(account.network, secret)
-        val sealed = secrets.seal(secret)
+        val sealed = withContext(cipherDispatcher) { secrets.seal(secret) }
         return db.withTransaction {
             val existing = dao.find(account.network, account.server, account.remoteId)
             if (existing != null) {
@@ -126,7 +136,14 @@ class RoomAccountsRepository(
     override suspend fun reorder(orderedIds: List<Long>) {
         require(orderedIds.toSet().size == orderedIds.size) { "account ids repeat" }
         db.withTransaction {
-            orderedIds.forEachIndexed { index, id -> found(id, dao.updatePosition(id, index)) }
+            val all = dao.all()
+            val byId = all.associateBy { it.id }
+            orderedIds.forEach { id -> if (id !in byId) throw AccountNotFound(id) }
+            for (network in orderedIds.map { byId.getValue(it).network }.distinct()) {
+                val given = orderedIds.filter { byId.getValue(it).network == network }
+                val rest = all.filter { it.network == network && it.id !in given }.map { it.id }
+                (given + rest).forEachIndexed { index, id -> dao.updatePosition(id, index) }
+            }
         }
     }
 
@@ -136,13 +153,14 @@ class RoomAccountsRepository(
 
     override suspend fun readSecret(id: Long): AccountSecret {
         val sealed = dao.secret(id) ?: throw AccountNotFound(id)
-        return secrets.unsealAccountSecret(sealed)
+        return withContext(cipherDispatcher) { secrets.unsealAccountSecret(sealed) }
     }
 
     override suspend fun updateSecret(id: Long, secret: AccountSecret) {
         val account = dao.get(id) ?: throw AccountNotFound(id)
         requireMatches(account.network, secret)
-        found(id, dao.updateSecret(id, secrets.seal(secret)))
+        val sealed = withContext(cipherDispatcher) { secrets.seal(secret) }
+        found(id, dao.updateSecret(id, sealed))
     }
 
     override suspend fun remove(id: Long): Boolean = db.withTransaction {
