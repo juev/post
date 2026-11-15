@@ -79,6 +79,91 @@ class TextEntitiesTest {
     }
 
     @Test
+    fun `quotes and brackets of other scripts end the url`() {
+        // UTS #58 Link_Term, as Mastodon main counts: the host ends at the first character that is not part of
+        // it, and closing quotes and sentence punctuation of any script are soft at the end.
+        assertThat(urls("Ссылка «https://example.com» тут")).containsExactly("https://example.com")
+        assertThat(urls("Ссылка «https://example.com/path» тут")).containsExactly("https://example.com/path")
+        assertThat(urls("“https://example.com/a”")).containsExactly("https://example.com/a")
+        assertThat(urls("“https://example.com”")).containsExactly("https://example.com")
+        assertThat(urls("見て https://example.com/a。")).containsExactly("https://example.com/a")
+        assertThat(urls("見て https://example.com。")).containsExactly("https://example.com")
+        assertThat(urls("（https://example.com/a）")).containsExactly("https://example.com/a")
+        assertThat(urls("https://example.com）")).containsExactly("https://example.com")
+        assertThat(urls("https://t.co».")).containsExactly("https://t.co")
+        assertThat(urls("‘https://example.com/x’,")).containsExactly("https://example.com/x")
+    }
+
+    @Test
+    fun `text right after the host is not part of the url`() {
+        assertThat(urls("https://example.com,and more")).containsExactly("https://example.com")
+        assertThat(urls("see https://example.com…")).containsExactly("https://example.com")
+        assertThat(urls("https://example.com:abc")).containsExactly("https://example.com")
+        assertThat(urls("https://example.com.")).containsExactly("https://example.com")
+        // A dot after the host stays when a path follows, as in UTS #58.
+        assertThat(urls("https://example.com./a")).containsExactly("https://example.com./a")
+    }
+
+    @Test
+    fun `soft punctuation inside the path stays and at the end goes`() {
+        assertThat(urls("https://example.com/a,b")).containsExactly("https://example.com/a,b")
+        assertThat(urls("https://example.com/a!)")).containsExactly("https://example.com/a")
+        assertThat(urls("(see https://example.com/a.)")).containsExactly("https://example.com/a")
+        assertThat(urls("Is it https://example.com/page?")).containsExactly("https://example.com/page")
+        assertThat(urls("https://example.com/a…")).containsExactly("https://example.com/a…")
+    }
+
+    @Test
+    fun `brackets pair inside each path segment`() {
+        assertThat(urls("https://example.com/a(b)c/d")).containsExactly("https://example.com/a(b)c/d")
+        assertThat(urls("https://example.com/a[1]")).containsExactly("https://example.com/a[1]")
+        assertThat(urls("「https://example.com/a」")).containsExactly("https://example.com/a")
+        // A bracket opened in one segment does not close in the next.
+        assertThat(urls("https://example.com/(a/b)")).containsExactly("https://example.com/(a/b")
+    }
+
+    @Test
+    fun `query and fragment`() {
+        assertThat(urls("https://example.com/s?q=(a)&b=c#frag-1 x")).containsExactly("https://example.com/s?q=(a)&b=c#frag-1")
+        assertThat(urls("https://example.com/#:~:text=a,b x")).containsExactly("https://example.com/#:~:text=a,b")
+        // "=" and "&" start a new part of the query, where brackets pair anew.
+        assertThat(urls("https://example.com/s?a=(b&c=d)")).containsExactly("https://example.com/s?a=(b&c=d")
+    }
+
+    @Test
+    fun `ideographic full stop separates host labels`() {
+        assertThat(urls("見て https://example。com/a")).containsExactly("https://example。com/a")
+    }
+
+    @Test
+    fun `host needs a plausible top-level domain`() {
+        assertThat(urls("https://192.168.0.1/x")).isEmpty()
+        assertThat(urls("https://example.c/x")).isEmpty()
+        assertThat(urls("https://example.invalid/x")).isEmpty()
+        assertThat(urls("https://example.xn--p1ai/x")).containsExactly("https://example.xn--p1ai/x")
+        assertThat(urls("https://example.com:0/x")).isEmpty()
+    }
+
+    @Test
+    fun `an underscore may precede a url but a letter number may not`() {
+        assertThat(urls("_https://example.com_")).containsExactly("https://example.com")
+        assertThat(urls("Ⅻhttps://example.com")).isEmpty()
+        assertThat(urls("aテhttps://example.com")).isEmpty()
+    }
+
+    @Test
+    fun `long runs of brackets and punctuation are linear`() {
+        val parens = "https://a.co/" + ")".repeat(50_000)
+        val links = "](https://u.co)".repeat(20_000)
+        val dots = "https://a.co/a" + ".".repeat(50_000) + "b"
+        val started = System.nanoTime()
+        assertThat(urls(parens)).containsExactly("https://a.co/")
+        assertThat(TextEntities.urls(links)).hasSize(20_000)
+        assertThat(urls(dots)).containsExactly(dots)
+        assertThat((System.nanoTime() - started) / 1_000_000).isLessThan(1_000L)
+    }
+
+    @Test
     fun `internationalized host and path`() {
         assertThat(urls("Ссылка: https://пример.рф/путь/страница, дальше")).containsExactly("https://пример.рф/путь/страница")
     }

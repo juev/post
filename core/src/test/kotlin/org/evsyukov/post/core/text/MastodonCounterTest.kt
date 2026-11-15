@@ -37,6 +37,20 @@ class MastodonCounterTest {
     }
 
     @Test
+    fun `url in guillemets counts as 23`() {
+        // "Ссылка «" (8) + URL (23) + "» тут" (5).
+        assertThat(counter.count("Ссылка «https://example.com» тут")).isEqualTo(36)
+        assertThat(counter.count("Ссылка «https://example.com/path» тут")).isEqualTo(36)
+    }
+
+    @Test
+    fun `url inside an overlong url still counts as 23`() {
+        // The server drops the outer URL for its length but still finds the one that starts inside it.
+        val text = "https://example.com/" + "a".repeat(4100) + "?u=https://b.co"
+        assertThat(counter.count(text)).isEqualTo(text.length - "https://b.co".length + 23)
+    }
+
+    @Test
     fun `characters reserved per url come from the instance`() {
         assertThat(MastodonCounter(IcuTextSegmenter(), charactersReservedPerUrl = 30).count("x https://a.co")).isEqualTo(32)
     }
