@@ -90,3 +90,17 @@ internal fun blueskyProblem(e: Exception): SignInException {
     }
     return SignInException(problem, e)
 }
+
+/**
+ * Tells the sender that [accountId] signed in (product.md R5: signing in again resumes its deliveries).
+ * The sign-in has succeeded by then, so a failure of the hook does not undo it.
+ */
+internal suspend fun notifySignedIn(accountId: Long, hook: suspend (Long) -> Unit) {
+    try {
+        hook(accountId)
+    } catch (e: CancellationException) {
+        throw e
+    } catch (_: Exception) {
+        // The deliveries stay failed; the user can retry them from the queue.
+    }
+}

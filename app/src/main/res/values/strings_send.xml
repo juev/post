@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Notification channels (product.md R32). -->
+    <string name="send_channel_sending">Sending</string>
+    <string name="send_channel_sending_description">Progress of uploads and video conversion</string>
+    <string name="send_channel_failures">Failed posts</string>
+    <string name="send_channel_failures_description">A post could not be published to an account</string>
+    <string name="send_channel_success">Published posts</string>
+    <string name="send_channel_success_description">A summary when a post is published, if turned on in Settings</string>
+    <string name="send_channel_accounts">Accounts</string>
+    <string name="send_channel_accounts_description">An account needs to sign in again</string>
+
+    <string name="send_progress_title">Sending posts</string>
+    <string name="send_progress_preparing">Converting video… %1$d%%</string>
+    <string name="send_progress_uploading">Uploading media</string>
+    <string name="send_cancel">Cancel</string>
+
+    <!-- %1$s is the account handle, such as alice@mastodon.social. -->
+    <string name="send_failed_title">Could not post to %1$s</string>
+    <string name="send_needs_sign_in_title">Sign in to %1$s again</string>
+    <string name="send_needs_sign_in_text">The server rejected the sign-in. Posts to this account wait until you sign in again.</string>
+    <plurals name="send_success_title">
+        <item quantity="one">Posted to %d account</item>
+        <item quantity="other">Posted to %d accounts</item>
+    </plurals>
+</resources>

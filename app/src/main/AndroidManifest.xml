@@ -1,7 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Failures, sign-in requests, progress and the optional success summary (product.md R32). -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- A run that uploads video or large files, or converts video, goes to the foreground (scheduling.md M2, M5). -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROCESSING" />
 
     <!-- Package visibility (API 30+): find the browser that offers Custom Tabs and Auth Tab. -->
     <queries>
@@ -52,6 +59,15 @@
                     android:scheme="org.evsyukov.post" />
             </intent-filter>
         </activity>
+        <!-- The Cancel action of the video conversion notification (media.md A7). -->
+        <receiver
+            android:name=".send.CancelSendReceiver"
+            android:exported="false" />
+        <!-- WorkManager's foreground service: dataSync for uploads, mediaProcessing for video conversion on 35+. -->
+        <service
+            android:name="androidx.work.impl.foreground.SystemForegroundService"
+            android:foregroundServiceType="dataSync|mediaProcessing"
+            tools:node="merge" />
     </application>
 
 </manifest>

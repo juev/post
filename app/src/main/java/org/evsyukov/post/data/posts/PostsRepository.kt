@@ -129,6 +129,34 @@ interface PostsRepository {
     suspend fun recoverInterrupted(): Int
 
     /**
+     * A waiting delivery that cannot start, such as one whose plan has a blocking conflict, fails with
+     * [error] without a plan (R29). Returns false when it was not waiting.
+     */
+    suspend fun failUnstarted(id: Long, error: String): Boolean
+
+    /**
+     * Retry of one failed delivery (Post details, Queue): it waits again. Returns false when it was not
+     * failed, or its account was removed (R1).
+     */
+    suspend fun retryDelivery(id: Long): Boolean
+
+    /**
+     * R5: the account [accountId] signed in again, so its deliveries that failed with [NEEDS_SIGN_IN] wait
+     * again. Returns the ids of their posts.
+     */
+    suspend fun resumeAfterSignIn(accountId: Long): List<Long>
+
+    /** The earliest time a waiting delivery of a queued or sending post is to be tried again, or null. */
+    suspend fun earliestRetry(): Instant?
+
+    /**
+     * The user cancelled the preparation of the post's media (media.md A7): the post goes back to the
+     * drafts with its attachments, and its deliveries go. Returns false, and changes nothing, when a
+     * delivery has already published something: the post can no longer be a draft.
+     */
+    suspend fun returnToDraft(postId: Long): Boolean
+
+    /**
      * Records that every delivery of [postId] succeeded (R28, R31): the post becomes SENT, its history
      * changes, and its attachments and variants go with their files. A NEW post gets a history record
      * with [items] unless history is off; an EDIT post replaces text, options and items of its record;
@@ -140,6 +168,11 @@ interface PostsRepository {
      * @throws IllegalStateException when a delivery has not succeeded.
      */
     suspend fun markSent(postId: Long, items: List<HistoryItem>): Long?
+
+    companion object {
+        /** The error of a delivery whose account's server rejected the credentials (R5). */
+        const val NEEDS_SIGN_IN = "needs sign-in"
+    }
 }
 
 class RoomPostsRepository(
@@ -357,6 +390,39 @@ class RoomPostsRepository(
             val count = deliveries.recoverInterrupted()
             affected.forEach { db.refreshPostState(it, now) }
             count
+        }
+    }
+
+    override suspend fun failUnstarted(id: Long, error: String): Boolean =
+        changeDelivery(id) { deliveries.failUnstarted(id, clock.millis(), error) }
+
+    override suspend fun retryDelivery(id: Long): Boolean = changeDelivery(id) { deliveries.retryOne(id) }
+
+    override suspend fun resumeAfterSignIn(accountId: Long): List<Long> {
+        val now = clock.millis()
+        return db.withTransaction {
+            val affected = deliveries.postsFailedWith(accountId, PostsRepository.NEEDS_SIGN_IN)
+            deliveries.resumeFailedWith(accountId, PostsRepository.NEEDS_SIGN_IN)
+            affected.forEach { db.refreshPostState(it, now) }
+            affected
+        }
+    }
+
+    override suspend fun earliestRetry(): Instant? = deliveries.earliestRetry()?.let(Instant::ofEpochMilli)
+
+    override suspend fun returnToDraft(postId: Long): Boolean {
+        val now = clock.millis()
+        return db.withTransaction {
+            val post = posts.get(postId) ?: return@withTransaction false
+            if (post.state == PostState.DRAFT) return@withTransaction true
+            val all = deliveries.forPost(postId).map { it.toDelivery() }
+            val published = all.any { delivery ->
+                delivery.state == DeliveryState.SENT || delivery.progress.parts.any { it.published != null || it.unknownSince != null }
+            }
+            if (published) return@withTransaction false
+            deliveries.deleteForPost(postId)
+            posts.updateState(postId, PostState.DRAFT, now)
+            true
         }
     }
 
