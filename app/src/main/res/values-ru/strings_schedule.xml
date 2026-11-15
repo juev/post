@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="schedule_channel_late">Опоздавшие посты</string>
+    <string name="schedule_channel_late_description">Посты, пропустившие своё время и ждущие решения</string>
+    <plurals name="schedule_late_title">
+        <item quantity="one">%d пост пропустил своё время</item>
+        <item quantity="few">%d поста пропустили своё время</item>
+        <item quantity="many">%d постов пропустили своё время</item>
+        <item quantity="other">%d поста пропустили своё время</item>
+    </plurals>
+    <string name="schedule_late_text">Post не отправляет опоздавшие посты сам. Отправьте их сейчас, перенесите в ближайшие свободные слоты или просмотрите.</string>
+    <string name="schedule_late_send_now">Отправить сейчас</string>
+    <string name="schedule_late_reschedule">Перенести</string>
+    <string name="schedule_late_review">Просмотреть</string>
+
+    <string name="schedule_send_later_title">Отправить позже</string>
+    <string name="schedule_next_free_slot">Ближайший свободный слот</string>
+    <string name="schedule_other_slots">Другие свободные слоты</string>
+    <string name="schedule_pick_date_time">Выбрать дату и время</string>
+    <string name="schedule_no_schedule">Расписания пока нет, поэтому нет и слотов. Выберите время или настройте расписание.</string>
+    <string name="schedule_open_schedule">Настроить расписание</string>
+
+    <string name="schedule_no_times">Нет времени</string>
+    <string name="schedule_add_time">Добавить время: %1$s</string>
+    <string name="schedule_day_menu">Ещё: %1$s</string>
+    <string name="schedule_time_chip">%1$s %2$s. Изменить или удалить</string>
+    <string name="schedule_copy_weekdays">Копировать на будни</string>
+    <string name="schedule_copy_all">Копировать на все дни</string>
+    <string name="schedule_time_title">Время: %1$s</string>
+    <string name="schedule_delete_time">Удалить</string>
+    <string name="schedule_save_time">Сохранить</string>
+    <string name="schedule_coming">Ближайшие слоты</string>
+    <string name="schedule_no_coming">В ближайшие семь дней слотов нет. Добавьте время выше.</string>
+    <string name="schedule_free">свободно</string>
+    <string name="schedule_today">Сегодня</string>
+    <string name="schedule_tomorrow">Завтра</string>
+    <string name="schedule_redistribute">Перераспределить очередь</string>
+    <plurals name="schedule_redistributed">
+        <item quantity="one">%d пост перенесён в новые слоты</item>
+        <item quantity="few">%d поста перенесены в новые слоты</item>
+        <item quantity="many">%d постов перенесены в новые слоты</item>
+        <item quantity="other">%d поста перенесены в новые слоты</item>
+    </plurals>
+    <string name="schedule_nothing_to_redistribute">Переносить ничего не пришлось</string>
+    <string name="schedule_time_zone">Часовой пояс: %1$s</string>
+</resources>

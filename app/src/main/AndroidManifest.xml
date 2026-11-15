@@ -9,6 +9,11 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROCESSING" />
+    <!-- One exact alarm at the earliest send time, which fires in Doze (scheduling.md M1). Granted at install;
+         the Google Play policy on it does not apply to an app installed through Obtainium. -->
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <!-- Alarms are lost on reboot and set again on BOOT_COMPLETED (M3). -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <!-- Package visibility (API 30+): find the browser that offers Custom Tabs and Auth Tab. -->
     <queries>
@@ -62,6 +67,26 @@
         <!-- The Cancel action of the video conversion notification (media.md A7). -->
         <receiver
             android:name=".send.CancelSendReceiver"
+            android:exported="false" />
+        <!-- The exact alarm of the sender (scheduling.md M1, M2). -->
+        <receiver
+            android:name=".send.schedule.PublishAlarmReceiver"
+            android:exported="false" />
+        <!-- Boot, time, time zone and app update set the alarm again and look for late posts (M3). The system
+             sends these broadcasts, and it reaches receivers that are not exported. -->
+        <receiver
+            android:name=".send.schedule.ScheduleRestoreReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+        <!-- Send now and Reschedule of the late notification (Q6). -->
+        <receiver
+            android:name=".send.schedule.LateActionReceiver"
             android:exported="false" />
         <!-- WorkManager's foreground service: dataSync for uploads, mediaProcessing for video conversion on 35+. -->
         <service

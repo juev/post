@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Late posts (scheduling.md Q6). -->
+    <string name="schedule_channel_late">Late posts</string>
+    <string name="schedule_channel_late_description">Posts that missed their time and wait for a decision</string>
+    <plurals name="schedule_late_title">
+        <item quantity="one">%d post missed its time</item>
+        <item quantity="other">%d posts missed their time</item>
+    </plurals>
+    <string name="schedule_late_text">Post does not send late posts on its own. Send them now, move them to the next free slots, or review them.</string>
+    <string name="schedule_late_send_now">Send now</string>
+    <string name="schedule_late_reschedule">Reschedule</string>
+    <string name="schedule_late_review">Review</string>
+
+    <!-- Send later sheet (product.md R24, screens.md). -->
+    <string name="schedule_send_later_title">Send later</string>
+    <string name="schedule_next_free_slot">Next free slot</string>
+    <string name="schedule_other_slots">More free slots</string>
+    <string name="schedule_pick_date_time">Pick date and time</string>
+    <string name="schedule_no_schedule">There is no schedule yet, so there are no slots. Pick a time, or set up the schedule.</string>
+    <string name="schedule_open_schedule">Set up schedule</string>
+
+    <!-- Schedule screen (screens.md, Schedule). -->
+    <string name="schedule_no_times">No times</string>
+    <!-- %1$s is a weekday, such as Monday. -->
+    <string name="schedule_add_time">Add a time on %1$s</string>
+    <string name="schedule_day_menu">More for %1$s</string>
+    <!-- %1$s is a weekday, %2$s a time. -->
+    <string name="schedule_time_chip">%1$s %2$s. Change or delete</string>
+    <string name="schedule_copy_weekdays">Copy to weekdays</string>
+    <string name="schedule_copy_all">Copy to all days</string>
+    <string name="schedule_time_title">Time on %1$s</string>
+    <string name="schedule_delete_time">Delete</string>
+    <string name="schedule_save_time">Save</string>
+    <string name="schedule_coming">Coming slots</string>
+    <string name="schedule_no_coming">No slots in the next seven days. Add times above.</string>
+    <string name="schedule_free">free</string>
+    <string name="schedule_today">Today</string>
+    <string name="schedule_tomorrow">Tomorrow</string>
+    <string name="schedule_redistribute">Redistribute queue</string>
+    <plurals name="schedule_redistributed">
+        <item quantity="one">%d post moved to the new slots</item>
+        <item quantity="other">%d posts moved to the new slots</item>
+    </plurals>
+    <string name="schedule_nothing_to_redistribute">No post needed to move</string>
+    <!-- %1$s is the time zone, such as Europe/Moscow (Moscow Standard Time). -->
+    <string name="schedule_time_zone">Time zone: %1$s</string>
+</resources>
