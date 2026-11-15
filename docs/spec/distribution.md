@@ -21,6 +21,10 @@ Facts about Obtainium are from its wiki (wiki.obtainium.imranr.dev) and source (
 - D5. GitHub Actions builds and publishes the release from a pushed tag. The release notes list the changes.
 - D6. The README has an "Add to Obtainium" badge with the link `https://apps.obtainium.imranr.dev/redirect?r=obtainium://add/https://github.com/juev/post`, and states the minimum Android version and the signing certificate SHA-256 so users can set "Expected signing certificate hashes".
 
-## Open questions
+## Decided during implementation
 
 - Whether the debug or QA build gets a separate application ID suffix (Brook uses `.qa`).
+
+## License
+
+MIT, in `LICENSE` at the repository root.

@@ -19,7 +19,7 @@ The app accepts content from Android's Share menu. Sharing offers two actions: s
 
 Post is an Android app only, with no web part. The composer is its start screen.
 
-Out of scope: reading timelines, notifications, replies to other people's posts, direct messages, editing or deleting published posts, other networks. The data model must allow more network types later (see R3).
+Out of scope: reading timelines, notifications, replies to other people's posts, quoting other people's posts, direct messages, other networks. The data model must allow more network types later (see R3).
 
 Android 13 (API 33) and newer. Kotlin, Jetpack Compose, Room, WorkManager, as in Brook. Application ID `org.evsyukov.post`. Distribution only through Obtainium from GitHub Releases.
 
@@ -47,14 +47,15 @@ Android 13 (API 33) and newer. Kotlin, Jetpack Compose, Room, WorkManager, as in
 
 - R6. The composer has a text field, attachment buttons, a target picker, per-network options and two actions: Send and Send later.
 - R7. The target picker lists every account as a chip, grouped by network. The default targets (R16) are preselected. Send is disabled without a target.
-- R8. A character counter is shown for each selected network, counted by that network's rules and limit (networks.md). If the text exceeds the limit of any selected account, the counter of that network turns red and Send is disabled. The composer offers to split the text into a thread for that network (R12).
+- R8. A character counter is shown for each selected network, counted by that network's rules and limit (networks.md). If the text exceeds the limit of an account, it is split into a thread for that account (R12), and the counter shows the number of parts. Send is disabled only when the text cannot be split (threads.md, T9).
 - R9. Attachments: images, video, GIF, and for Mastodon audio. Sources: the Android photo picker, the file picker (`ACTION_OPEN_DOCUMENT`), the Share menu. Every attachment is copied into app storage when added, so later sending does not depend on the source app's URI grant.
 - R10. Each attachment has alt text. A setting "Require alt text" (off by default) blocks sending without it.
 - R11. The user attaches files once for all targets. The app checks every attachment against each selected account: count, type, size, resolution, duration, and allowed combinations. It converts images and transcodes video by itself when that keeps the content. When something must be dropped or moved, the composer shows the conflict for that network and offers fixes; sending waits for a fix. Rules are in [media.md](media.md).
-- R12. Thread: the user can split a message into several parts with an explicit separator. Each part is checked against the limits on its own. A thread is published as a chain of replies to the previous part, in each target account. Attachments belong to the part they were added to.
+- R12. Thread: a text longer than an account's limit is split into a thread for that account automatically, at paragraph and sentence boundaries, with balanced parts and no short leftover at the end. The user sees the split in a preview and can add manual breaks. Rules are in [threads.md](threads.md).
 - R13. Per-network options:
   - Mastodon: visibility (public, unlisted, followers only, direct), content warning text, sensitive media flag, language, poll (options and duration; not combined with media).
-  - Bluesky: language(s), content labels for media (adult content values from networks.md), who can reply (threadgate), quotes allowed (postgate).
+  - Mastodon 4.5+: who may quote this post (`quote_approval_policy`: anyone, followers, nobody).
+  - Bluesky: language(s), content labels for media (adult content values from networks.md), who can reply (threadgate), whether others may quote this post (postgate).
   - Common: language is entered once and passed to both networks.
 - R14. Links: the app does not fetch link previews in the first version for Mastodon (the server builds them). For Bluesky, the app builds a link card from the first link when the post has no media: it fetches the page's title, description and image itself. The user can remove the card.
 - R15. Leaving the composer with unsaved changes asks whether to keep the draft. Drafts are saved locally and listed on the Drafts tab of Posts.
@@ -97,11 +98,20 @@ Detailed rules are in [scheduling.md](scheduling.md).
 - R34. The app sends no analytics and talks only to the account servers and, for Bluesky link cards, the linked page.
 - R35. Interface languages: English and Russian.
 
+### Editing and deleting published posts
+
+- R37. A post in the Sent tab can be edited or deleted while its history record exists. With history off, or after the record expires, the app has no ids to act on and offers only to open the published copy in the browser.
+- R38. The history record keeps what this needs: per account and per thread part, the server id (Mastodon status id; Bluesky AT URI and CID), the source text of the draft, the options, and for Mastodon the media ids with their alt text. Media files are not kept.
+- R39. Delete asks which accounts to delete from (all by default) and removes every part of the thread there, last part first. A part that is already gone counts as deleted. The record leaves history when all deletions succeed.
+- R40. Edit opens the composer with the source text and options. The targets are the accounts where the post was published; clearing one leaves its copy unchanged. Network rules are in networks.md, N28–N33: Mastodon edits in place, Bluesky offers "delete and post again".
+- R41. Edits and deletions are saved locally first and sent like posts: with retries, idempotency and a place in the Failed group of the Queue tab (R27–R30).
+
 ### Formatting
 
 - R36. The composer edits Markdown with live highlighting and a formatting toolbar above the keyboard. Each account gets Markdown or HTML when its server accepts them, and plain text with the markup removed otherwise. Rules are in [formatting.md](formatting.md).
 
-## Open questions
+## Decided later
 
-- Bluesky OAuth: when to add it and where to host its client metadata (networks.md, N14).
-- Quotes (Mastodon 4.5+, Bluesky): not in the first version.
+- Bluesky OAuth: not planned for now; the app uses app passwords (networks.md, N14).
+- A separate application ID for QA builds: decided during implementation.
+- Bluesky link cards (R14): built by the app; to be reviewed after testing.

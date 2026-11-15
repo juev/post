@@ -29,7 +29,7 @@ Share sheet (from other apps) ── Composer
 ├──────────────────────────────────────────┤
 │ Text of the post…                        │  text field, grows with content
 │                                          │
-│ ── part 2 ──────────────────────── [×]   │  thread parts, when added
+│ ─────────────────────────────────── [×]  │  manual break, when added
 │ …                                        │
 ├──────────────────────────────────────────┤
 │ [img][img][vid]                          │  attachment strip: alt badge, conflict badge
@@ -40,10 +40,10 @@ Share sheet (from other apps) ── Composer
 ```
 
 - Targets. One chip per account: avatar, network mark, label. A tap selects or clears it; a long press opens that account's options for this post (visibility, reply settings, language). The default targets (R16) are selected in a new draft.
-- Text. One field per thread part. "Add part" in the ⋯ menu, or the separator from R12, adds a part below.
+- Text. One field for the whole text. A text over an account's limit is split into a thread automatically ([threads.md](threads.md)); the status line shows the number of parts per network, and a tap on it opens the preview of the parts. "Break here" in the ⋯ menu adds a manual break, shown as a line with a remove button.
 - Attachment strip. Thumbnails of the attachments of the current part. A tap opens the attachment sheet: preview, alt text, focus point, remove. A badge marks missing alt text, and a warning marks a conflict ([media.md](media.md)).
 - Status line. One counter per selected network, counted by its rules. A tap opens the details sheet: what is converted, what conflicts, which fixes are available.
-- Toolbar. It sits above the keyboard and stays visible when the keyboard is closed. From the left: attach (photo picker, files), formatting buttons (see Formatting below), content warning, language, the ⋯ menu (poll, add part, per-network options, save draft, clear). On the right: Send later and Send. Send is disabled when no target is selected or a conflict has no fix; a tap on it in that state opens the details sheet.
+- Toolbar. It sits above the keyboard and stays visible when the keyboard is closed. From the left: attach (photo picker, files), formatting buttons (see Formatting below), content warning, language, the ⋯ menu (poll, break here, preview, per-network options, save draft, clear). On the right: Send later and Send. Send is disabled when no target is selected or a conflict has no fix; a tap on it in that state opens the details sheet.
 - Leaving with unsaved text asks whether to keep the draft (R15).
 
 ### Send later sheet
@@ -83,11 +83,15 @@ One screen with three tabs.
 - Queue. Groups from the top: Late (posts on hold after missing their time, with Send now, Reschedule and per-post actions; scheduling.md, Q7), Failed (failed deliveries), then waiting posts ordered by time. Each row: send time (slot or explicit), the first line of text, attachment count, target avatars with a state dot each (waiting, sending, sent, failed). Swipe or menu: Send now, Change time, Edit, Delete, Move up, Move down.
   - Slot-based waiting posts have a drag handle. A long press on the handle starts dragging; on drop the posts take the slot times in the new order and an Undo bar appears (scheduling.md, S8–S10). Posts with an explicit time show a pin instead of the handle.
 - Drafts. Saved drafts, newest first. A tap opens the draft in the composer.
-- Sent. History (R31): text, time, and per account a link to the published copy. A menu offers Open, Copy link, New post from this. Media are not kept. Records older than the retention period are deleted.
+- Sent. History (R31): text, time, and per account a link to the published copy. A menu offers Open, Copy link, Edit, Delete, New post from this (R37–R41). Media are not kept. Records older than the retention period are deleted.
 
 ### Post details
 
-Opens from any row of Queue or Sent. Shows the full text by thread part, attachments (while kept), and for each account: state, time, server error text for a failure, link for a success. Actions: Retry (for failed deliveries), Send now, Change time, Edit (only before the first delivery starts), Delete.
+Opens from any row of Queue or Sent. Shows the full text by thread part, attachments (while kept), and for each account: state, time, server error text for a failure, link for a success. Actions for a queued post: Retry (for failed deliveries), Send now, Change time, Edit (only before the first delivery starts), Delete. For a sent post: Edit published, Delete published (with a choice of accounts), New post from this.
+
+### Editing a published post
+
+The composer opens in edit mode: the top bar says "Editing", the targets are the accounts that hold the post, and Send becomes Save. Mastodon visibility is locked. For each Bluesky target a row offers "Leave unchanged" or "Delete and post again" (networks.md, N32). The thread preview marks which parts will be edited, added or deleted.
 
 ## Schedule
 
@@ -123,6 +127,6 @@ A list of sections.
   - Add Bluesky account: the handle and an app password, with a link to the Bluesky page that creates app passwords. OAuth is planned for a later version.
   - Account details: label, default options of this account (visibility, language, content warning, reply settings, sensitive flag), the limits read from its server and when they were read, Sign in again, Remove.
 - Defaults. Default targets, the default Share action (composer, send now, send later), "Require alt text", default fixes for media conflicts (media.md, A12), "Bluesky: Markdown links" (formatting.md, F11).
-- Sending. Notifications (success summary on or off, link to system settings), history retention (off, 7, 30, 90 days), late threshold (15 minutes, 30 minutes, 1 hour, 3 hours), video transcoding quality, keep image metadata.
+- Sending. Notifications (success summary on or off, link to system settings), history retention (off, 7, 30, 90 days), late threshold (15 minutes, 30 minutes, 1 hour, 3 hours), number thread parts (threads.md, T11), video transcoding quality, keep image metadata.
 - Schedule. Opens the Schedule screen.
 - About. Version, links to the source repository and the privacy note.

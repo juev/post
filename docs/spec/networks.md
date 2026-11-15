@@ -105,6 +105,22 @@ Scope `atproto transition:generic` gives app-password-level access. Video upload
 - N26. Uploaded blobs not referenced by a record are deleted after a while (the spec asks servers to wait at least an hour). If a retry happens later, Post uploads the media again.
 - N27. Bluesky has no scheduled posting, so queued posts are always sent by the device. `createdAt` is the actual send time.
 
+## Editing and deleting published posts
+
+Requirements R37–R41 of product.md refer here.
+
+Mastodon (docs.joinmastodon.org, read 2026-11-15):
+
+- N28. Edit uses `PUT /api/v1/statuses/:id` (Mastodon 3.5+). It changes `status`, `spoiler_text`, `sensitive`, `language`, `media_ids[]`, `media_attributes[]` (alt text and focus of attached media) and `poll`; 4.5 adds `quote_approval_policy`. Visibility and the reply target cannot change, so the composer locks them while editing. Changing poll options resets its votes; the composer warns about it.
+- N29. Edit of a thread re-splits the new text (threads.md). Parts whose text and media did not change are not sent. Changed parts are edited in place. Extra parts are posted as replies to the last remaining part. Surplus parts are deleted, last first.
+- N30. Media of an edited post: attachments kept from the published post are passed by their media ids; new ones are uploaded; removed ones are left out of `media_ids[]`.
+- N31. Delete uses `DELETE /api/v1/statuses/:id`. Deletion is limited to 30 requests per 30 minutes, so a long thread may take longer; the queue waits on HTTP 429. A server without edit support (older than 3.5, or a fork answering 404 or 405 to `PUT`) gets only Delete and "delete and post again".
+
+Bluesky:
+
+- N32. Bluesky has no edit in Post. The official app offers none. A post record can technically be replaced with `putRecord`, and the reference AppView then re-indexes it (`bluesky-social/atproto` `7dd086d4de`, `packages/bsky/src/data-plane/server/indexing/processor.ts`). But the new version gets a new CID, while replies, likes and reposts point to the old one. How the production AppView and apps show that is not verified. When a Bluesky account is among the targets of an edit, the composer offers for it: "Leave unchanged" (default) or "Delete and post again", with a warning that likes, reposts and replies are lost.
+- N33. Delete uses `com.atproto.repo.deleteRecord` for every part and for the threadgate and postgate records of the thread, in one `applyWrites` call when the thread fits its 200-write limit.
+
 ## Mapping of common options
 
 | Post option | Mastodon | Bluesky |
@@ -116,4 +132,4 @@ Scope `atproto transition:generic` gives app-password-level access. Video upload
 | Alt text | `description` | `alt` |
 | Thread part | `in_reply_to_id` | `reply{root, parent}` |
 | Who can reply | not supported | threadgate |
-| Quotes | `quote_approval_policy` (4.5+) | postgate |
+| Who may quote this post | `quote_approval_policy` (4.5+) | postgate |
