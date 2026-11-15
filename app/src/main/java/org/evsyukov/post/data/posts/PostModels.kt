@@ -1,6 +1,8 @@
 package org.evsyukov.post.data.posts
 
 import kotlinx.serialization.Serializable
+import org.evsyukov.post.core.bluesky.ContentLabel
+import org.evsyukov.post.core.mastodon.Visibility
 import org.evsyukov.post.core.media.ConflictKind
 import org.evsyukov.post.core.media.FixKind
 import org.evsyukov.post.core.media.MediaItem
@@ -8,14 +10,26 @@ import org.evsyukov.post.core.media.MediaKind
 import org.evsyukov.post.core.media.Network
 import org.evsyukov.post.core.schedule.QueuedRef
 import org.evsyukov.post.core.schedule.SendTime
+import org.evsyukov.post.data.accounts.Account
 import org.evsyukov.post.data.accounts.AccountOptions
+import org.evsyukov.post.data.accounts.QuotePolicy
+import org.evsyukov.post.data.accounts.ReplyRule
 import org.evsyukov.post.data.db.DeliveryState
 import org.evsyukov.post.data.db.PostKind
 import org.evsyukov.post.data.db.PostState
 import java.time.Instant
 import java.time.LocalDateTime
 
-/** A Mastodon poll (R13); Bluesky has none. */
+/**
+ * A Mastodon poll (R13); Bluesky has none, and a poll does not go with media (step 7 shows the conflict).
+ *
+ * @property options the choices in order, 2 up to the server's `pollMaxOptions`, each at most
+ *   `pollMaxCharactersPerOption` characters (networks.md N1). The composer keeps Send disabled while an option
+ *   is empty or too long, so a queued poll is valid.
+ * @property expiresInSeconds Mastodon `poll[expires_in]`, within the server's minimum and maximum.
+ * @property multiple Mastodon `poll[multiple]`: more than one choice allowed.
+ * @property hideTotals Mastodon `poll[hide_totals]`: counts hidden until the poll ends.
+ */
 @Serializable
 data class PollDraft(
     val options: List<String>,
@@ -25,24 +39,80 @@ data class PollDraft(
 )
 
 /**
- * The options of a post (R13), stored in `optionsJson`.
+ * The options of one account for this post (R13, R17): what the composer's per-account sheet edits. A new
+ * entry is made from the account's defaults ([from]) when the sheet opens, so it starts prefilled. Each
+ * network reads its own fields and ignores the rest.
  *
- * @property common the options every target gets, unless [accounts] has its own for it.
- * @property accounts per-account options set for this post, by account id (screens.md, Targets).
- * @property poll the Mastodon poll, if any.
- * @property linkCard false when the user removed the Bluesky link card (R14).
- * @property mediaFixes the fixes chosen for media conflicts, per network (media.md A10).
+ * @property visibility Mastodon `visibility`.
+ * @property quotePolicy Mastodon `quote_approval_policy`; sent only to servers that support it
+ *   (`MastodonCapabilities.supportsQuotePolicy`, API version 7 and later).
+ * @property sensitive Mastodon `sensitive` for this account's media; it adds to [PostOptions.sensitive].
+ * @property replyRules the Bluesky threadgate on the first part: null lets anyone reply, an empty set
+ *   nobody, otherwise the people of these rules.
+ * @property allowQuotes false adds a Bluesky postgate that disables quoting on every part (N24).
+ * @property contentLabels Bluesky self-labels; they matter only for a post with media (N22).
+ * @property linkCard whether a Bluesky account builds a link card for the first link when the post has
+ *   no media (R14). On by default; the card itself is built at send time.
+ */
+@Serializable
+data class AccountPostOptions(
+    val visibility: Visibility = Visibility.PUBLIC,
+    val quotePolicy: QuotePolicy = QuotePolicy.PUBLIC,
+    val sensitive: Boolean = false,
+    val replyRules: Set<ReplyRule>? = null,
+    val allowQuotes: Boolean = true,
+    val contentLabels: Set<ContentLabel> = emptySet(),
+    val linkCard: Boolean = true,
+) {
+    companion object {
+        /** The options an account gives a new post: its defaults (R17), with the link card on. */
+        fun from(defaults: AccountOptions) = AccountPostOptions(
+            visibility = defaults.visibility,
+            quotePolicy = defaults.quotePolicy,
+            sensitive = defaults.sensitive,
+            replyRules = defaults.replyRules,
+            allowQuotes = defaults.allowQuotes,
+            contentLabels = defaults.contentLabels,
+        )
+    }
+}
+
+/**
+ * The options of a post (R13), stored as JSON in `posts.optionsJson` and in history records: the contract
+ * between the composer, which writes it, and the sender, which reads it. Every field has a default, and
+ * the JSON reader ignores unknown keys, so a field added later keeps old rows readable.
+ *
+ * @property language the post's language as a BCP 47 code, entered once and given to both networks
+ *   (R13): Mastodon `language`, Bluesky `langs` with this one code. The composer fills it from the first
+ *   selected account's default language or the device locale; null means none was chosen, and the sender
+ *   then uses the account's default languages.
+ * @property spoilerText the content warning, Mastodon `spoiler_text`, sent with every part of a Mastodon
+ *   thread and counted in it (N3). Bluesky has none and ignores it.
+ * @property sensitive marks the media sensitive for every Mastodon target; an account's own
+ *   [AccountPostOptions.sensitive] can only add to it.
+ * @property accounts the per-account options of this post by account id. An account without an entry
+ *   uses [AccountPostOptions.from] its defaults as they are at send time; see [forAccount].
+ * @property poll the Mastodon poll, if any; Bluesky targets get the text without it.
+ * @property chosenFixes the fixes the user chose for media conflicts, per network (media.md A10); the
+ *   attachments step fills it, and a conflict without a chosen fix falls back to the settings' defaults.
  */
 @Serializable
 data class PostOptions(
-    val common: AccountOptions = AccountOptions(),
-    val accounts: Map<Long, AccountOptions> = emptyMap(),
+    val language: String? = null,
+    val spoilerText: String = "",
+    val sensitive: Boolean = false,
+    val accounts: Map<Long, AccountPostOptions> = emptyMap(),
     val poll: PollDraft? = null,
-    val linkCard: Boolean = true,
-    val mediaFixes: Map<Network, Map<ConflictKind, FixKind>> = emptyMap(),
+    val chosenFixes: Map<Network, Map<ConflictKind, FixKind>> = emptyMap(),
 ) {
-    /** The options of account [accountId] for this post. */
-    fun forAccount(accountId: Long): AccountOptions = accounts[accountId] ?: common
+    /** The options [account] gets for this post: its own entry, or its defaults (R17). */
+    fun forAccount(account: Account): AccountPostOptions = accounts[account.id] ?: AccountPostOptions.from(account.defaults)
+
+    /** Whether a Mastodon [account]'s media is marked sensitive. */
+    fun sensitiveFor(account: Account): Boolean = sensitive || forAccount(account).sensitive
+
+    /** The languages [account] gets: [language], or its default languages when the post has none. */
+    fun languagesFor(account: Account): List<String> = language?.let(::listOf) ?: account.defaults.languages
 }
 
 /** When a queued post is sent (scheduling.md S2, S5). */

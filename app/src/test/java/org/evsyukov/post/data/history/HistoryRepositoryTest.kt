@@ -7,7 +7,7 @@ import kotlinx.coroutines.runBlocking
 import org.evsyukov.post.core.mastodon.Visibility
 import org.evsyukov.post.core.media.Network
 import org.evsyukov.post.data.RecordingFiles
-import org.evsyukov.post.data.accounts.AccountOptions
+import org.evsyukov.post.data.posts.AccountPostOptions
 import org.evsyukov.post.data.inMemoryDatabase
 import org.evsyukov.post.data.posts.DraftInput
 import org.evsyukov.post.data.posts.PostOptions
@@ -71,7 +71,7 @@ class HistoryRepositoryTest {
                 parts = listOf(PublishedPart(uri = "at://did:plc:a/app.bsky.feed.post/3k", cid = "bafyrei", url = "https://bsky.app/profile/a/post/3k")),
             ),
         )
-        val options = PostOptions(common = AccountOptions(visibility = Visibility.UNLISTED, languages = listOf("de")))
+        val options = PostOptions(language = "de", accounts = mapOf(7L to AccountPostOptions(visibility = Visibility.UNLISTED)))
 
         val postId = RoomPostsRepository(db, RecordingFiles(), { retention }).saveDraft(DraftInput(text = "Source"))
         val id = repo.insert(postId, sentAt, "Source *text*\n\n⸻\n\nsecond", options, items)!!

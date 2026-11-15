@@ -17,7 +17,6 @@ import org.evsyukov.post.core.schedule.reorder
 import org.evsyukov.post.data.FakeCipher
 import org.evsyukov.post.data.MutableClock
 import org.evsyukov.post.data.RecordingFiles
-import org.evsyukov.post.data.accounts.AccountOptions
 import org.evsyukov.post.data.accounts.NewAccount
 import org.evsyukov.post.data.accounts.RoomAccountsRepository
 import org.evsyukov.post.data.db.DeliveryState
@@ -73,11 +72,12 @@ class PostsRepositoryTest {
     @Test
     fun aDraftKeepsItsTextOptionsTargetsAndAttachments() = runBlocking<Unit> {
         val options = PostOptions(
-            common = AccountOptions(languages = listOf("en"), contentWarning = "politics"),
-            accounts = mapOf(alice to AccountOptions(visibility = Visibility.UNLISTED, replyRules = emptySet())),
+            language = "en",
+            spoilerText = "politics",
+            sensitive = true,
+            accounts = mapOf(alice to AccountPostOptions(visibility = Visibility.UNLISTED, replyRules = emptySet(), linkCard = false)),
             poll = PollDraft(listOf("Yes", "No"), expiresInSeconds = 86_400, multiple = true),
-            linkCard = false,
-            mediaFixes = mapOf(
+            chosenFixes = mapOf(
                 Network.MASTODON to mapOf(ConflictKind.TOO_MANY_FILES to FixKind.MOVE_TO_REPLY),
                 Network.BLUESKY to mapOf(ConflictKind.UNSUPPORTED_TYPE to FixKind.SEND_WITHOUT_FILE),
             ),
@@ -108,8 +108,8 @@ class PostsRepositoryTest {
         assertThat(post.kind).isEqualTo(PostKind.NEW)
         assertThat(post.text).isEqualTo("Hello\n\n⸻\n\nworld")
         assertThat(post.options).isEqualTo(options)
-        assertThat(post.options.forAccount(alice).visibility).isEqualTo(Visibility.UNLISTED)
-        assertThat(post.options.forAccount(bob)).isEqualTo(options.common)
+        assertThat(post.options.accounts.getValue(alice).visibility).isEqualTo(Visibility.UNLISTED)
+        assertThat(post.options.accounts).doesNotContainKey(bob)
         assertThat(post.targets).containsExactly(bob, alice).inOrder()
         assertThat(post.schedule).isNull()
         assertThat(post.deliveries).isEmpty()
@@ -244,6 +244,44 @@ class PostsRepositoryTest {
         assertThat(post.schedule).isNull()
         assertThat(post.targets).containsExactly(alice)
         assertThat(post.deliveries).isEmpty()
+        assertThat(db.rows("SELECT COUNT(*) FROM deliveries").single().single()).isEqualTo(0L)
+    }
+
+    @Test
+    fun saveAndQueueWritesTheTextOptionsAndAWaitingDeliveryPerTarget() = runBlocking<Unit> {
+        val options = PostOptions(language = "ru", spoilerText = "cw", accounts = mapOf(bob to AccountPostOptions(visibility = Visibility.PRIVATE)))
+
+        val id = repo.saveAndQueue(DraftInput(text = "now", options = options, targets = listOf(bob, alice)), Schedule.Now(clock.now))
+
+        val post = repo.get(id)!!
+        assertThat(post.state).isEqualTo(PostState.QUEUED)
+        assertThat(post.schedule).isEqualTo(Schedule.Now(clock.now))
+        assertThat(post.text).isEqualTo("now")
+        assertThat(post.options).isEqualTo(options)
+        assertThat(post.deliveries.map { it.accountId }).containsExactly(bob, alice).inOrder()
+        assertThat(post.deliveries.map { it.state }.toSet()).containsExactly(DeliveryState.WAITING)
+    }
+
+    @Test
+    fun saveAndQueueOfAnOpenDraftQueuesThatDraft() = runBlocking<Unit> {
+        val draft = repo.saveDraft(DraftInput(text = "draft", targets = listOf(alice)))
+
+        val id = repo.saveAndQueue(DraftInput(id = draft, text = "edited", targets = listOf(alice)), Schedule.Explicit(Instant.parse("2026-11-20T10:00:00Z")))
+
+        assertThat(id).isEqualTo(draft)
+        assertThat(repo.get(draft)!!.state).isEqualTo(PostState.QUEUED)
+        assertThat(repo.get(draft)!!.text).isEqualTo("edited")
+        assertThat(db.rows("SELECT COUNT(*) FROM posts").single().single()).isEqualTo(1L)
+    }
+
+    @Test
+    fun saveAndQueueToAnUnknownAccountWritesNothing() = runBlocking<Unit> {
+        assertThrows(IllegalArgumentException::class.java) {
+            runBlocking { repo.saveAndQueue(DraftInput(text = "lost", targets = listOf(alice, 999)), Schedule.Now(clock.now)) }
+        }
+
+        // R27: one transaction; no draft is left behind either.
+        assertThat(db.rows("SELECT COUNT(*) FROM posts").single().single()).isEqualTo(0L)
         assertThat(db.rows("SELECT COUNT(*) FROM deliveries").single().single()).isEqualTo(0L)
     }
 
@@ -631,7 +669,7 @@ class PostsRepositoryTest {
 
     @Test
     fun anEditReplacesItsRecordAndADeletionRemovesItOrKeepsWhatIsLeft() = runBlocking<Unit> {
-        val options = PostOptions(common = AccountOptions(languages = listOf("en")))
+        val options = PostOptions(language = "en")
         val aliceCopy = HistoryItem(alice, Network.MASTODON, "https://mastodon.social", "alice", listOf(PublishedPart(id = "1")))
         val bobCopy = HistoryItem(bob, Network.MASTODON, "https://fosstodon.org", "bob", listOf(PublishedPart(id = "2")))
         val record = history.insert(null, clock.now, "original", options, listOf(aliceCopy, bobCopy))!!
