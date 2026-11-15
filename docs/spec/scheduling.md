@@ -13,6 +13,9 @@ Decisions of 2026-11-15: the schedule is a set of weekly slots; scheduled posts 
 - S5. A post may have an explicit time instead of a slot. Such posts do not occupy slots and may share a time with other posts.
 - S6. Changing the schedule does not move posts that already have a slot time: each queued post keeps its assigned time. The Schedule screen offers "Redistribute", which reassigns all slot-based posts, in their current order, to the free slots of the new schedule.
 - S7. Deleting or sending a slot-based post early frees its slot; later posts stay where they are.
+- S8. The user changes the order of slot-based posts by dragging them in the Queue tab. The set of slot times held by these posts stays the same; after a drop the posts take those times again, earliest time to the first post in the new order. Example: A at 09:00, B at 13:00, C at 18:00; dragging C to the top gives C 09:00, A 13:00, B 18:00.
+- S9. Posts with an explicit time do not move by dragging and keep their time; slot-based posts may be dragged past them. A post whose delivery has started, and posts in the Late and Failed groups, cannot be dragged.
+- S10. After a drop the Queue tab shows "Order changed" with Undo for a few seconds. For screen readers and as an alternative to dragging, the row menu has Move up and Move down, which follow the same rule.
 
 ## Queue
 
@@ -52,6 +55,7 @@ Design:
 
 - With slots Mon 09:00 and 13:00, queue three posts on Monday at 08:00: they get 09:00, 13:00 and the next weekday's first slot.
 - Queue a post for 3 minutes ahead, put the device into Doze (`adb shell dumpsys deviceidle force-idle`): it is sent within a minute of its time.
+- Queue A 09:00, B 13:00 (slots) and X 11:00 (explicit time). Drag B above A: B gets 09:00, A 13:00, X stays at 11:00. Undo restores A 09:00, B 13:00.
 - Reboot with a queued post due in an hour: the alarm is restored and the post is sent on time.
 - Turn the phone off before two posts are due and on two hours later: nothing is sent; one notification "2 posts missed their time" appears. Reschedule puts them into the next two free slots in their order; Send now sends both in order.
 - Turn off network at send time and on again after 10 minutes: the post is sent. After 2 hours: it goes on hold and the notification appears.

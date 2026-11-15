@@ -80,7 +80,8 @@ Send later here uses the next free slot at once; a long press opens the Send lat
 
 One screen with three tabs.
 
-- Queue. Groups from the top: Late (posts on hold after missing their time, with Send now, Reschedule and per-post actions; scheduling.md, Q7), Failed (failed deliveries), then waiting posts ordered by time. Each row: send time (slot or explicit), the first line of text, attachment count, target avatars with a state dot each (waiting, sending, sent, failed). Swipe or menu: Send now, Change time, Edit, Delete.
+- Queue. Groups from the top: Late (posts on hold after missing their time, with Send now, Reschedule and per-post actions; scheduling.md, Q7), Failed (failed deliveries), then waiting posts ordered by time. Each row: send time (slot or explicit), the first line of text, attachment count, target avatars with a state dot each (waiting, sending, sent, failed). Swipe or menu: Send now, Change time, Edit, Delete, Move up, Move down.
+  - Slot-based waiting posts have a drag handle. A long press on the handle starts dragging; on drop the posts take the slot times in the new order and an Undo bar appears (scheduling.md, S8–S10). Posts with an explicit time show a pin instead of the handle.
 - Drafts. Saved drafts, newest first. A tap opens the draft in the composer.
 - Sent. History (R31): text, time, and per account a link to the published copy. A menu offers Open, Copy link, New post from this. Media are not kept. Records older than the retention period are deleted.
 

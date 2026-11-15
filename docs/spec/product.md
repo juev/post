@@ -78,7 +78,7 @@ Android 13 (API 33) and newer. Kotlin, Jetpack Compose, Room, WorkManager, as in
 Detailed rules are in [scheduling.md](scheduling.md).
 
 - R24. Send later offers: "Next free slot" (default), a date and time picker, and the slots of the next days to choose from.
-- R25. The Queue tab of Posts lists scheduled posts by time and failed deliveries. The user can open a queued post, edit it, change its time, send it now or delete it.
+- R25. The Queue tab of Posts lists scheduled posts by time and failed deliveries. The user can open a queued post, edit it, change its time, send it now or delete it, and drag slot-based posts to change their order (scheduling.md, S8–S10).
 - R26. Settings hold the weekly schedule: for each weekday, a list of times. The schedule uses the device time zone at the moment of sending.
 - R26a. A post that missed its time by more than a threshold (30 minutes by default), for example because the phone was off, is never sent on its own. The app holds it and asks with a notification: send now, move to the next free slots, or review one by one. Rules are in scheduling.md, Q4–Q7.
 
