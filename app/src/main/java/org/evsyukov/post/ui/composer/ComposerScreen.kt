@@ -202,6 +202,7 @@ private fun ComposerContent(
         scope.launch {
             when (val result = model.send(schedule)) {
                 is ComposerModel.SendResult.Blocked -> sheet = Sheet.Details
+                ComposerModel.SendResult.AlreadySending -> Unit
                 is ComposerModel.SendResult.Queued -> {
                     askNotificationsOnce()
                     val message = when (val time = result.schedule) {
@@ -347,8 +348,21 @@ private fun ComposerContent(
                     }
                 },
                 onClear = { clearDialog = true },
-                onSendLater = { if (blockers.isEmpty()) sendLater = true else sheet = Sheet.Details },
-                onSend = { if (blockers.isEmpty()) send(null) else sheet = Sheet.Details },
+                // A tap while a send runs is a double tap: it does nothing.
+                onSendLater = {
+                    when {
+                        model.sending -> Unit
+                        blockers.isEmpty() -> sendLater = true
+                        else -> sheet = Sheet.Details
+                    }
+                },
+                onSend = {
+                    when {
+                        model.sending -> Unit
+                        blockers.isEmpty() -> send(null)
+                        else -> sheet = Sheet.Details
+                    }
+                },
             )
         }
     }
