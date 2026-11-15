@@ -22,6 +22,10 @@ import org.evsyukov.post.core.thread.pieces
  *    replies too (media.md A11). The width of the number is reserved before splitting, and the split
  *    repeats with a wider reserve until the number of digits is stable.
  *
+ * A piece that shows nothing once converted for the account (an empty code block in plain text) gets no part,
+ * as an empty piece gets none: an empty status is refused. Nothing visible is lost by that (T17). Media of
+ * such a piece still get a part of their own.
+ *
  * The content warning goes with every Mastodon part and counts in it (N3). Bluesky has none. When the
  * warning leaves no room, for the text or for a part number, the result is [TextIssue.SpoilerTooLong].
  */
@@ -70,6 +74,9 @@ object TextRenderer {
 
         val models = allPieces.filter { !it.isEmpty }
             .associate { it.index to PieceModel(it, draft.source, profile, segmenter, converter, draft.locale) }
+            // A piece that shows nothing once converted (an empty code block in plain text) has no text to
+            // send, and an empty status is refused: it gets a part only for media of its own, like an empty piece.
+            .filterValues { model -> model.exact(0, model.last, null).text.isNotEmpty() }
         val paddings = HashMap<Int, Int>()
         var digits = 0
         var rounds = 0
