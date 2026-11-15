@@ -19,8 +19,15 @@ Decisions of 2026-11-15: the schedule is a set of weekly slots; scheduled posts 
 - Q1. A queued post has a send time, a list of target accounts and a state per delivery: waiting, sending, sent, failed.
 - Q2. A queued post can be edited until its first delivery starts. Editing re-runs the limit checks for its targets.
 - Q3. Send now on a queued post starts delivery immediately and frees its slot.
-- Q4. If the device was off or without network at the send time, the post is sent as soon as possible after it. The Queue tab of Posts shows that it is late. There is no expiry: a late post is still sent. (Open question: a setting to skip posts that are more than N hours late.)
-- Q5. Several posts due at the same time are sent in their queue order, one after another per account, so threads and order stay intact.
+- Q4. A post is late when its send time passed more than 30 minutes ago and its first delivery has not started. Typical causes: the phone was off, had no network, or Android delayed the job. The threshold is a setting under Sending (15 minutes, 30 minutes, 1 hour, 3 hours). A post that is due but not late is sent as usual.
+- Q5. Post never sends a late post on its own. The job puts it on hold, and holding frees its slot. The check runs whenever the job starts: after boot (M3), when the network returns, and on the periodic check (M4).
+- Q6. When posts go on hold, a notification says "N posts missed their time" with three actions:
+  - Send now: sends all held posts at once, in queue order (Q8).
+  - Reschedule: gives each held post, in queue order, the next free slot. A post with an explicit time also gets a slot.
+  - Review: opens the Late group of the Queue tab.
+  The notification stays until a decision is made, and is updated when more posts go on hold.
+- Q7. The Late group sits at the top of the Queue tab. It has the same three actions for the whole group. Each post in it can also be sent now, given a new time, edited or deleted. The composer's top bar shows a warning badge on Posts while the group is not empty.
+- Q8. Several posts due at the same time are sent in their queue order, one after another per account, so threads and order stay intact.
 
 ## Android mechanism
 
@@ -36,15 +43,17 @@ Design:
 
 - M1. One exact alarm is set for the earliest pending send time, with `USE_EXACT_ALARM`. Whenever the queue changes, the alarm is reset to the new earliest time.
 - M2. The alarm receiver enqueues a unique WorkManager job with a `CONNECTED` network constraint. The job sends every post whose time has come, then sets the next alarm.
-- M3. On `BOOT_COMPLETED`, time zone change, time change and app update, the app sets the alarm again. Posts whose time passed while the device was off are sent by the job (Q4).
+- M3. On `BOOT_COMPLETED`, time zone change, time change and app update, the app sets the alarm again. Then the job runs once to put late posts on hold and ask about them (Q4–Q6).
 - M4. A periodic WorkManager check every 30 minutes restores a missing alarm or job, as in ShareDing.
 - M5. Video uploads run as a long-running worker with a `dataSync` foreground notification. (Hypothesis, not verified: starting the foreground worker from an exact-alarm receiver on Android 14+ is allowed; check on a device before relying on it.)
-- M6. Without network at send time, the job waits for the network constraint. Retries of failed deliveries use WorkManager backoff starting at 30 seconds.
+- M6. Without network at send time, the job waits for the network constraint. When the network returns after the late threshold, the post goes on hold instead (Q5). Retries of failed deliveries use WorkManager backoff starting at 30 seconds.
 
 ## Verification scenarios
 
 - With slots Mon 09:00 and 13:00, queue three posts on Monday at 08:00: they get 09:00, 13:00 and the next weekday's first slot.
 - Queue a post for 3 minutes ahead, put the device into Doze (`adb shell dumpsys deviceidle force-idle`): it is sent within a minute of its time.
-- Reboot with a queued post: the alarm is restored; a post due during the reboot is sent after boot.
-- Turn off network at send time: the post is sent when network returns and is shown as late until then.
+- Reboot with a queued post due in an hour: the alarm is restored and the post is sent on time.
+- Turn the phone off before two posts are due and on two hours later: nothing is sent; one notification "2 posts missed their time" appears. Reschedule puts them into the next two free slots in their order; Send now sends both in order.
+- Turn off network at send time and on again after 10 minutes: the post is sent. After 2 hours: it goes on hold and the notification appears.
+- Change the late threshold to 3 hours and repeat the two-hour case: the posts are sent without asking.
 - Kill the process during a thread: the thread resumes from the first unpublished part without duplicates.

@@ -80,6 +80,7 @@ Detailed rules are in [scheduling.md](scheduling.md).
 - R24. Send later offers: "Next free slot" (default), a date and time picker, and the slots of the next days to choose from.
 - R25. The Queue tab of Posts lists scheduled posts by time and failed deliveries. The user can open a queued post, edit it, change its time, send it now or delete it.
 - R26. Settings hold the weekly schedule: for each weekday, a list of times. The schedule uses the device time zone at the moment of sending.
+- R26a. A post that missed its time by more than a threshold (30 minutes by default), for example because the phone was off, is never sent on its own. The app holds it and asks with a notification: send now, move to the next free slots, or review one by one. Rules are in scheduling.md, Q4–Q7.
 
 ### Sending and history
 
@@ -102,6 +103,5 @@ Detailed rules are in [scheduling.md](scheduling.md).
 
 ## Open questions
 
-- Late queued posts: whether to skip posts more than N hours late (scheduling.md, Q4).
 - Bluesky OAuth: when to add it and where to host its client metadata (networks.md, N14).
 - Quotes (Mastodon 4.5+, Bluesky): not in the first version.

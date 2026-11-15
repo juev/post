@@ -80,7 +80,7 @@ Send later here uses the next free slot at once; a long press opens the Send lat
 
 One screen with three tabs.
 
-- Queue. Posts waiting to be sent, ordered by time, then failed deliveries on top in a separate group. Each row: send time (slot or explicit, marked "late" when overdue), the first line of text, attachment count, target avatars with a state dot each (waiting, sending, sent, failed). Swipe or menu: Send now, Change time, Edit, Delete.
+- Queue. Groups from the top: Late (posts on hold after missing their time, with Send now, Reschedule and per-post actions; scheduling.md, Q7), Failed (failed deliveries), then waiting posts ordered by time. Each row: send time (slot or explicit), the first line of text, attachment count, target avatars with a state dot each (waiting, sending, sent, failed). Swipe or menu: Send now, Change time, Edit, Delete.
 - Drafts. Saved drafts, newest first. A tap opens the draft in the composer.
 - Sent. History (R31): text, time, and per account a link to the published copy. A menu offers Open, Copy link, New post from this. Media are not kept. Records older than the retention period are deleted.
 
@@ -122,6 +122,6 @@ A list of sections.
   - Add Bluesky account: the handle and an app password, with a link to the Bluesky page that creates app passwords. OAuth is planned for a later version.
   - Account details: label, default options of this account (visibility, language, content warning, reply settings, sensitive flag), the limits read from its server and when they were read, Sign in again, Remove.
 - Defaults. Default targets, the default Share action (composer, send now, send later), "Require alt text", default fixes for media conflicts (media.md, A12), "Bluesky: Markdown links" (formatting.md, F11).
-- Sending. Notifications (success summary on or off, link to system settings), history retention (off, 7, 30, 90 days), video transcoding quality, keep image metadata.
+- Sending. Notifications (success summary on or off, link to system settings), history retention (off, 7, 30, 90 days), late threshold (15 minutes, 30 minutes, 1 hour, 3 hours), video transcoding quality, keep image metadata.
 - Schedule. Opens the Schedule screen.
 - About. Version, links to the source repository and the privacy note.
