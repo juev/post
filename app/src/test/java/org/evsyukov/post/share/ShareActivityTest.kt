@@ -426,6 +426,8 @@ class ShareActivityTest {
         val sky = bluesky("sky")
         defaults(me, sky)
         share(sendIntent("text/plain", "x".repeat(320)))
+        // The default targets come from a database flow that Compose does not wait for.
+        compose.waitUntil(TIMEOUT) { exists(ShareTags.problem(0)) }
 
         compose.onNodeWithTag(ShareTags.SEND).assertIsNotEnabled()
         compose.onNodeWithTag(ShareTags.SEND_LATER).assertIsNotEnabled()

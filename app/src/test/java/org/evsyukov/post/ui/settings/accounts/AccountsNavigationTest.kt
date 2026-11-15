@@ -66,6 +66,7 @@ class AccountsNavigationTest {
         compose.waitUntil(5_000) { compose.onAllNodes(hasTestTag(AccountsTags.row(id))).fetchSemanticsNodes().isNotEmpty() }
 
         compose.onNodeWithTag(AccountsTags.row(id)).performClick()
+        awaitDetails()
         compose.onNodeWithTag(AccountDetailsTags.SCREEN).assertIsDisplayed()
         compose.onNodeWithTag(AccountDetailsTags.LABEL).performTextInput("work")
         compose.waitUntil(5_000) { runBlocking { container.accounts.get(id)!!.label } == "work" }
@@ -100,6 +101,7 @@ class AccountsNavigationTest {
         }
         compose.waitUntil(5_000) { compose.onAllNodes(hasTestTag(AccountsTags.row(id))).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag(AccountsTags.row(id)).performClick()
+        awaitDetails()
 
         compose.onNodeWithTag(AccountDetailsTags.SIGN_IN_AGAIN).performScrollTo().performClick()
 
@@ -107,6 +109,10 @@ class AccountsNavigationTest {
         compose.onNodeWithText(string(R.string.sign_in_again_title)).assertIsDisplayed()
         compose.onNodeWithTag(AddMastodonTags.ADDRESS).assertTextContains("https://mastodon.example")
     }
+
+    /** The details read the account from a database flow that Compose does not wait for; until then the screen is empty. */
+    private fun awaitDetails() =
+        compose.waitUntil(5_000) { compose.onAllNodes(hasTestTag(AccountDetailsTags.SCREEN)).fetchSemanticsNodes().isNotEmpty() }
 
     private fun string(@StringRes id: Int) = compose.activity.getString(id)
 }
