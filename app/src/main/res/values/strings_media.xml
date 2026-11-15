@@ -67,6 +67,7 @@
         <item quantity="other">%d attachments have no alt text</item>
     </plurals>
     <string name="media_alt_too_long_blocker">Alt text is over the limit of a selected Mastodon server (%1$d), which rejects it</string>
+    <string name="media_importing_blocker">Files are still being added; Send waits until they are in place</string>
     <plurals name="media_preview_part">
         <item quantity="one">%d attachment</item>
         <item quantity="other">%d attachments</item>

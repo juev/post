@@ -129,12 +129,15 @@ sealed interface Blocker {
 
     /** The alt text of [ids] is over the limit of a selected Mastodon server, which rejects the upload (A9). */
     data class AltTooLong(val ids: List<Long>, val limit: Int) : Blocker
+
+    /** Picked files are still being copied (R9); sending now would leave them out of the post. */
+    data object Importing : Blocker
 }
 
 /**
  * Everything that blocks sending [text] with [poll] and [attachments] to [targets], given the current
  * [renders] and media plans ([media]). Alt text over Bluesky's limit is only marked (A9): the limit is the
- * official app's, not the server's.
+ * official app's, not the server's. While [importing], the post is not complete yet, so it waits too.
  */
 fun blockers(
     targets: List<Long>,
@@ -145,9 +148,11 @@ fun blockers(
     attachments: List<Attachment> = emptyList(),
     media: List<NetworkMedia> = emptyList(),
     requireAltText: Boolean = false,
+    importing: Boolean = false,
 ): List<Blocker> = buildList {
     if (targets.isEmpty()) add(Blocker.NoTarget)
-    if (text.isBlank() && poll == null && attachments.isEmpty()) add(Blocker.EmptyPost)
+    if (importing) add(Blocker.Importing)
+    if (text.isBlank() && poll == null && attachments.isEmpty() && !importing) add(Blocker.EmptyPost)
     for (render in renders) render.render.issue?.let { add(Blocker.Text(render, it)) }
     if (poll != null) pollProblem(poll, pollLimits)?.let { add(Blocker.Poll(it)) }
     for (network in media) network.blocking.forEach { add(Blocker.Media(network.network, it)) }

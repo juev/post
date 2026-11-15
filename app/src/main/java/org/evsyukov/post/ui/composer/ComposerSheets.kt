@@ -152,6 +152,7 @@ fun DetailsSheet(
                         color = MaterialTheme.colorScheme.error,
                     )
                     is Blocker.AltTooLong -> Text(stringResource(R.string.media_alt_too_long_blocker, blocker.limit), color = MaterialTheme.colorScheme.error)
+                    Blocker.Importing -> Text(stringResource(R.string.media_importing_blocker), color = MaterialTheme.colorScheme.error)
                     is Blocker.Text, is Blocker.Media -> Unit // shown with its profile above, or with the media below
                 }
             }
