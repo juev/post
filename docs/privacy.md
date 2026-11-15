@@ -1,6 +1,6 @@
 # Post privacy note
 
-Post is an Android app that publishes posts to your Bluesky and Mastodon accounts. It has no server of its own: everything it knows stays on your device, and it sends your posts straight to the servers of your accounts. Questions: [denis@evsyukov.org](mailto:denis@evsyukov.org).
+Post is an Android app that publishes posts to your Bluesky and Mastodon accounts. It has no server of its own: everything it knows stays on your device, and it sends your posts straight to the servers of your accounts. Questions: [open an issue](https://github.com/juev/post/issues).
 
 ## Data on the device
 
@@ -25,13 +25,14 @@ Removing the app deletes all of it.
 
 Post makes network requests only to these hosts, and only for the reasons given:
 
-- **The servers of your accounts** (Mastodon instances, Bluesky PDSes): sign-in, reading limits and formats, uploading media, publishing, editing and deleting posts.
+- **The servers of your accounts** (Mastodon instances, Bluesky PDSes): sign-in, reading limits and formats, uploading media, publishing, editing and deleting posts. On Mastodon, Post also reads your own recent posts when a server's answer was lost, to check whether the post went out before sending it again.
+- **For avatars**: the profile pictures of your accounts, from the addresses your servers give for them. These are often a separate media host of the server, such as `cdn.bsky.app` for Bluesky.
 - **For Bluesky sign-in and mentions**:
-  - `public.api.bsky.app`, to resolve a handle to its DID;
+  - `public.api.bsky.app`, to resolve a handle to its DID and to read the public profile (name and avatar) of the account you sign in with;
   - `plc.directory`, or the domain of a `did:web` identity, for the DID document that names the account's server;
   - the domain of the handle itself, for `/.well-known/atproto-did`, when the handle is not resolved otherwise.
 - **For Bluesky video**: `video.bsky.app`, which receives and processes videos before they are attached to a post.
-- **For Bluesky link cards**: the page of the first link in a post without media, and its preview image, to get the title, description and thumbnail of the card. You can remove the card before sending.
+- **For Bluesky link cards**: the page of the first link in a post (or a thread part) without media, and its preview image, to get the title, description and thumbnail of the card. You can turn the card off before sending.
 
 Mastodon builds link previews on its own server, so Post fetches no pages for Mastodon posts.
 

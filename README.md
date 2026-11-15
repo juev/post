@@ -36,7 +36,7 @@ Post is distributed only through GitHub Releases of this repository. It is not o
 [Obtainium](https://github.com/ImranR98/Obtainium) installs the app from GitHub Releases and checks for updates.
 
 1. Open the "Get it on Obtainium" link above on the phone, or choose "Add app" in Obtainium and enter `https://github.com/juev/post` as the source URL.
-2. Release candidates, such as `v0.1.0-rc.1`, are published as prereleases. To get them, turn on "Include prereleases" in the app's settings in Obtainium. Without it, Obtainium installs only final releases.
+2. Release candidates, such as `v0.1.0-rc.1`, are published as prereleases, and Obtainium skips prereleases unless "Include prereleases" is on. While only release candidates are published, turn it on in the "Add app" screen before you tap "Add": otherwise Obtainium finds no release to install. Later you can change it in the app's settings in Obtainium.
 3. To have Obtainium refuse an APK signed by anyone else, paste the certificate hash below into "Expected signing certificate hashes".
 
 Every release has exactly one APK, `post-<version>.apk`, so Obtainium needs no APK filter.
@@ -74,7 +74,7 @@ Tokens are stored on the device, encrypted with a key in Android Keystore.
 
 ## Privacy
 
-Post sends no analytics and has no server of its own. It contacts only your accounts' servers and the few Bluesky services and pages that sign-in, mentions, video and link cards need. Accounts, drafts, the queue and the history stay on the device and are excluded from Android backup. Details are in [docs/privacy.md](docs/privacy.md).
+Post sends no analytics and has no server of its own. It contacts only your accounts' servers, the hosts that serve your accounts' avatars, and the few Bluesky services and pages that sign-in, mentions, video and link cards need. Accounts, drafts, the queue and the history stay on the device and are excluded from Android backup. Details are in [docs/privacy.md](docs/privacy.md).
 
 ## Building from source
 
