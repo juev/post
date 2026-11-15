@@ -73,6 +73,28 @@ class HtmlTest {
     }
 
     @Test
+    fun `bare urls with markup characters become one anchor`() {
+        assertThat(toHtml("https://example.com/files/__init__.py")).isEqualTo(
+            "<p><a href=\"https://example.com/files/__init__.py\">https://example.com/files/__init__.py</a></p>",
+        )
+        assertThat(toHtml("https://mastodon.social/@_jane_")).isEqualTo(
+            "<p><a href=\"https://mastodon.social/@_jane_\">https://mastodon.social/@_jane_</a></p>",
+        )
+        assertThat(toHtml("**https://example.com/a**")).isEqualTo(
+            "<p><strong><a href=\"https://example.com/a\">https://example.com/a</a></strong></p>",
+        )
+        assertThat(toHtml("«https://example.com/path»")).isEqualTo(
+            "<p>«<a href=\"https://example.com/path\">https://example.com/path</a>»</p>",
+        )
+    }
+
+    @Test
+    fun `spaced thematic break is a paragraph as typed`() {
+        assertThat(toHtml("* * *")).isEqualTo("<p>* * *</p>")
+        assertThat(toHtml("a\n- - -\nb")).isEqualTo("<p>a</p><p>- - -</p><p>b</p>")
+    }
+
+    @Test
     fun `manual break lines are removed`() {
         assertThat(toHtml("a\n⸻\nb")).isEqualTo("<p>a</p><p>b</p>")
     }

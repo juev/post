@@ -21,27 +21,38 @@ import org.commonmark.node.Text
  * - italic directly inside italic (`*_x_*`, `_*x*_`) loses the inner markers, which would otherwise turn
  *   into `**x**`, that is bold;
  * - manual break lines are removed (threads.md, T13); the pieces around them are joined by a blank line;
- * - everything else stays exactly as typed, byte for byte.
+ * - everything else stays exactly as typed, byte for byte, including bare URLs, mentions and hashtags
+ *   with underscores in them (`https://example.com/__init__.py`, `@_jane_`; see [parseMarkdown]).
  *
  * A replacement must not change what the reader sees. Next to a literal `*` a new `*` could join it into
  * another delimiter run (`*_a_` is not `**a*`), so the result is parsed again and compared with the
- * source; when they differ, the replacements are taken one by one, each only if it keeps the text and
- * its styles, and the rest keep their underscores.
+ * source. When they differ, the replacements are tried in halves, down to single ones, each group taken
+ * only if it keeps the text and its styles; the rest keep their underscores. A few bad replacements thus
+ * cost a few parses, not one parse per replacement.
  */
 fun toMarkdownDialect(source: String): String {
     val text = withoutManualBreaks(source)
     val replacements = ArrayList<List<Edit>>()
-    collectDialectEdits(markdownParser.parse(text), replacements)
+    collectDialectEdits(parseMarkdown(text), replacements)
     if (replacements.isEmpty()) return text
-    val expected = readerView(text)
-    val all = applyEdits(text, replacements.flatten()).text
-    if (readerView(all) == expected) return all
-    var accepted = emptyList<Edit>()
-    for (replacement in replacements) {
-        val trial = accepted + replacement
-        if (readerView(applyEdits(text, trial).text) == expected) accepted = trial
-    }
+    val accepted = acceptReplacements(text, readerView(text), replacements, emptyList())
     return applyEdits(text, accepted).text
+}
+
+/** [accepted] plus the [candidates] that keep the reader's view [expected]: all at once if they can, else by halves. */
+private fun acceptReplacements(
+    text: String,
+    expected: String,
+    candidates: List<List<Edit>>,
+    accepted: List<Edit>,
+): List<Edit> {
+    if (candidates.isEmpty()) return accepted
+    val trial = accepted + candidates.flatten()
+    if (readerView(applyEdits(text, trial).text) == expected) return trial
+    if (candidates.size == 1) return accepted
+    val middle = candidates.size / 2
+    val left = acceptReplacements(text, expected, candidates.subList(0, middle), accepted)
+    return acceptReplacements(text, expected, candidates.subList(middle, candidates.size), left)
 }
 
 /** The replacements, one list of edits per emphasis node, so they can be taken or left together. */
@@ -111,6 +122,6 @@ private fun readerView(markdown: String): String {
             }
         }
     }
-    walk(markdownParser.parse(markdown), italic = false, bold = false, strike = false)
+    walk(parseMarkdown(markdown), italic = false, bold = false, strike = false)
     return out.toString()
 }
