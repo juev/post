@@ -150,6 +150,7 @@ object ComposerTags {
 fun composerModelKey(draftId: Long?, editHistoryId: Long? = null, fromHistoryId: Long? = null, session: Long = 0): String = when {
     editHistoryId != null -> "composer-edit-$editHistoryId-$session"
     fromHistoryId != null -> "composer-from-$fromHistoryId-$session"
+    session != 0L -> "composer-${draftId ?: "new"}-$session"
     else -> "composer-${draftId ?: "new"}"
 }
 
