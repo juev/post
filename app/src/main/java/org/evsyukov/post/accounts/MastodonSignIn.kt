@@ -178,7 +178,7 @@ class MastodonSignIn(
         registeredAgain: Boolean,
     ): HttpUrl {
         val scopes = scopesFor(client.authorizationServerMetadata())
-        val app = registration(origin)?.takeIf { it.scopes == scopes && it.redirectUri == REDIRECT_URI }
+        val app = registration(origin)?.takeIf { it.scopes == scopes && it.redirectUri == REDIRECT_URI && stillKnown(client, it) }
             ?: register(client, origin, scopes)
         val verifier = Pkce.verifier()
         val state = newState()
@@ -196,6 +196,25 @@ class MastodonSignIn(
             ),
         )
         return client.authorizeUrl(app.clientId, REDIRECT_URI, scopes, state, Pkce.challenge(verifier), forceLogin = true)
+    }
+
+    /**
+     * N4: whether the server still knows the stored registration. A server may remove it (for example when its
+     * last token was revoked), and then rejects it at the authorize page, which sends no redirect back. An app
+     * token answered with `invalid_client` says it is gone; any other answer keeps it, and the token goes.
+     */
+    private suspend fun stillKnown(client: MastodonClient, app: MastodonApp): Boolean {
+        val token = try {
+            client.appToken(app.clientId, app.clientSecret, app.scopes)
+        } catch (e: MastodonException) {
+            return !e.isInvalidClient
+        }
+        try {
+            client.revokeToken(app.clientId, app.clientSecret, token.accessToken)
+        } catch (_: MastodonException) {
+            // The app token expires or stays unused; the sign-in goes on.
+        }
+        return true
     }
 
     private suspend fun registration(origin: String): MastodonApp? = try {
