@@ -55,7 +55,10 @@ class QueueActions(
      * slot-based posts. Returns the times to put back on Undo (S10), or null when nothing moved.
      */
     suspend fun reorder(postId: Long, toIndex: Int): Map<Long, Schedule>? =
-        move(postId) { list, from -> if (from == toIndex) null else reorder(list, from, toIndex) }
+        move(postId) { list, from ->
+            // The index was found on the list the tab showed; a post that started sending meanwhile has left it.
+            if (from == toIndex || toIndex !in list.indices) null else reorder(list, from, toIndex)
+        }
 
     /** Move up in the row menu (S10). Returns the times to put back on Undo, or null at the top. */
     suspend fun moveUp(postId: Long): Map<Long, Schedule>? =
