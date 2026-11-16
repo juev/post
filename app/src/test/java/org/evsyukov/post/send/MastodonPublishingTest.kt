@@ -111,6 +111,21 @@ class MastodonPublishingTest {
     }
 
     @Test
+    fun aFileOfAPieceWhoseBreakWasRemovedGoesWithTheLastPieceAsTheComposerShowed() {
+        // The image was added in the second piece; the break was removed since, so the text is one piece and
+        // the composer shows one post with the image (T14).
+        val alice = f.mastodon()
+        val id = f.queue("Hello\nWorld", listOf(alice), attachments = listOf(f.image().copy(pieceIndex = 1)))
+
+        f.run()
+
+        assertThat(server.statuses).hasSize(1)
+        assertThat(server.statuses.single().text).isEqualTo("Hello\nWorld")
+        assertThat(server.statuses.single().mediaIds).containsExactly("m1")
+        assertThat(f.post(id)!!.deliveries.single().plan!!.parts).hasSize(1)
+    }
+
+    @Test
     fun aFailedMediaProcessingFailsTheDelivery() {
         val alice = f.mastodon()
         server.uploadCode = 202
