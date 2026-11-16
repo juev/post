@@ -190,6 +190,44 @@ class MastodonEditDeleteTest {
     }
 
     @Test
+    fun aRemovedFileGoesFromEveryMastodonCopyWhateverItsSplit() {
+        // A (500 characters) splits the long paragraph in two, B (5000) does not: the image is in part 3 on A and
+        // in part 2 on B. The composer lists the files of the first copy; the removal is meant for the file itself.
+        val alice = f.mastodon()
+        val bob = f.mastodon(host = "b.example", remoteId = "202")
+        val other = FakeMastodon(f.servers, "b.example") { f.clock.now }
+        val bobEdits = CopyOnWriteArrayList<String>()
+        for (n in 1..3) {
+            f.servers.route("PUT", "b.example/api/v1/statuses/s$n") { request ->
+                bobEdits += "PUT s$n " + json.parseToJsonElement(request.body).jsonObject["media_ids"].toString()
+                FakeServers.json("""{"id":"s$n","uri":"https://b.example/users/alice/statuses/s$n","created_at":"2026-11-16T08:00:00Z","content":"<p>edited</p>"}""")
+            }
+        }
+        blocking {
+            f.accounts.updateLimits(alice, org.evsyukov.post.data.accounts.AccountLimits.Mastodon(org.evsyukov.post.core.mastodon.MastodonCapabilities(maxCharacters = 500)), f.clock.instant())
+            f.accounts.updateLimits(bob, org.evsyukov.post.data.accounts.AccountLimits.Mastodon(org.evsyukov.post.core.mastodon.MastodonCapabilities(maxCharacters = 5000)), f.clock.instant())
+        }
+        val text = thread(List(80) { "Sentence number $it." }.joinToString(" "), "short")
+        val id = f.queue(text, listOf(alice, bob), attachments = listOf(f.image().copy(pieceIndex = 1)))
+        f.run()
+        check(f.post(id)?.state ?: PostState.SENT == PostState.SENT)
+        val record = blocking { f.history.observe().first().single() }
+        val first = record.items.first { it.network == org.evsyukov.post.core.media.Network.MASTODON }
+        val place = first.parts.indexOfFirst { it.media.isNotEmpty() }
+        assertThat(record.items.map { item -> item.parts.indexOfFirst { it.media.isNotEmpty() } }.toSet()).hasSize(2)
+
+        // The composer's list: the file of the first copy, by its place there and among all the post's files.
+        val removed = KeptMedia(place, 0, "a cat", removed = true, ordinal = 0)
+        edit(record, text, listOf(alice, bob), record.options.copy(keptMedia = listOf(removed)))
+        f.run()
+
+        assertThat(edits.map { (it["media_ids"] as JsonArray).size }).containsExactly(0)
+        assertThat(bobEdits).hasSize(1)
+        assertThat(bobEdits.single()).endsWith("[]")
+        assertThat(other.statuses).hasSize(2)
+    }
+
+    @Test
     fun aServerWithoutEditFailsTheEditWithAMessageOfferingDeleteAndPostAgain() {
         val alice = f.mastodon()
         val record = published("old text", listOf(alice))

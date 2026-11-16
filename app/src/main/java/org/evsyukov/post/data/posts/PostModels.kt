@@ -124,7 +124,18 @@ data class PostOptions(
  * can only stay or go, not change.
  */
 @Serializable
-data class KeptMedia(val part: Int, val index: Int, val alt: String, val removed: Boolean = false)
+data class KeptMedia(
+    val part: Int,
+    val index: Int,
+    val alt: String,
+    val removed: Boolean = false,
+    /**
+     * The file's place among all files of the post, in thread order. Every Mastodon copy has the files in that
+     * order while its split into parts may differ (T3), so the edit finds the same file in each; null in edits
+     * saved before, which go by [part] and [index].
+     */
+    val ordinal: Int? = null,
+)
 
 /** When a queued post is sent (scheduling.md S2, S5). */
 sealed interface Schedule {

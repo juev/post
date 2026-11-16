@@ -351,8 +351,12 @@ class ComposerModel(
     private fun keptMediaOf(record: HistoryRecord, edits: List<KeptMedia>): List<KeptMedia> {
         val item = record.items.firstOrNull { it.network == Network.MASTODON } ?: record.items.firstOrNull() ?: return emptyList()
         val byPlace = edits.associateBy { it.part to it.index }
+        var ordinal = 0
         return item.parts.flatMapIndexed { part, published ->
-            published.media.mapIndexed { index, media -> byPlace[part to index] ?: KeptMedia(part, index, media.alt) }
+            published.media.mapIndexed { index, media ->
+                // The place among all files names the same file in every Mastodon copy, whatever its split.
+                (byPlace[part to index] ?: KeptMedia(part, index, media.alt)).copy(ordinal = ordinal++)
+            }
         }
     }
 

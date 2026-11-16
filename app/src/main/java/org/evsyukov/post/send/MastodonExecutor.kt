@@ -189,9 +189,14 @@ class MastodonExecutor(
         }
 
         private fun keptOf(index: Int, published: PublishedPart): List<PublishedMedia> {
-            val edits = job.post.options.keptMedia.filter { it.part == index }.associateBy { it.index }
+            val all = job.post.options.keptMedia
+            // The edits name a file by its place among all files of the post, the same in every Mastodon copy
+            // whatever its split; older edits name it by part and index of the copy the composer listed.
+            val byOrdinal = all.filter { it.ordinal != null }.associateBy { it.ordinal }
+            val byPlace = all.filter { it.ordinal == null && it.part == index }.associateBy { it.index }
+            val before = job.previous?.parts.orEmpty().take(index).sumOf { it.media.size }
             return published.media.mapIndexedNotNull { position, media ->
-                val edit = edits[position]
+                val edit = byOrdinal[before + position] ?: byPlace[position]
                 when {
                     edit == null -> media
                     edit.removed -> null
