@@ -70,6 +70,10 @@ class QueueTabTest {
         compose.waitForIdle()
     }
 
+    /** How many account marks with the description [description] are on screen. */
+    private fun marks(description: String): Int =
+        compose.onAllNodes(hasContentDescription(description), useUnmergedTree = true).fetchSemanticsNodes().size
+
     private fun top(tag: String): Float = compose.onNode(hasTestTag(tag)).fetchSemanticsNode().boundsInRoot.top
 
     @Test
@@ -86,8 +90,9 @@ class QueueTabTest {
         assertThat(top(QueueTags.row(missed))).isLessThan(top(QueueTags.row(broken)))
         assertThat(top(QueueTags.row(broken))).isLessThan(top(QueueTags.row(sooner)))
         assertThat(top(QueueTags.row(sooner))).isLessThan(top(QueueTags.row(later)))
-        // The failure shows with the server's message and a retry for the delivery and the post.
-        compose.onNodeWithText("alice@alice.example: the server said no").assertExists()
+        // The failure shows with the server's message and a retry for the delivery and the post. The accounts come
+        // in a flow of their own; until they do, the line names its account "?".
+        h.waitUntil { compose.onAllNodes(hasText("alice@alice.example: the server said no")).fetchSemanticsNodes().isNotEmpty() }
     }
 
     @Test
@@ -105,8 +110,9 @@ class QueueTabTest {
         assertThat(h.exists(QueueTags.handle(missed))).isFalse()
         assertThat(h.exists(QueueTags.handle(broken))).isFalse()
         compose.onNode(hasContentDescription("Drag to change the order")).assertExists()
-        assertThat(compose.onAllNodes(hasContentDescription("alice@alice.example: waiting"), useUnmergedTree = true).fetchSemanticsNodes()).isNotEmpty()
-        assertThat(compose.onAllNodes(hasContentDescription("alice@alice.example: failed"), useUnmergedTree = true).fetchSemanticsNodes()).hasSize(1)
+        // The accounts come in a flow of their own; until they do, a mark names its account "?".
+        h.waitUntil { marks("alice@alice.example: waiting") > 0 }
+        assertThat(marks("alice@alice.example: failed")).isEqualTo(1)
     }
 
     @Test
