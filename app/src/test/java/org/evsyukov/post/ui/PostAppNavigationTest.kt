@@ -58,6 +58,9 @@ class PostAppNavigationTest {
 
     @After
     fun tearDown() {
+        // The rule ends the activity only after @After. Ended first, the composer's flows stop before the database
+        // closes, and none of their queries meets a closed connection.
+        runCatching { compose.activityRule.scenario.close() }
         if (container.database.isOpen) container.database.close()
     }
 
