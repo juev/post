@@ -108,7 +108,7 @@ class ScheduledSendDeviceTest {
     }
 
     @Test
-    fun aPostTwoMinutesAheadIsSentWithinAMinuteOfItsTimeInDoze() = runBlocking<Unit> {
+    fun aPostTwoMinutesAheadIsAnAlarmClockThatKeepsTheDeviceOutOfDeepIdleAndIsSentOnTime() = runBlocking<Unit> {
         // The database keeps milliseconds.
         val due = Instant.ofEpochMilli(Instant.now().plusSeconds(120).toEpochMilli())
         val id = queue("on time in doze", Schedule.Explicit(due))
@@ -120,10 +120,15 @@ class ScheduledSendDeviceTest {
         }
         assertThat(container.publishAlarms.state!!.path).isEqualTo(PublishAlarms.Path.EXACT)
         assertThat(ourAlarm()).isTrue()
+        // M7: the alarm is an alarm clock, the next one the system knows of on the emulator.
+        val next = app.getSystemService(android.app.AlarmManager::class.java).nextAlarmClock
+        assertThat(next?.triggerTime).isEqualTo(due.toEpochMilli())
 
+        // An alarm clock wakes the device from idle, and the system does not enter deep idle while one is closer
+        // than its MIN_TIME_TO_ALARM (DeviceIdleController.isUpcomingAlarmClock in AOSP), so forcing it fails.
         shell("dumpsys battery unplug")
         val idle = shell("dumpsys deviceidle force-idle")
-        assertThat(idle).contains("Now forced in to deep idle mode")
+        assertThat(idle).contains("Unable to go deep idle")
 
         withTimeout(Duration.ofMinutes(4).toMillis()) {
             while (container.posts.get(id)?.state != PostState.SENT) delay(500)

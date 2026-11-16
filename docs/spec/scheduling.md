@@ -55,7 +55,7 @@ Design:
 ## Verification scenarios
 
 - With slots Mon 09:00 and 13:00, queue three posts on Monday at 08:00: they get 09:00, 13:00 and the next weekday's first slot.
-- Queue a post for 3 minutes ahead, put the device into Doze (`adb shell dumpsys deviceidle force-idle`): it is sent within a minute of its time.
+- Queue a post for 3 minutes ahead and try to put the device into Doze (`adb shell dumpsys deviceidle force-idle`): the system refuses deep idle because of the upcoming alarm clock, and the post is sent within a minute of its time.
 - Queue A 09:00, B 13:00 (slots) and X 11:00 (explicit time). Drag B above A: B gets 09:00, A 13:00, X stays at 11:00. Undo restores A 09:00, B 13:00.
 - Reboot with a queued post due in an hour: the alarm is restored and the post is sent on time.
 - Turn the phone off before two posts are due and on two hours later: nothing is sent; one notification "2 posts missed their time" appears. Reschedule puts them into the next two free slots in their order; Send now sends both in order.
