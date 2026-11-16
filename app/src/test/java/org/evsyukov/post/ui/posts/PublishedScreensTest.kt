@@ -91,7 +91,8 @@ class PublishedScreensTest {
 
         h.waitFor(DraftsTags.row(newer))
         assertThat(top(DraftsTags.row(newer))).isLessThan(top(DraftsTags.row(older)))
-        // Each row names its targets.
+        // Each row names its targets. The accounts come in a flow of their own; until they do, a row shows no targets.
+        h.waitUntil { compose.onAllNodesWithText("alice@alice.example").fetchSemanticsNodes().isNotEmpty() }
         compose.onAllNodesWithText("alice@alice.example").assertCountEquals(2)
 
         h.click(DraftsTags.row(older))
