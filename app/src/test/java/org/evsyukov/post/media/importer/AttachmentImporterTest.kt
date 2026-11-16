@@ -72,7 +72,11 @@ class AttachmentImporterTest {
         )
 
         runBlocking {
-            job = launch(kotlinx.coroutines.Dispatchers.Default) { importer.import(listOf(first, second), 0) }
+            // Started only once assigned: the stream cancels it from another thread and must not find it unset.
+            job = launch(kotlinx.coroutines.Dispatchers.Default, start = kotlinx.coroutines.CoroutineStart.LAZY) {
+                importer.import(listOf(first, second), 0)
+            }
+            job.start()
             job.join()
         }
 
