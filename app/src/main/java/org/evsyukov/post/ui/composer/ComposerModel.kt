@@ -9,6 +9,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.text.TextRange
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
@@ -74,6 +75,8 @@ class ComposerModel(
     private val editHistoryId: Long? = null,
     /** New post from this (R31): a new draft with the text and options of this history record. */
     private val fromHistoryId: Long? = null,
+    /** The saved state of the screen: what the composer shows comes back from it after process death. */
+    private val savedState: SavedStateHandle = SavedStateHandle(),
 ) : ViewModel() {
     val text = TextFieldState()
     val spoiler = TextFieldState()
@@ -167,7 +170,13 @@ class ComposerModel(
     val queueCount: StateFlow<Int> = container.posts.observeQueue().map { it.size }.stateIn(viewModelScope, SharingStarted.Eagerly, 0)
 
     init {
-        viewModelScope.launch { load(initialDraftId) }
+        viewModelScope.launch {
+            // After process death the draft comes back as it was on screen, saved or not (R15, R27).
+            val snapshot = ComposerSnapshot.decode(savedState[KEY_SNAPSHOT])
+            load(snapshot?.draftId ?: initialDraftId)
+            if (snapshot != null) restore(snapshot)
+            snapshotFlow { if (loaded) toSnapshot() else null }.filterNotNull().collect { savedState[KEY_SNAPSHOT] = it.encode() }
+        }
         viewModelScope.launch {
             snapshotFlow { renderInput() }
                 .combine(accounts.filterNotNull()) { input, list -> input to list }
@@ -277,6 +286,50 @@ class ComposerModel(
         // A new post from a sent one is not saved yet: leaving asks whether to keep it (R15).
         saved = if (fromHistoryId != null && id == null) null else content()
         loaded = true
+    }
+
+    /** What the screen shows, for the saved state. */
+    private fun toSnapshot() = ComposerSnapshot(
+        draftId = draftId,
+        text = text.text.toString(),
+        spoilerText = spoiler.text.toString(),
+        spoilerShown = spoilerShown,
+        language = language,
+        targets = targets,
+        accountOptions = accountOptions,
+        poll = poll,
+        attachments = attachments.map(SnapshotFile::of),
+        chosenFixes = chosenFixes,
+        keptMedia = keptMedia,
+    )
+
+    /**
+     * Puts back what the screen showed before process death over the draft [load] read. A saved attachment
+     * comes from the database with its variants and takes the edits of the snapshot; one added since the last
+     * save comes back while its copy is still in app storage.
+     */
+    private suspend fun restore(snapshot: ComposerSnapshot) {
+        text.setTextAndPlaceCursorAtEnd(snapshot.text)
+        spoiler.setTextAndPlaceCursorAtEnd(snapshot.spoilerText)
+        spoilerShown = snapshot.spoilerShown
+        language = snapshot.language
+        targets = snapshot.targets
+        accountOptions = snapshot.accountOptions
+        poll = snapshot.poll
+        chosenFixes = snapshot.chosenFixes
+        if (editing != null) keptMedia = snapshot.keptMedia
+        val stored = attachments.associateBy { it.id }
+        val restored = withContext(Dispatchers.IO) {
+            snapshot.attachments.mapNotNull { file ->
+                if (file.id >= 0) {
+                    stored[file.id]?.copy(pieceIndex = file.pieceIndex, alt = file.alt, focusX = file.focusX, focusY = file.focusY)
+                } else {
+                    file.toAttachment().takeIf { container.attachmentImporter.file(it.path).isFile }
+                }
+            }
+        }
+        attachments = restored
+        nextNewId = minOf(-1L, (restored.minOfOrNull { it.id } ?: 0L) - 1)
     }
 
     /** The composer filled with [text] and [options], as a saved draft or a history record gives them. */
@@ -662,6 +715,9 @@ class ComposerModel(
 
     companion object {
         const val RENDER_DEBOUNCE_MS = 150L
+
+        /** The key of the [ComposerSnapshot] in the saved state. */
+        const val KEY_SNAPSHOT = "composer.snapshot"
 
         /**
          * [current] with the database ids of [savedBack], matched by file path, which is unique per copy. Only the
