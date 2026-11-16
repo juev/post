@@ -87,16 +87,19 @@ class Publisher(
             posts.recoverInterrupted()
             val now = clock.instant()
             beforeSend(now)
-            val queue = posts.observeQueue().first()
-            val refs = queue.mapNotNull { it.toQueuedRef() }
             val zone = zone()
-            val due = dueOrder(refs, zone, now).toSet()
-            // dueOrder leaves out posts that have started: a retry or a thread cut short resumes here (R30).
-            val resumed = refs.filter { it.started && !it.held && !it.failed }.map { it.id }.toSet()
-            val byId = queue.associateBy { it.id }
-            val order = inQueueOrder(refs.filter { it.id in due || it.id in resumed }, zone).mapNotNull { byId[it.id] }
-            if (order.any { it.hasLargeMedia() }) showForeground(foreground, SendProgress())
-            for (post in order) {
+            val handled = HashSet<Long>()
+            var first = true
+            while (true) {
+                // Q2, S8: the queue is read again before every post, so an edit, a new time or a reorder saved
+                // while an earlier post was sending is what goes out, and a post moved into the due time goes too.
+                val order = dueNow(now, zone)
+                if (first) {
+                    if (order.any { it.hasLargeMedia() }) showForeground(foreground, SendProgress())
+                    first = false
+                }
+                val post = order.firstOrNull { it.id !in handled } ?: break
+                handled += post.id
                 try {
                     publishPost(post, foreground)
                 } catch (e: CancellationException) {
@@ -114,6 +117,17 @@ class Publisher(
                 afterRun()
             }
         }
+    }
+
+    /** The posts due at [now] and the posts already sending, in queue order, as the database has them now. */
+    private suspend fun dueNow(now: Instant, zone: ZoneId): List<Post> {
+        val queue = posts.observeQueue().first()
+        val refs = queue.mapNotNull { it.toQueuedRef() }
+        val due = dueOrder(refs, zone, now).toSet()
+        // dueOrder leaves out posts that have started: a retry or a thread cut short resumes here (R30).
+        val resumed = refs.filter { it.started && !it.held && !it.failed }.map { it.id }.toSet()
+        val byId = queue.associateBy { it.id }
+        return inQueueOrder(refs.filter { it.id in due || it.id in resumed }, zone).mapNotNull { byId[it.id] }
     }
 
     /**

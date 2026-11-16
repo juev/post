@@ -6,10 +6,13 @@ import kotlinx.coroutines.runBlocking
 import org.evsyukov.post.PublishTrigger
 import org.evsyukov.post.data.db.DeliveryState
 import org.evsyukov.post.data.db.PostState
+import org.evsyukov.post.data.posts.DraftInput
+import org.evsyukov.post.data.posts.Schedule
 import org.evsyukov.post.text.AndroidTextSegmenter
 import org.junit.After
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.time.Duration
 import java.time.ZoneOffset
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -61,5 +64,58 @@ class PublisherRunTest {
         assertThat(f.post(broken)!!.state).isEqualTo(PostState.QUEUED)
         assertThat(f.post(broken)!!.deliveries.single().state).isEqualTo(DeliveryState.WAITING)
         assertThat(afterRuns.get()).isEqualTo(1)
+    }
+
+    @Test
+    fun anEditSavedWhileAnEarlierPostSendsIsWhatGoesOut() {
+        // Q2: the second post has not started while the first one sends, so the user can still edit it.
+        val alice = f.mastodon()
+        f.queue("first", listOf(alice))
+        val second = f.queue("second", listOf(alice))
+        server.afterCreate = { created ->
+            if (created.text == "first") blocking { f.posts.saveDraft(DraftInput(id = second, text = "second, fixed", targets = listOf(alice))) }
+        }
+
+        f.run()
+
+        assertThat(server.statuses.map { it.text }).containsExactly("first", "second, fixed").inOrder()
+    }
+
+    @Test
+    fun aPostMovedLaterWhileAnEarlierPostSendsWaitsForItsNewTime() {
+        val alice = f.mastodon()
+        f.queue("first", listOf(alice))
+        val second = f.queue("second", listOf(alice))
+        val tomorrow = f.clock.now.plus(Duration.ofDays(1))
+        server.afterCreate = { created ->
+            if (created.text == "first") blocking { f.posts.updateSchedules(mapOf(second to Schedule.Explicit(tomorrow))) }
+        }
+
+        f.run()
+
+        assertThat(server.statuses.map { it.text }).containsExactly("first")
+        val post = f.post(second)!!
+        assertThat(post.state).isEqualTo(PostState.QUEUED)
+        assertThat(post.deliveries.single().attempts).isEqualTo(0)
+    }
+
+    @Test
+    fun aPostMovedIntoTheDueTimeWhileTheRunSendsGoesOutInTheSameRun() {
+        // S8: a drag swaps the times of a due post and a later one while the run is busy with an earlier post.
+        val alice = f.mastodon()
+        val now = f.clock.now
+        f.queue("first", listOf(alice))
+        val due = f.queue("due", listOf(alice))
+        val later = blocking { f.posts.saveAndQueue(DraftInput(text = "later", targets = listOf(alice)), Schedule.Explicit(now.plus(Duration.ofHours(4)))) }
+        server.afterCreate = { created ->
+            if (created.text == "first") {
+                blocking { f.posts.updateSchedules(mapOf(due to Schedule.Explicit(now.plus(Duration.ofHours(4))), later to Schedule.Explicit(now))) }
+            }
+        }
+
+        f.run()
+
+        assertThat(server.statuses.map { it.text }).containsExactly("first", "later").inOrder()
+        assertThat(f.post(due)!!.state).isEqualTo(PostState.QUEUED)
     }
 }
