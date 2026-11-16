@@ -74,7 +74,7 @@ Tokens are stored on the device, encrypted with a key in Android Keystore.
 - **Network state** (`ACCESS_NETWORK_STATE`): sending waits until the phone is online.
 - **Keep awake** (`WAKE_LOCK`): the phone does not fall asleep in the middle of a send.
 - **Notifications**: progress of long uploads, failed deliveries, posts that missed their time and, if you turn it on, a summary of successful sends. Android 13 and later ask for it the first time you send.
-- **Exact alarms** (`USE_EXACT_ALARM`): to send a scheduled post at its minute even when the phone is idle. Android's ordinary background jobs can be delayed by many minutes in Doze.
+- **Exact alarms** (`USE_EXACT_ALARM`): to send a scheduled post at its minute even when the phone is idle. Android's ordinary background jobs can be delayed by many minutes in Doze. The alarm is set as an alarm clock, because some phones delay other exact alarms by up to an hour, so Android may show the alarm icon and the time of the next post where it shows the next alarm.
 - **Run at startup**: alarms are lost on reboot, so the app sets the next one again after the phone starts and checks for posts that missed their time.
 - **Foreground service**: long video uploads and transcoding run with a notification so Android does not stop them halfway.
 
