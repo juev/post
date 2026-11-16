@@ -8,7 +8,6 @@ import org.evsyukov.post.core.schedule.moveUp
 import org.evsyukov.post.core.schedule.redistribute
 import org.evsyukov.post.core.schedule.reorder
 import org.evsyukov.post.core.schedule.reschedule
-import org.evsyukov.post.data.db.DeliveryState
 import org.evsyukov.post.data.db.PostState
 import org.evsyukov.post.data.posts.PostsRepository
 import org.evsyukov.post.data.posts.Schedule
@@ -49,11 +48,7 @@ class QueueActions(
      * Delete from the queue (S7): the post goes with its files and frees its slot; later posts stay. A post
      * with a delivery in progress cannot go; returns false then.
      */
-    suspend fun delete(postId: Long): Boolean {
-        val post = posts.get(postId) ?: return false
-        if (post.deliveries.any { it.state == DeliveryState.SENDING }) return false
-        return posts.delete(postId)
-    }
+    suspend fun delete(postId: Long): Boolean = posts.deleteUnlessSending(postId)
 
     /**
      * Drag and drop (S8, S9): the slot-based post [postId] moves to position [toIndex] among the waiting
