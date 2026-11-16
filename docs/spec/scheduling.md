@@ -44,12 +44,13 @@ Facts are from developer.android.com, read 2026-11-15:
 
 Design:
 
-- M1. One exact alarm is set for the earliest pending send time, with `USE_EXACT_ALARM`. Whenever the queue changes, the alarm is reset to the new earliest time.
+- M1. One exact alarm is set for the earliest pending send time, with `USE_EXACT_ALARM`, as an alarm clock (`setAlarmClock`; why, see M7). Whenever the queue changes, the alarm is reset to the new earliest time. The system may show the alarm icon in the status bar and the time of the next post where it shows the next alarm; a tap on that time opens the Queue tab. When the system refuses exact alarms, the app sets an inexact alarm (`setAndAllowWhileIdle`) and a WorkManager run delayed to the same time.
 - M2. The alarm receiver enqueues a unique WorkManager job with a `CONNECTED` network constraint as expedited work (`RUN_AS_NON_EXPEDITED_WORK_REQUEST` when the quota is exhausted), because Doze does not run ordinary jobs. The job sends every post whose time has come, then sets the next alarm. A job that uploads video calls `setForeground` at its start, inside the window the alarm grants.
 - M3. On `BOOT_COMPLETED`, time zone change, time change and app update, the app sets the alarm again. Then the job runs once to put late posts on hold and ask about them (Q4–Q6).
 - M4. A periodic WorkManager check every 30 minutes restores a missing alarm or job, as in ShareDing.
 - M5. Video uploads run as a long-running worker with a `dataSync` foreground notification. (Hypothesis, not verified: starting the foreground worker from an exact-alarm receiver on Android 14+ is allowed; check on a device before relying on it.)
 - M6. Without network at send time, the job waits for the network constraint. When the network returns after the late threshold, the post goes on hold instead (Q5). Retries of failed deliveries use WorkManager backoff starting at 30 seconds.
+- M7. The alarm is an alarm clock always, not a setting (decision of 2026-11-16, #10): a scheduler that sends late defeats its purpose, and the alarm icon is an acceptable cost. Reason, measured 2026-11-16 on a OnePlus CPH2747 with Android 17 and Post 0.1.0-rc.1: `setExactAndAllowWhileIdle` under `USE_EXACT_ALARM` got `exactAllowReason=policy_permission` and still the window of an inexact alarm in `adb shell dumpsys alarm`, 75 % of the time left until it is due (`window=+14m47s926ms` for a post queued at 15:40:29 for 16:00), at most one hour. Such a delay is beyond the late threshold (Q4), and the post would go on hold. Lists measured the same on this phone with Android 16 (`juev/lists` R119): only `setAlarmClock` was delivered on time there, and the Lists alarm clocks on Android 17 show `window=0`.
 
 ## Verification scenarios
 

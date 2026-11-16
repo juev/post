@@ -15,7 +15,9 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import org.evsyukov.post.MainActivity
 import org.evsyukov.post.data.posts.PostsRepository
+import org.evsyukov.post.send.AndroidSendNotifier
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
@@ -23,7 +25,8 @@ import java.time.ZoneId
 
 /**
  * The one alarm of the sender (scheduling.md M1): set for the earliest pending time of the queue with
- * `setExactAndAllowWhileIdle`, which fires in Doze, under `USE_EXACT_ALARM`. Should the system still refuse
+ * `setAlarmClock`, which fires in Doze, under `USE_EXACT_ALARM`. `setExactAndAllowWhileIdle` is not enough: the
+ * firmware of some phones gives it the window of an inexact alarm, up to an hour (M7). Should the system refuse
  * exact alarms, it falls back to `setAndAllowWhileIdle` together with a delayed WorkManager run, and remembers
  * which way it went. [refresh] runs on every change of the queue and after every run of the sender.
  */
@@ -72,7 +75,7 @@ class PublishAlarms(
         val millis = at.toEpochMilli()
         if (alarmManager.canScheduleExactAlarms()) {
             try {
-                alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, millis, alarmIntent())
+                alarmManager.setAlarmClock(AlarmManager.AlarmClockInfo(millis, showIntent()), alarmIntent())
                 workManager.cancelUniqueWork(FALLBACK)
                 return Path.EXACT
             } catch (e: SecurityException) {
@@ -92,6 +95,16 @@ class PublishAlarms(
         context,
         REQUEST_CODE,
         Intent(context, PublishAlarmReceiver::class.java).setAction(ACTION_ALARM),
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+    )
+
+    /** What a tap on the time of the next alarm opens, where the system shows it: the Queue tab. */
+    private fun showIntent(): PendingIntent = PendingIntent.getActivity(
+        context,
+        REQUEST_CODE,
+        Intent(context, MainActivity::class.java)
+            .addFlags(AndroidSendNotifier.OPEN_FLAGS)
+            .putExtra(AndroidSendNotifier.EXTRA_OPEN, AndroidSendNotifier.OPEN_QUEUE),
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
     )
 

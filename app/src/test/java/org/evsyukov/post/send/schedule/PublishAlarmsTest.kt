@@ -21,7 +21,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.runBlocking
+import org.evsyukov.post.MainActivity
 import org.evsyukov.post.data.posts.Schedule
+import org.evsyukov.post.send.AndroidSendNotifier
 import org.evsyukov.post.send.PublishScheduler
 import org.evsyukov.post.send.blocking
 import org.junit.After
@@ -59,7 +61,8 @@ class PublishAlarmsTest {
     private lateinit var alarms: PublishAlarms
     private var zone: ZoneId = ZoneOffset.UTC
     private var alice = 0L
-    private val shadowAlarms get() = shadowOf(context.getSystemService(AlarmManager::class.java))
+    private val alarmManager get() = context.getSystemService(AlarmManager::class.java)
+    private val shadowAlarms get() = shadowOf(alarmManager)
 
     @Before
     fun setUp() {
@@ -84,7 +87,7 @@ class PublishAlarmsTest {
     private fun publishWork(): List<WorkInfo> = workManager.getWorkInfosForUniqueWork(PublishScheduler.PUBLISH).get()
 
     @Test
-    fun theExactAlarmIsSetForTheEarliestPendingTimeAndFiresInDoze() {
+    fun theExactAlarmIsAnAlarmClockForTheEarliestPendingTime() {
         f.queue("later", Schedule.Explicit(f.clock.now.plusSeconds(7200)), listOf(alice))
         f.queue("sooner", Schedule.Explicit(f.clock.now.plusSeconds(3600)), listOf(alice))
 
@@ -92,12 +95,27 @@ class PublishAlarmsTest {
 
         assertThat(state).isEqualTo(PublishAlarms.State(PublishAlarms.Path.EXACT, f.clock.now.plusSeconds(3600)))
         val alarm = shadowAlarms.scheduledAlarms.single()
+        val at = f.clock.now.plusSeconds(3600).toEpochMilli()
         assertThat(alarm.type).isEqualTo(AlarmManager.RTC_WAKEUP)
-        assertThat(alarm.triggerAtMs).isEqualTo(f.clock.now.plusSeconds(3600).toEpochMilli())
-        assertThat(alarm.allowWhileIdle).isTrue()
+        assertThat(alarm.triggerAtMs).isEqualTo(at)
         assertThat(alarm.windowLengthMs).isEqualTo(ShadowAlarmManager.WINDOW_EXACT)
         assertThat(shadowOf(alarm.operation).savedIntent.component!!.className).isEqualTo(PublishAlarmReceiver::class.java.name)
+        // M7: an alarm clock, which the firmware of some phones does not delay as it does other exact alarms.
+        assertThat(alarm.alarmClockInfo!!.triggerTime).isEqualTo(at)
+        assertThat(alarmManager.nextAlarmClock!!.triggerTime).isEqualTo(at)
         assertThat(alarms.state).isEqualTo(state)
+    }
+
+    @Test
+    fun aTapOnTheTimeOfTheAlarmClockOpensTheQueue() {
+        f.queue("post", Schedule.Explicit(f.clock.now.plusSeconds(3600)), listOf(alice))
+        blocking { alarms.refresh() }
+
+        val show = shadowOf(alarmManager.nextAlarmClock!!.showIntent)
+
+        assertThat(show.isActivity).isTrue()
+        assertThat(show.savedIntent.component!!.className).isEqualTo(MainActivity::class.java.name)
+        assertThat(show.savedIntent.getStringExtra(AndroidSendNotifier.EXTRA_OPEN)).isEqualTo(AndroidSendNotifier.OPEN_QUEUE)
     }
 
     @Test
@@ -115,6 +133,7 @@ class PublishAlarmsTest {
 
         assertThat(state.path).isEqualTo(PublishAlarms.Path.NONE)
         assertThat(shadowAlarms.scheduledAlarms).isEmpty()
+        assertThat(alarmManager.nextAlarmClock).isNull()
     }
 
     @Test
@@ -142,6 +161,7 @@ class PublishAlarmsTest {
         val alarm = shadowAlarms.scheduledAlarms.single()
         assertThat(alarm.allowWhileIdle).isTrue()
         assertThat(alarm.windowLengthMs).isNotEqualTo(ShadowAlarmManager.WINDOW_EXACT)
+        assertThat(alarm.alarmClockInfo).isNull()
         val fallback = workManager.getWorkInfosForUniqueWork(PublishAlarms.FALLBACK).get().single()
         assertThat(fallback.state).isEqualTo(WorkInfo.State.ENQUEUED)
         assertThat(fallback.initialDelayMillis).isEqualTo(Duration.ofMinutes(30).toMillis())
@@ -150,6 +170,8 @@ class PublishAlarmsTest {
         ShadowAlarmManager.setCanScheduleExactAlarms(true)
         assertThat(blocking { alarms.refresh() }.path).isEqualTo(PublishAlarms.Path.EXACT)
         assertThat(workManager.getWorkInfosForUniqueWork(PublishAlarms.FALLBACK).get().single().state).isEqualTo(WorkInfo.State.CANCELLED)
+        // The alarm clock replaces the inexact alarm: they share the operation.
+        assertThat(shadowAlarms.scheduledAlarms.single().alarmClockInfo).isNotNull()
     }
 
     @Test
