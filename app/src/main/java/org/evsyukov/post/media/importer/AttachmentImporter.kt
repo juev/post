@@ -23,6 +23,11 @@ class AttachmentImporter(
     private val resolver: ContentResolver,
     private val filesDir: File,
     private val probe: MediaProbe = MediaProbe(),
+    /**
+     * The app's own data directory. A `file:` URI into it is refused: another app could share one and have
+     * Post copy its private files (tokens, the database, other drafts' media) into a post.
+     */
+    private val privateDir: File? = null,
 ) {
     /** Why a file could not be added. */
     enum class Reason {
@@ -76,6 +81,7 @@ class AttachmentImporter(
             return One.Failed(reason)
         }
         try {
+            if (isPrivateFile(uri)) return fail(Reason.UNREADABLE)
             dir.mkdirs()
             val input = resolver.openInputStream(uri) ?: return fail(Reason.UNREADABLE)
             input.use { source -> partial.outputStream().use { source.copyTo(it) } }
@@ -107,6 +113,15 @@ class AttachmentImporter(
             // A provider may throw anything: a lost grant, a missing file, a full disk.
             return fail(Reason.UNREADABLE)
         }
+    }
+
+    private fun isPrivateFile(uri: Uri): Boolean {
+        val root = privateDir ?: return false
+        if (!uri.scheme.equals(ContentResolver.SCHEME_FILE, ignoreCase = true)) return false
+        val path = uri.path ?: return true
+        val target = File(path).canonicalFile
+        val base = root.canonicalFile
+        return generateSequence(target) { it.parentFile }.any { it == base }
     }
 
     private fun resolverType(uri: Uri): String? = runCatching { resolver.getType(uri) }.getOrNull()

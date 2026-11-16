@@ -105,7 +105,7 @@ class AppContainer(
     val attachmentFiles: AttachmentFiles by lazy { FilesDirAttachmentFiles(this.context.filesDir) }
 
     /** Copies picked and shared files into app storage and reads their metadata (R9). */
-    val attachmentImporter: AttachmentImporter by lazy { AttachmentImporter(this.context.contentResolver, this.context.filesDir) }
+    val attachmentImporter: AttachmentImporter by lazy { AttachmentImporter(this.context.contentResolver, this.context.filesDir, privateDir = this.context.dataDir) }
 
     val accounts: AccountsRepository by lazy { RoomAccountsRepository(database, secrets) }
 
