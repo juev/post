@@ -186,7 +186,7 @@ class Publisher(
             val plan = delivery.plan ?: if (post.kind == PostKind.DELETE) {
                 DeliveryPlan(parts = emptyList())
             } else {
-                when (val frozen = freezer.freeze(post, account, targets.filter { it.network == account.network }, settings)) {
+                when (val frozen = freezer.freeze(post, account, targets.filter { it.network == account.network }, settings, previous)) {
                     is FreezeResult.Ready -> frozen.plan
                     is FreezeResult.Blocked -> {
                         if (posts.failUnstarted(delivery.id, frozen.message)) notifier.deliveryFailed(account, post.id, frozen.message)

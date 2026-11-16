@@ -622,7 +622,12 @@ class ComposerModel(
     }
 
     /** The options [account] gets for this post: its own entry, or its defaults (R17). */
-    fun optionsFor(account: Account): AccountPostOptions = accountOptions[account.id] ?: AccountPostOptions.from(account.defaults)
+    fun optionsFor(account: Account): AccountPostOptions {
+        val options = accountOptions[account.id] ?: AccountPostOptions.from(account.defaults)
+        // N28: a published post keeps the visibility it went out with, whatever the defaults say now.
+        val published = editing?.items?.firstOrNull { it.accountId == account.id }?.mastodon?.visibility
+        return if (published != null) options.copy(visibility = published) else options
+    }
 
     fun setOptions(accountId: Long, options: AccountPostOptions) {
         accountOptions = accountOptions + (accountId to options)
