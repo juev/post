@@ -442,15 +442,22 @@ class ComposerModel(
      */
     suspend fun saveDraft(): Long = keepDraft().id
 
-    /** The outcome of a draft save: the id, and whether the edits went into a new draft (see [keepDraft]). */
-    data class DraftSave(val id: Long, val keptAsNew: Boolean)
+    /**
+     * The outcome of a draft save: the id, and whether the edits went into a new draft (see [keepDraft]). With
+     * [blocked] nothing was saved: a queued post stays in the queue only as something that can be sent.
+     */
+    data class DraftSave(val id: Long, val keptAsNew: Boolean, val blocked: List<Blocker> = emptyList())
 
     /**
      * [saveDraft] for Save draft and for keeping the draft on leave. When the post being edited started
      * sending or was deleted meanwhile (Q2), the composer lets go of it ([detach]) and saves the edits as a
-     * new draft, so they are not lost.
+     * new draft, so they are not lost. A queued post is not saved without a target: the screen shows why.
      */
     suspend fun keepDraft(): DraftSave {
+        if (editingQueued) {
+            val blocked = listOfNotNull(Blocker.NoTarget.takeIf { liveTargets().isEmpty() })
+            if (blocked.isNotEmpty()) return DraftSave(draftId ?: 0L, keptAsNew = false, blocked = blocked)
+        }
         var id = 0L
         if (saveOrDetach { id = writeDraft() }) return DraftSave(id, keptAsNew = false)
         return DraftSave(writeDraft(), keptAsNew = true)
