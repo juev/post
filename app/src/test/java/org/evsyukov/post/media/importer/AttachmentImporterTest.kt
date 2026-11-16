@@ -150,6 +150,21 @@ class AttachmentImporterTest {
     }
 
     @Test
+    fun aSharedFileUriIntoTheAppsOwnStorageIsRefused() {
+        // Another app shares file:///data/data/org.evsyukov.post/…: Post must not copy its own private files.
+        val dataDir = temp.newFolder("data")
+        val guarded = AttachmentImporter(context.contentResolver, File(dataDir, "files").apply { mkdirs() }, privateDir = dataDir)
+        val secret = File(dataDir, "files/attachments").apply { mkdirs() }.let { source("alpha.png").copyTo(File(it, "other-draft.png")) }
+        val sneaky = Uri.parse("file://" + File(dataDir, "files/../files/attachments/other-draft.png").path)
+        val outside = Uri.fromFile(source("still.gif"))
+
+        val result = runBlocking { guarded.import(listOf(Uri.fromFile(secret), sneaky, outside), 0) }
+
+        assertThat(result.failures.map { it.reason }).containsExactly(AttachmentImporter.Reason.UNREADABLE, AttachmentImporter.Reason.UNREADABLE)
+        assertThat(result.attachments.map { it.mime }).containsExactly("image/gif")
+    }
+
+    @Test
     fun aContentUriWithoutAProviderIsUnreadable() {
         val uri = Uri.parse("content://org.evsyukov.post.nothing/1")
         val result = runBlocking { importer.import(listOf(uri), 0) }
