@@ -60,6 +60,12 @@ interface PostsRepository {
     suspend fun delete(id: Long): Boolean
 
     /**
+     * Delete from the queue (S7): like [delete], but a post with a delivery sending now stays and false is
+     * returned. The check and the deletion are one transaction, so the sender cannot claim the post in between.
+     */
+    suspend fun deleteUnlessSending(id: Long): Boolean
+
+    /**
      * Puts a draft into the queue (R21, R24): one waiting delivery per target and the state QUEUED, in
      * one transaction (R27). A new post goes last among posts due at the same time (Q8). A queued post
      * that has not started can be queued again with a new time and targets.
@@ -261,10 +267,13 @@ class RoomPostsRepository(
 
     override suspend fun delete(id: Long): Boolean = deletePost(id, onlyDraft = false)
 
-    private suspend fun deletePost(id: Long, onlyDraft: Boolean): Boolean {
+    override suspend fun deleteUnlessSending(id: Long): Boolean = deletePost(id, onlyDraft = false, unlessSending = true)
+
+    private suspend fun deletePost(id: Long, onlyDraft: Boolean, unlessSending: Boolean = false): Boolean {
         val paths = db.withTransaction {
             val post = posts.get(id) ?: return@withTransaction null
             if (onlyDraft && post.state != PostState.DRAFT) return@withTransaction null
+            if (unlessSending && deliveries.forPost(id).any { it.state == DeliveryState.SENDING }) return@withTransaction null
             val paths = attachments.pathsOfPost(id) + attachments.variantPathsOfPost(id)
             posts.delete(id)
             paths

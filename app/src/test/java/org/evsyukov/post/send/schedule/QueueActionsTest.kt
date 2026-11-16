@@ -2,7 +2,12 @@ package org.evsyukov.post.send.schedule
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.google.common.truth.Truth.assertThat
+import org.evsyukov.post.PublishTrigger
+import org.evsyukov.post.data.db.DeliveryState
 import org.evsyukov.post.data.db.PostState
+import org.evsyukov.post.data.posts.DeliveryPlan
+import org.evsyukov.post.data.posts.Post
+import org.evsyukov.post.data.posts.PostsRepository
 import org.evsyukov.post.data.posts.Schedule
 import org.evsyukov.post.send.blocking
 import org.junit.After
@@ -138,6 +143,38 @@ class QueueActionsTest {
 
         assertThat(slotOf(b)).isEqualTo("2026-11-16T13:00")
         assertThat(occupiedSlots(f.queueNow(), java.time.ZoneOffset.UTC).map { it.toString() }).containsExactly("2026-11-16T13:00")
+    }
+
+    @Test
+    fun aPostTheSenderClaimsWhileDeleteLooksAtItStaysAndKeepsSending() {
+        // S7 with the sender: it claims the post's delivery right after Delete has read the post. The post must
+        // stay, or the sender would publish a post the user deleted and then lose the record of it.
+        val a = f.slot("A", "2026-11-16T09:00", listOf(alice))
+        val delivery = f.post(a).deliveries.single().id
+        val claim = suspend { f.send.posts.startDelivery(delivery, DeliveryPlan(emptyList())) }
+        // The claim lands after any read Delete makes of the post and before it deletes.
+        val racing = object : PostsRepository by f.send.posts {
+            override suspend fun get(id: Long): Post? = f.send.posts.get(id).also { claim() }
+
+            override suspend fun deleteUnlessSending(id: Long): Boolean {
+                claim()
+                return f.send.posts.deleteUnlessSending(id)
+            }
+        }
+        val actions = QueueActions(racing, f.schedule, PublishTrigger {}, f.late, f.clock) { java.time.ZoneOffset.UTC }
+
+        assertThat(blocking { actions.delete(a) }).isFalse()
+
+        assertThat(f.post(a).deliveries.single().state).isEqualTo(DeliveryState.SENDING)
+    }
+
+    @Test
+    fun aSendingPostCannotBeDeleted() {
+        val a = f.slot("A", "2026-11-16T09:00", listOf(alice))
+        blocking { f.send.posts.startDelivery(f.post(a).deliveries.single().id, DeliveryPlan(emptyList())) }
+
+        assertThat(blocking { f.actions.delete(a) }).isFalse()
+        assertThat(f.queueNow().map { it.id }).containsExactly(a)
     }
 
     @Test
