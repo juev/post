@@ -52,7 +52,11 @@ class AccountsNavigationTest {
     }
 
     @After
-    fun tearDown() = container.database.close()
+    fun tearDown() {
+        // Ends the activity first, so no screen still reads the database when it closes (#15).
+        runCatching { compose.activityRule.scenario.close() }
+        container.database.close()
+    }
 
     @Test
     fun anAccountShowsUpOpensChangesItsLabelAndIsRemoved() {

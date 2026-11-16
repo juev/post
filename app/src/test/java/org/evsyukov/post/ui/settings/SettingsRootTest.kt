@@ -41,6 +41,8 @@ class SettingsRootTest {
 
     @After
     fun tearDown() {
+        // Ends the activity first, so no screen still reads the database when it closes (#15).
+        runCatching { compose.activityRule.scenario.close() }
         if (container.database.isOpen) container.database.close()
     }
 

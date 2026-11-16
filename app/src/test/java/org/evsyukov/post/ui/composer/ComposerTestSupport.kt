@@ -44,6 +44,8 @@ class ComposerHarness(private val compose: AndroidComposeTestRule<ActivityScenar
     val settingsOpened = AtomicInteger()
 
     fun close() {
+        // Ends the activity first, so no screen still reads the database when it closes (#15).
+        runCatching { compose.activityRule.scenario.close() }
         if (container.database.isOpen) container.database.close()
     }
 
