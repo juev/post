@@ -89,6 +89,8 @@ class Publisher(
             beforeSend(now)
             val zone = zone()
             val handled = HashSet<Long>()
+            // Q8: an account whose earlier post waits for a retry takes no later post in this run.
+            val waiting = HashSet<Long>()
             var first = true
             while (true) {
                 // Q2, S8: the queue is read again before every post, so an edit, a new time or a reorder saved
@@ -101,7 +103,7 @@ class Publisher(
                 val post = order.firstOrNull { it.id !in handled } ?: break
                 handled += post.id
                 try {
-                    publishPost(post, foreground)
+                    publishPost(post, foreground, waiting)
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
@@ -156,13 +158,18 @@ class Publisher(
     suspend fun retryPost(postId: Long): Int =
         posts.retryFailed(postId).also { if (it > 0) trigger.publishNow() }
 
-    private suspend fun publishPost(post: Post, foreground: SendForeground) {
+    /** [waiting]: the accounts whose earlier post in this run waits for a retry; this post's ones are added. */
+    private suspend fun publishPost(post: Post, foreground: SendForeground, waiting: MutableSet<Long>) {
         val settings = settings()
         val now = clock.instant()
         val targets = post.targets.mapNotNull { accounts.get(it) }
         for (delivery in post.deliveries) {
             if (delivery.state != DeliveryState.WAITING) continue
-            if (delivery.nextAttemptAt?.isAfter(now) == true) continue
+            if (delivery.accountId in waiting) continue
+            if (delivery.nextAttemptAt?.isAfter(now) == true) {
+                waiting += delivery.accountId
+                continue
+            }
             val account = accounts.get(delivery.accountId) ?: continue
             val executor = executors[account.network] ?: continue
             val previous: HistoryItem? = if (post.kind == PostKind.NEW) {
@@ -195,6 +202,7 @@ class Publisher(
                 return
             }
             apply(post, account, started, outcome)
+            if (outcome is DeliveryOutcome.Retry) waiting += account.id
         }
         val fresh = posts.get(post.id) ?: return
         if (fresh.deliveries.isNotEmpty() && fresh.deliveries.all { it.state == DeliveryState.SENT }) complete(fresh, settings)
