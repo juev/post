@@ -195,8 +195,9 @@ class ComposerPublishedEditTest {
 
         h.waitUntil { queue().isNotEmpty() }
         assertThat(queue().single().options.keptMedia).containsExactly(
-            KeptMedia(0, 0, "new alt"),
-            KeptMedia(0, 1, "second", removed = true),
+            // The place among all files names the same file in every Mastodon copy (T3).
+            KeptMedia(0, 0, "new alt", ordinal = 0),
+            KeptMedia(0, 1, "second", removed = true, ordinal = 1),
         ).inOrder()
     }
 
@@ -210,7 +211,7 @@ class ComposerPublishedEditTest {
         )
         show(editHistoryId = id)
 
-        assertThat(h.model.keptMedia).containsExactly(KeptMedia(0, 0, "second"))
+        assertThat(h.model.keptMedia).containsExactly(KeptMedia(0, 0, "second", ordinal = 0))
     }
 
     @Test
