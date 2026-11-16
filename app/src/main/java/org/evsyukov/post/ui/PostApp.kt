@@ -6,6 +6,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -114,8 +118,12 @@ fun PostApp(
         while (backStack.size > 1 && backStack.last() != AccountsKey) backStack.removeAt(backStack.lastIndex)
         if (backStack.last() != AccountsKey) backStack.add(AccountsKey)
     }
+    // Q6: every request for Posts (Review of the late notification) shows its Queue tab, also when Posts is
+    // already open on another tab and nothing is pushed.
+    var queueRequests by rememberSaveable { mutableIntStateOf(0) }
     LaunchedEffect(request) {
         if (request != null) {
+            if (request == PostsKey) queueRequests++
             open(request)
             onRequestHandled()
         }
@@ -147,6 +155,7 @@ fun PostApp(
                 entry<PostsKey> {
                     PostsScreen(
                         onBack = back,
+                        queueRequests = queueRequests,
                         onEdit = { open(ComposerKey(it)) },
                         onOpenSchedule = { open(ScheduleKey) },
                         onOpenDetails = { open(PostDetailsKey(postId = it)) },
