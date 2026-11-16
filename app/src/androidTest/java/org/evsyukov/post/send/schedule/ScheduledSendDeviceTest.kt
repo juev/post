@@ -169,6 +169,8 @@ class ScheduledSendDeviceTest {
 
     @Test
     fun aPostQueuedInThePastIsHeldNotSentAndTheNotificationSendsItOnSendNow() = runBlocking<Unit> {
+        // A new database has the default schedule (#9); without one the notification offers no Reschedule.
+        container.schedule.save(org.evsyukov.post.core.schedule.WeeklySchedule.EMPTY)
         val id = queue("missed by two hours", Schedule.Explicit(Instant.now().minus(Duration.ofHours(2))))
 
         container.publishScheduler.enqueue()
