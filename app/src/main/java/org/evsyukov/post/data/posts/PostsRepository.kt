@@ -22,9 +22,12 @@ import org.evsyukov.post.data.db.ScheduleKind
 import org.evsyukov.post.data.db.VariantEntity
 import org.evsyukov.post.data.db.refreshPostState
 import org.evsyukov.post.data.history.HistoryItem
+import org.evsyukov.post.data.history.after
 import org.evsyukov.post.data.history.encodeItems
 import org.evsyukov.post.data.history.encodeOptions
 import org.evsyukov.post.data.history.historyEntity
+import org.evsyukov.post.data.history.toRecord
+import org.evsyukov.post.data.history.withItem
 import org.evsyukov.post.data.settings.HistoryRetention
 import java.time.Clock
 import java.time.Instant
@@ -274,6 +277,9 @@ class RoomPostsRepository(
             val post = posts.get(id) ?: return@withTransaction null
             if (onlyDraft && post.state != PostState.DRAFT) return@withTransaction null
             if (unlessSending && deliveries.forPost(id).any { it.state == DeliveryState.SENDING }) return@withTransaction null
+            // #4: an edit or a deletion that was applied in part leaves its effects in the record before it goes.
+            val unfinished = deliveries.forPost(id).filter { it.state != DeliveryState.SENT }
+            writeOutcomes(post, unfinished, succeeded = false, dropEmpty = true)
             val paths = attachments.pathsOfPost(id) + attachments.variantPathsOfPost(id)
             posts.delete(id)
             paths
@@ -379,7 +385,38 @@ class RoomPostsRepository(
     }
 
     override suspend fun deliverySucceeded(id: Long, progress: DeliveryProgress): Boolean =
-        changeDelivery(id) { deliveries.succeed(id, encodeProgress(progress)) }
+        changeDelivery(id) {
+            val changed = deliveries.succeed(id, encodeProgress(progress))
+            if (changed > 0) {
+                val delivery = deliveries.get(id) ?: throw DeliveryNotFound(id)
+                posts.get(delivery.postId)?.let { writeOutcomes(it, listOf(delivery), succeeded = true) }
+            }
+            changed
+        }
+
+    /**
+     * #4, R38: writes what [delivered] did on the server into the history record the edit or deletion [post]
+     * acts on, in the caller's transaction. A succeeded delivery writes at once, so the record follows each
+     * account even when another one fails; a delivery cut short is written only when its post leaves the queue,
+     * because a retry compares its plan with the record as it was. With [dropEmpty] a record left without
+     * copies goes; otherwise the sender's [markSent] removes it.
+     */
+    private suspend fun writeOutcomes(post: PostEntity, delivered: List<DeliveryEntity>, succeeded: Boolean, dropEmpty: Boolean = false) {
+        if (post.kind == PostKind.NEW) return
+        val historyId = post.historyId ?: return
+        val history = db.historyDao()
+        val before = history.get(historyId)?.toRecord()?.items ?: return
+        var items = before
+        for (entity in delivered) {
+            val delivery = entity.toDelivery()
+            val item = items.firstOrNull { it.accountId == delivery.accountId } ?: continue
+            items = items.withItem(delivery.accountId, item.after(post.kind, delivery.plan, delivery.progress, succeeded))
+        }
+        when {
+            items.isEmpty() && dropEmpty -> history.delete(historyId)
+            items != before -> history.updateItems(historyId, encodeItems(items))
+        }
+    }
 
     override suspend fun deliveryFailed(id: Long, error: String, retryAt: Instant?): Boolean =
         changeDelivery(id) {

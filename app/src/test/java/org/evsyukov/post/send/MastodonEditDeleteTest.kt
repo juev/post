@@ -140,6 +140,71 @@ class MastodonEditDeleteTest {
     }
 
     @Test
+    fun partsPostedBeforeAFailureStayOutOfHistoryForTheRetryAndGoInWhenTheEditIsDeleted() {
+        // #4: the edit adds two parts; the second of them is refused, so "three" is online and not in history.
+        val alice = f.mastodon()
+        val record = published(thread("one", "two"), listOf(alice))
+        server.statusAnswer = { _, request -> if ("four" in request.body) FakeMastodon.error(422, "Validation failed") else null }
+
+        val editId = edit(record, thread("one", "two", "three", "four"), listOf(alice))
+        f.run()
+
+        assertThat(f.post(editId)!!.state).isEqualTo(PostState.FAILED)
+        assertThat(server.statuses.map { it.id }).containsExactly("s1", "s2", "s3").inOrder()
+        // A retry compares its plan with the record, so the record still has the old thread.
+        assertThat(record(record.id)!!.items.single().parts.map { it.id }).containsExactly("s1", "s2").inOrder()
+
+        assertThat(blocking { f.posts.deleteUnlessSending(editId) }).isTrue()
+
+        val after = record(record.id)!!.items.single().parts
+        assertThat(after.map { it.id }).containsExactly("s1", "s2", "s3").inOrder()
+        assertThat(after.last().text).isEqualTo("three")
+
+        // Delete published now removes the part the failed edit left online too.
+        blocking { PublishedActions(f.posts, f.history, { }, f.clock).delete(record.id, listOf(alice)) }
+        f.run()
+        assertThat(calls).containsExactly("DELETE s3", "DELETE s2", "DELETE s1").inOrder()
+        assertThat(record(record.id)).isNull()
+    }
+
+    @Test
+    fun anEditThatSucceedsOnOneAccountIsInHistoryWhileTheOtherFails() {
+        val alice = f.mastodon()
+        val work = f.mastodon(host = "work.example", remoteId = "202")
+        FakeMastodon(f.servers, "work.example") { f.clock.now }
+        f.servers.route("PUT", "work.example/api/v1/statuses/s1") { FakeMastodon.error(422, "Validation failed") }
+        val record = published("both", listOf(alice, work))
+
+        val editId = edit(record, "both, fixed", listOf(alice, work))
+        f.run()
+
+        assertThat(f.post(editId)!!.state).isEqualTo(PostState.FAILED)
+        val items = record(record.id)!!.items.associateBy { it.accountId }
+        assertThat(items[alice]!!.parts.single().text).isEqualTo("both, fixed")
+        assertThat(items[work]!!.parts.single().text).isEqualTo("both")
+
+        // Deleting the failed edit leaves both copies as they are on their servers.
+        assertThat(blocking { f.posts.deleteUnlessSending(editId) }).isTrue()
+        assertThat(record(record.id)!!.items.associateBy { it.accountId }).isEqualTo(items)
+    }
+
+    @Test
+    fun aDeletionCutShortKeepsWhatIsLeftWhenItIsDeletedFromTheQueue() {
+        val alice = f.mastodon()
+        val record = published(thread("one", "two", "three"), listOf(alice))
+        deleteAnswer = { call, _ -> if (call == 2) FakeMastodon.error(403, "Forbidden") else null }
+
+        val deleteId = blocking { PublishedActions(f.posts, f.history, { }, f.clock).delete(record.id, listOf(alice)) }
+        f.run()
+        assertThat(f.post(deleteId)!!.state).isEqualTo(PostState.FAILED)
+
+        assertThat(blocking { f.posts.deleteUnlessSending(deleteId) }).isTrue()
+
+        // s3 is gone; the record names only what is still online.
+        assertThat(record(record.id)!!.items.single().parts.map { it.id }).containsExactly("s1", "s2").inOrder()
+    }
+
+    @Test
     fun surplusPartsAreDeletedLastFirstAfterTheEdit() {
         val alice = f.mastodon()
         val record = published(thread("one", "two", "three", "four"), listOf(alice))
