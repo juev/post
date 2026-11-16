@@ -25,6 +25,8 @@ import org.evsyukov.post.data.posts.PlannedSpan
 import org.evsyukov.post.data.posts.Post
 import org.evsyukov.post.data.settings.Settings
 import org.evsyukov.post.media.convert.MastodonVideoCheck
+import org.evsyukov.post.ui.composer.effectivePiece
+import org.evsyukov.post.ui.composer.pieceCount
 import java.util.Locale
 import java.util.UUID
 
@@ -130,8 +132,10 @@ class PlanFreezer(
 
     private fun mediaPlan(post: Post, network: Network, accounts: List<Account>, settings: Settings): MediaPlan? {
         if (post.attachments.isEmpty()) return null
+        // T14: the piece of each file as the composer showed it; a piece whose break was removed since is gone.
+        val pieces = pieceCount(post.text)
         return MediaPlanner.plan(
-            items = post.attachments.map { it.toMediaItem() },
+            items = post.attachments.map { it.toMediaItem().copy(pieceIndex = effectivePiece(it, pieces)) },
             rules = rulesOf(network, accounts),
             fixes = settings.defaultFixes() + post.options.chosenFixes[network].orEmpty(),
             hasPoll = post.options.poll != null,
