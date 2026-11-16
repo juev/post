@@ -2,6 +2,7 @@ package org.evsyukov.post.send
 
 import android.util.Log
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
@@ -12,6 +13,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import org.evsyukov.post.PublishTrigger
 import org.evsyukov.post.core.media.Conversion
 import org.evsyukov.post.core.media.MediaKind
@@ -81,21 +83,37 @@ class Publisher(
 
     /** Sends every due post; returns when they are all tried. */
     suspend fun run(foreground: SendForeground = SendForeground {}) = mutex.withLock {
-        posts.recoverInterrupted()
-        val now = clock.instant()
-        beforeSend(now)
-        val queue = posts.observeQueue().first()
-        val refs = queue.mapNotNull { it.toQueuedRef() }
-        val zone = zone()
-        val due = dueOrder(refs, zone, now).toSet()
-        // dueOrder leaves out posts that have started: a retry or a thread cut short resumes here (R30).
-        val resumed = refs.filter { it.started && !it.held && !it.failed }.map { it.id }.toSet()
-        val byId = queue.associateBy { it.id }
-        val order = inQueueOrder(refs.filter { it.id in due || it.id in resumed }, zone).mapNotNull { byId[it.id] }
-        if (order.any { it.hasLargeMedia() }) showForeground(foreground, SendProgress())
-        for (post in order) publishPost(post, foreground)
-        posts.earliestRetry()?.let(scheduleRetry)
-        afterRun()
+        try {
+            posts.recoverInterrupted()
+            val now = clock.instant()
+            beforeSend(now)
+            val queue = posts.observeQueue().first()
+            val refs = queue.mapNotNull { it.toQueuedRef() }
+            val zone = zone()
+            val due = dueOrder(refs, zone, now).toSet()
+            // dueOrder leaves out posts that have started: a retry or a thread cut short resumes here (R30).
+            val resumed = refs.filter { it.started && !it.held && !it.failed }.map { it.id }.toSet()
+            val byId = queue.associateBy { it.id }
+            val order = inQueueOrder(refs.filter { it.id in due || it.id in resumed }, zone).mapNotNull { byId[it.id] }
+            if (order.any { it.hasLargeMedia() }) showForeground(foreground, SendProgress())
+            for (post in order) {
+                try {
+                    publishPost(post, foreground)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    // One post that cannot be handled, such as one deleted under the run, does not hold up the
+                    // posts after it; its deliveries keep their state and the next run sees them again.
+                    Log.w(TAG, "post ${post.id} was not handled: ${e.javaClass.simpleName}")
+                }
+            }
+        } finally {
+            // M1, R29: whatever happened above, the next run is set up, even when this one was stopped.
+            withContext(NonCancellable) {
+                posts.earliestRetry()?.let(scheduleRetry)
+                afterRun()
+            }
+        }
     }
 
     /**
