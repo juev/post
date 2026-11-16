@@ -21,12 +21,18 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.activity.compose.LocalActivity
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.Job
+import java.util.UUID
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
@@ -91,41 +97,77 @@ fun isHandleOrDid(text: String): Boolean {
 @Composable
 fun AddBlueskyScreen(accountId: Long?, initialHandle: String, onBack: () -> Unit, onDone: () -> Unit) {
     val container = LocalAppContainer.current
-    val scope = rememberCoroutineScope()
+    val activity = LocalActivity.current
     var handle by rememberSaveable { mutableStateOf(initialHandle) }
-    // The password is not saved with the screen state: it must not reach the saved-state bundle.
-    var password by remember { mutableStateOf("") }
     var code by rememberSaveable { mutableStateOf("") }
-    var state by remember { mutableStateOf<BlueskyFormState>(BlueskyFormState.Idle) }
+    // One form per opening of the screen; a rotation finds the same one again.
+    val visit = rememberSaveable { UUID.randomUUID().toString() }
+    val form: BlueskyFormModel = viewModel(key = "add-bluesky-$visit") { BlueskyFormModel() }
+    DisposableEffect(form) {
+        // Leaving the screen, not rotating it, forgets the password.
+        onDispose { if (activity?.isChangingConfigurations != true) form.forget() }
+    }
+    LaunchedEffect(form.done) {
+        if (form.done) {
+            form.done = false
+            onDone()
+        }
+    }
     AddBlueskyContent(
         handle = handle,
         onHandleChange = { handle = it },
-        password = password,
-        onPasswordChange = { password = it },
+        password = form.password,
+        onPasswordChange = { form.password = it },
         code = code,
         onCodeChange = { code = it },
-        state = state,
+        state = form.state,
         reSignIn = accountId != null,
-        onSignIn = {
-            val codeAsked = state == BlueskyFormState.NeedsCode || (state as? BlueskyFormState.Failed)?.codeAsked == true
-            state = BlueskyFormState.Working
-            scope.launch {
-                state = try {
-                    when (container.blueskySignIn.signIn(handle, password, code.takeIf { codeAsked })) {
-                        is BlueskySignIn.Result.Done -> {
-                            password = ""
-                            onDone()
-                            BlueskyFormState.Idle
-                        }
-                        BlueskySignIn.Result.NeedsCode -> BlueskyFormState.NeedsCode
-                    }
-                } catch (e: SignInException) {
-                    BlueskyFormState.Failed(e.problem, codeAsked)
-                }
-            }
-        },
+        onSignIn = { form.signIn(container.blueskySignIn, handle, code) },
         onBack = onBack,
     )
+}
+
+/**
+ * The part of the Bluesky form a rotation must not lose: the password, which stays in memory and never reaches
+ * the saved-state bundle, and the sign-in in progress, which a rotation does not cancel.
+ */
+class BlueskyFormModel : ViewModel() {
+    var password by mutableStateOf("")
+    var state by mutableStateOf<BlueskyFormState>(BlueskyFormState.Idle)
+        private set
+
+    /** The sign-in succeeded; the screen closes and sets this back. */
+    var done by mutableStateOf(false)
+
+    private var job: Job? = null
+
+    fun signIn(signIn: BlueskySignIn, handle: String, code: String) {
+        val codeAsked = state == BlueskyFormState.NeedsCode || (state as? BlueskyFormState.Failed)?.codeAsked == true
+        val password = password
+        state = BlueskyFormState.Working
+        job = viewModelScope.launch {
+            state = try {
+                when (signIn.signIn(handle, password, code.takeIf { codeAsked })) {
+                    is BlueskySignIn.Result.Done -> {
+                        this@BlueskyFormModel.password = ""
+                        done = true
+                        BlueskyFormState.Idle
+                    }
+                    BlueskySignIn.Result.NeedsCode -> BlueskyFormState.NeedsCode
+                }
+            } catch (e: SignInException) {
+                BlueskyFormState.Failed(e.problem, codeAsked)
+            }
+        }
+    }
+
+    /** The user left the screen: the password goes from memory and nothing reopens the screen later. */
+    fun forget() {
+        job?.cancel()
+        password = ""
+        state = BlueskyFormState.Idle
+        done = false
+    }
 }
 
 /** The form without the sign-in machinery. */
