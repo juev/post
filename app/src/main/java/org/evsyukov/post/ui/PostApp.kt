@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -95,7 +96,13 @@ val MaxContentWidth = 640.dp
  * [draftId] the composer starts with that draft, as Open in composer of the Share sheet asks (R20).
  */
 @Composable
-fun PostApp(openOnStart: NavKey? = null, draftId: Long? = null) {
+fun PostApp(
+    openOnStart: NavKey? = null,
+    draftId: Long? = null,
+    /** A screen asked for while the app runs, such as by a tapped notification; [onRequestHandled] clears it. */
+    request: NavKey? = null,
+    onRequestHandled: () -> Unit = {},
+) {
     val backStack = rememberNavBackStack(*listOfNotNull(ComposerKey(draftId), openOnStart).toTypedArray())
     val activity = LocalActivity.current
     // A second tap on an action while its screen slides in would stack the screen twice.
@@ -106,6 +113,12 @@ fun PostApp(openOnStart: NavKey? = null, draftId: Long? = null) {
     val backToAccounts: () -> Unit = {
         while (backStack.size > 1 && backStack.last() != AccountsKey) backStack.removeAt(backStack.lastIndex)
         if (backStack.last() != AccountsKey) backStack.add(AccountsKey)
+    }
+    LaunchedEffect(request) {
+        if (request != null) {
+            open(request)
+            onRequestHandled()
+        }
     }
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         NavDisplay(

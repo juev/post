@@ -43,7 +43,7 @@ class AndroidLateNotifier(context: Context) : LateNotifier {
             context,
             REQUEST_REVIEW,
             Intent(context, MainActivity::class.java)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+                .addFlags(AndroidSendNotifier.OPEN_FLAGS)
                 .putExtra(AndroidSendNotifier.EXTRA_OPEN, AndroidSendNotifier.OPEN_QUEUE),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
