@@ -115,12 +115,13 @@ fun AccountsContent(
         modifier = Modifier.testTag(AccountsTags.SCREEN),
         topBar = { BackTopBar(title = stringResource(R.string.settings_accounts), onBack = onBack) },
         floatingActionButton = {
-            ExtendedFloatingActionButton(
-                text = { Text(stringResource(R.string.accounts_add)) },
-                icon = { Icon(Icons.Filled.Add, contentDescription = null) },
-                onClick = { choosing = true },
-                modifier = Modifier.testTag(AccountsTags.ADD),
-            )
+            // R33: the content slot, not the text/icon overload, whose animated label a screen reader never
+            // reached (the button had no name in TalkBack and in uiautomator).
+            ExtendedFloatingActionButton(onClick = { choosing = true }, modifier = Modifier.testTag(AccountsTags.ADD)) {
+                Icon(Icons.Filled.Add, contentDescription = null)
+                Spacer(Modifier.width(12.dp))
+                Text(stringResource(R.string.accounts_add))
+            }
         },
     ) { padding ->
         LazyColumn(Modifier.fillMaxSize().padding(padding)) {
