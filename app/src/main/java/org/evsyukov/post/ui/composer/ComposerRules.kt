@@ -152,7 +152,12 @@ fun blockers(
 ): List<Blocker> = buildList {
     if (targets.isEmpty()) add(Blocker.NoTarget)
     if (importing) add(Blocker.Importing)
-    if (text.isBlank() && poll == null && attachments.isEmpty() && !importing) add(Blocker.EmptyPost)
+    // A network that gets no file (all left out by a fix) and no poll (Bluesky has none) would get an empty post.
+    val emptyForANetwork = media.any { network ->
+        val pollGoes = poll != null && network.network == Network.MASTODON
+        !pollGoes && attachments.none { it.id !in network.plan.excluded }
+    }
+    if (text.isBlank() && !importing && ((poll == null && attachments.isEmpty()) || emptyForANetwork)) add(Blocker.EmptyPost)
     for (render in renders) render.render.issue?.let { add(Blocker.Text(render, it)) }
     if (poll != null) pollProblem(poll, pollLimits)?.let { add(Blocker.Poll(it)) }
     for (network in media) network.blocking.forEach { add(Blocker.Media(network.network, it)) }
