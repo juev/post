@@ -140,4 +140,43 @@ class BlueskyEditDeleteTest {
         assertThat(pds.posts.last().text).isEqualTo("new one")
         assertThat(f.post(editId)).isNull()
     }
+
+    @Test
+    fun aRepostThatSucceedsIsInHistoryAtOnceSoDeletePublishedReachesItAfterTheFailedEditIsDeleted() {
+        // #4: Mastodon A and Bluesky B; B is posted again, A's edit fails, the user deletes the edit from the queue.
+        val alice = f.mastodon()
+        val mastodon = org.evsyukov.post.send.FakeMastodon(f.servers) { f.clock.now }
+        f.servers.route("PUT", "${mastodon.host}/api/v1/statuses/s1") { org.evsyukov.post.send.FakeMastodon.error(422, "Validation failed") }
+        val bob = f.bluesky()
+        val id = f.queue("one", listOf(alice, bob))
+        f.run()
+        check(f.post(id)!!.state == PostState.SENT)
+        val record = blocking { f.history.observe().first().single() }
+        val oldKeys = record.items.first { it.accountId == bob }.parts.map { it.uri!!.substringAfterLast('/') }
+
+        val editId = blocking {
+            f.posts.saveAndQueue(
+                DraftInput(text = "one, fixed", options = record.options, targets = listOf(alice, bob), kind = PostKind.EDIT, historyId = record.id),
+                Schedule.Now(f.clock.instant()),
+            )
+        }
+        f.run()
+
+        assertThat(f.post(editId)!!.state).isEqualTo(PostState.FAILED)
+        // B's new thread is in the record already; A keeps its old copy.
+        val during = blocking { f.history.get(record.id) }!!.items.associateBy { it.accountId }
+        val newKeys = during[bob]!!.parts.map { it.uri!!.substringAfterLast('/') }
+        assertThat(newKeys).containsNoneIn(oldKeys)
+        assertThat(pds.records.keys).contains("app.bsky.feed.post/${newKeys.single()}")
+        assertThat(during[alice]!!.parts.single().id).isEqualTo("s1")
+
+        assertThat(blocking { f.posts.deleteUnlessSending(editId) }).isTrue()
+        blocking { PublishedActions(f.posts, f.history, { }, f.clock).delete(record.id, listOf(bob)) }
+        f.run()
+
+        // Delete published reaches the new thread, not the gone one.
+        assertThat(pds.deleteCommits.last()).contains("app.bsky.feed.post/${newKeys.single()}")
+        assertThat(pds.records.keys.filter { it.startsWith("app.bsky.feed.post/") }).isEmpty()
+        assertThat(blocking { f.history.get(record.id) }!!.items.map { it.accountId }).containsExactly(alice)
+    }
 }
