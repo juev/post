@@ -43,8 +43,8 @@ data class ComposerKey(
     val editHistoryId: Long? = null,
     val fromHistoryId: Long? = null,
     /**
-     * Tells apart two openings of an edit or a new post from the same record: models live as long as the
-     * activity, and one that already saved its edit starts over as an empty draft.
+     * Tells apart two openings of the same draft, queued post, edit or new post from a record: models live as
+     * long as the activity, and one that already saved, sent or cleared its post starts over as an empty draft.
      */
     val session: Long = 0,
 ) : NavKey
@@ -90,6 +90,10 @@ data object SendingSettingsKey : NavKey
 @Serializable
 data object AboutKey : NavKey
 
+/** [a] and [b] show the same screen: equal keys, or openings of the same post in the composer. */
+private fun sameScreen(a: NavKey, b: NavKey): Boolean =
+    a == b || (a is ComposerKey && b is ComposerKey && a.copy(session = 0) == b.copy(session = 0))
+
 /** The widest a screen gets: on a tablet or in landscape it stays this wide, in the middle. */
 val MaxContentWidth = 640.dp
 
@@ -109,8 +113,9 @@ fun PostApp(
 ) {
     val backStack = rememberNavBackStack(*listOfNotNull(ComposerKey(draftId), openOnStart).toTypedArray())
     val activity = LocalActivity.current
-    // A second tap on an action while its screen slides in would stack the screen twice.
-    val open: (NavKey) -> Unit = { key -> if (backStack.lastOrNull() != key) backStack.add(key) }
+    // A second tap on an action while its screen slides in would stack the screen twice. Two openings of the same
+    // post differ only in their session.
+    val open: (NavKey) -> Unit = { key -> if (backStack.lastOrNull()?.let { sameScreen(it, key) } != true) backStack.add(key) }
     // A second tap on a back arrow while the screen slides out would pop the composer itself.
     val back: () -> Unit = { if (backStack.size > 1) backStack.removeAt(backStack.lastIndex) }
     // After a sign-in the add screen closes and the accounts list shows the account.
@@ -156,7 +161,7 @@ fun PostApp(
                     PostsScreen(
                         onBack = back,
                         queueRequests = queueRequests,
-                        onEdit = { open(ComposerKey(it)) },
+                        onEdit = { open(ComposerKey(it, session = System.nanoTime())) },
                         onOpenSchedule = { open(ScheduleKey) },
                         onOpenDetails = { open(PostDetailsKey(postId = it)) },
                         sent = sent,
@@ -167,12 +172,12 @@ fun PostApp(
                         postId = key.postId,
                         historyId = key.historyId,
                         onBack = back,
-                        onEdit = { open(ComposerKey(it)) },
+                        onEdit = { open(ComposerKey(it, session = System.nanoTime())) },
                         onOpenSchedule = { open(ScheduleKey) },
                         navigation = sent,
                     )
                 }
-                entry<ScheduleKey> { ScheduleScreen(onBack = back, onOpenPost = { open(ComposerKey(it)) }) }
+                entry<ScheduleKey> { ScheduleScreen(onBack = back, onOpenPost = { open(ComposerKey(it, session = System.nanoTime())) }) }
                 entry<SettingsKey> {
                     SettingsScreen(
                         onBack = back,
