@@ -91,6 +91,20 @@ class QueueActionsTest {
     }
 
     @Test
+    fun aDropPastTheEndOfAListThatShrankUnderTheDragMovesNothing() {
+        // The tab computed index 2 among A, B, C; A started sending before the drop reached the database.
+        val a = f.slot("A", "2026-11-16T09:00", listOf(alice))
+        val b = f.slot("B", "2026-11-16T13:00", listOf(alice))
+        val c = f.slot("C", "2026-11-16T18:00", listOf(alice))
+        blocking { f.send.posts.startDelivery(f.post(a).deliveries.single().id, DeliveryPlan(parts = emptyList())) }
+
+        assertThat(blocking { f.actions.reorder(b, 2) }).isNull()
+
+        assertThat(slotOf(b)).isEqualTo("2026-11-16T13:00")
+        assertThat(slotOf(c)).isEqualTo("2026-11-16T18:00")
+    }
+
+    @Test
     fun moveUpAndMoveDownSwapWithTheNeighbourAndStopAtTheEnds() {
         val a = f.slot("A", "2026-11-16T09:00", listOf(alice))
         val b = f.slot("B", "2026-11-16T13:00", listOf(alice))
