@@ -19,6 +19,7 @@ import org.evsyukov.post.data.db.PostKind
 import org.evsyukov.post.data.history.HistoryItem
 import org.evsyukov.post.data.posts.AccountPostOptions
 import org.evsyukov.post.data.posts.KeptMedia
+import org.evsyukov.post.data.posts.MastodonStatusOptions
 import org.evsyukov.post.data.posts.PollDraft
 import org.evsyukov.post.data.posts.PostOptions
 import org.evsyukov.post.data.posts.PublishedMedia
@@ -165,6 +166,18 @@ class ComposerPublishedEditTest {
 
         h.waitFor(ComposerTags.VISIBILITY_LOCKED)
         assertThat(exists(AccountOptionsTags.visibility(Visibility.PUBLIC))).isFalse()
+    }
+
+    @Test
+    fun theLockedVisibilityIsThePublishedOneNotTheCurrentDefault() {
+        // Sent followers-only from the defaults, which say Public now.
+        val item = mastodonItem(alice, PublishedPart(id = "a1", text = "hi")).copy(mastodon = MastodonStatusOptions(visibility = Visibility.PRIVATE))
+        val id = record("hi", listOf(item))
+        show(editHistoryId = id)
+
+        val account = runBlocking { h.container.accounts.get(alice) }!!
+        assertThat(account.defaults.visibility).isEqualTo(Visibility.PUBLIC)
+        assertThat(h.model.optionsFor(account).visibility).isEqualTo(Visibility.PRIVATE)
     }
 
     @Test

@@ -125,6 +125,21 @@ class MastodonEditDeleteTest {
     }
 
     @Test
+    fun extraPartsKeepThePublishedVisibilityWhenTheDefaultChangedSince() {
+        // N28: a followers-only post sent with the account's default stays followers-only, also in its new parts.
+        val alice = f.mastodon()
+        blocking { f.accounts.updateDefaults(alice, org.evsyukov.post.data.accounts.AccountOptions(visibility = org.evsyukov.post.core.mastodon.Visibility.PRIVATE)) }
+        val record = published("one", listOf(alice))
+        assertThat(server.statuses.single().visibility).isEqualTo("private")
+        blocking { f.accounts.updateDefaults(alice, org.evsyukov.post.data.accounts.AccountOptions(visibility = org.evsyukov.post.core.mastodon.Visibility.PUBLIC)) }
+
+        edit(record, thread("one", "two"), listOf(alice))
+        f.run()
+
+        assertThat(server.statuses.map { it.text to it.visibility }).containsExactly("one" to "private", "two" to "private").inOrder()
+    }
+
+    @Test
     fun surplusPartsAreDeletedLastFirstAfterTheEdit() {
         val alice = f.mastodon()
         val record = published(thread("one", "two", "three", "four"), listOf(alice))

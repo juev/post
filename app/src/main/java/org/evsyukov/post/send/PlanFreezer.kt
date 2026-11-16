@@ -17,6 +17,7 @@ import org.evsyukov.post.core.render.TextIssue
 import org.evsyukov.post.core.render.TextRenderer
 import org.evsyukov.post.core.text.TextSegmenter
 import org.evsyukov.post.data.accounts.Account
+import org.evsyukov.post.data.history.HistoryItem
 import org.evsyukov.post.data.posts.BlueskyPostOptions
 import org.evsyukov.post.data.posts.DeliveryPlan
 import org.evsyukov.post.data.posts.MastodonStatusOptions
@@ -50,8 +51,10 @@ class PlanFreezer(
     /**
      * @param networkAccounts the post's target accounts of [account]'s network: the media plan follows the
      *   strictest of their rules (A10).
+     * @param published the account's copy an edit changes: its visibility stays (N28), whatever the account's
+     *   defaults are now.
      */
-    fun freeze(post: Post, account: Account, networkAccounts: List<Account>, settings: Settings): FreezeResult {
+    fun freeze(post: Post, account: Account, networkAccounts: List<Account>, settings: Settings, published: HistoryItem? = null): FreezeResult {
         val network = account.network
         val options = post.options
         val media = mediaPlan(post, network, networkAccounts.ifEmpty { listOf(account) }, settings)
@@ -92,7 +95,7 @@ class PlanFreezer(
             val caps = account.limits.mastodonCapabilities()
             val accountOptions = options.forAccount(account)
             MastodonStatusOptions(
-                visibility = accountOptions.visibility,
+                visibility = published?.mastodon?.visibility ?: accountOptions.visibility,
                 sensitive = options.sensitiveFor(account),
                 language = options.languagesFor(account).firstOrNull(),
                 quoteApprovalPolicy = accountOptions.quotePolicy.name.lowercase().takeIf { caps.supportsQuotePolicy },
