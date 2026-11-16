@@ -67,6 +67,8 @@
     <string name="problem_account_inactive">Аккаунт деактивирован или приостановлен.</string>
     <string name="problem_account_taken_down">Аккаунт заблокирован.</string>
     <string name="problem_rate_limited">Слишком много попыток входа. Подождите несколько минут и повторите.</string>
+    <string name="problem_wrong_account">Вы вошли в другой аккаунт, а не в тот, которому нужен вход.</string>
+    <string name="problem_wrong_account_named">Вы вошли как @%1$s, а не @%2$s.</string>
 
     <!-- Account details -->
     <string name="account_details_title">Аккаунт</string>

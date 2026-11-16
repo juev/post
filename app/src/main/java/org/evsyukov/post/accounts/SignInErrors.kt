@@ -58,10 +58,29 @@ enum class SignInProblem {
 
     /** Too many sign-ins for now (Bluesky allows 30 in 5 minutes, N15). */
     RATE_LIMITED,
+
+    /**
+     * Signing an account in again brought back another account (product.md R5); the original one still
+     * needs sign-in.
+     */
+    WRONG_ACCOUNT,
 }
 
-/** A sign-in failed for [problem]. The message never holds a token, a code or a password. */
-class SignInException(val problem: SignInProblem, cause: Throwable? = null) : Exception(problem.name, cause)
+/**
+ * The account [signedIn] came back from a sign-in meant for [expected]; both are handles such as
+ * `alice@mastodon.social`.
+ */
+data class AccountMismatch(val signedIn: String, val expected: String)
+
+/**
+ * A sign-in failed for [problem]. The message never holds a token, a code or a password. [mismatch] names
+ * both accounts for [SignInProblem.WRONG_ACCOUNT].
+ */
+class SignInException(
+    val problem: SignInProblem,
+    cause: Throwable? = null,
+    val mismatch: AccountMismatch? = null,
+) : Exception(problem.name, cause)
 
 /** Maps a failure of a Mastodon call to what the user sees. */
 internal fun mastodonProblem(e: Exception): SignInException {

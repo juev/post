@@ -14,6 +14,7 @@ import org.evsyukov.post.core.mastodon.REDIRECT_URI
 import org.evsyukov.post.core.mastodon.newState
 import org.evsyukov.post.core.mastodon.scopesFor
 import org.evsyukov.post.core.media.Network
+import org.evsyukov.post.data.accounts.Account
 import org.evsyukov.post.data.accounts.AccountLimits
 import org.evsyukov.post.data.accounts.AccountsRepository
 import org.evsyukov.post.data.accounts.MastodonApp
@@ -107,8 +108,10 @@ class MastodonSignIn(
     /**
      * Completes the sign-in from the [redirect] the browser returned. A redirect whose `state` is not the
      * pending one is rejected before any request, and the pending sign-in stays for the real redirect.
-     * Otherwise the pending sign-in is cleared whatever the outcome, unless a [Completion.Restart]
-     * replaced it.
+     * Signing an account in again must bring back that account: another one is rejected with
+     * [SignInProblem.WRONG_ACCOUNT], its token is revoked, and the pending sign-in stays, so the user can
+     * try again (product.md R5). Otherwise the pending sign-in is cleared whatever the outcome, unless a
+     * [Completion.Restart] replaced it.
      *
      * @throws SignInException
      */
@@ -138,6 +141,11 @@ class MastodonSignIn(
             val profile = client.verifyCredentials(token.accessToken)
             val host = rootOf(current.origin).host
             val handle = if ('@' in profile.acct) profile.acct else "${profile.acct}@$host"
+            val expected = current.accountId?.let { accounts.get(it) }
+            if (expected != null && !expected.isSameAccount(current.origin, profile.id)) {
+                revokeQuietly(client, app, token.accessToken)
+                throw SignInException(SignInProblem.WRONG_ACCOUNT, mismatch = AccountMismatch(handle, expected.handle))
+            }
             val id = accounts.add(
                 NewAccount(
                     network = Network.MASTODON,
@@ -156,8 +164,21 @@ class MastodonSignIn(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            pending.clear()
+            if (!(e is SignInException && e.problem == SignInProblem.WRONG_ACCOUNT)) pending.clear()
             throw mastodonProblem(e)
+        }
+    }
+
+    /** Whether this stored account is the one at [origin] with the remote id [remoteId]. */
+    private fun Account.isSameAccount(origin: String, remoteId: String): Boolean =
+        network == Network.MASTODON && server == origin && this.remoteId == remoteId
+
+    /** Revokes a token Post will not keep; a failed revoke leaves it unused. */
+    private suspend fun revokeQuietly(client: MastodonClient, app: MastodonApp, token: String) {
+        try {
+            client.revokeToken(app.clientId, app.clientSecret, token)
+        } catch (_: MastodonException) {
+            // Nothing stores the token, so it is never sent again.
         }
     }
 
