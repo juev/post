@@ -51,6 +51,9 @@ class MastodonSignInTest {
     private val host = "mastodon.example"
     private val registrations = AtomicInteger()
     private var tokenResponses = ArrayDeque<Pair<Int, String>>()
+
+    /** The answer to an app token request (`grant_type=client_credentials`); the server knows the client by default. */
+    private var appTokenResponse: Pair<Int, String> = 200 to """{"access_token":"app-token","token_type":"Bearer"}"""
     private var accountJson = """{"id":"42","username":"me","acct":"me","display_name":"Me Myself","avatar":"https://$host/avatars/me.png"}"""
 
     init {
@@ -62,8 +65,12 @@ class MastodonSignInTest {
             val n = registrations.incrementAndGet()
             FakeServers.json("""{"client_id":"client-$n","client_secret":"secret-$n"}""")
         }
-        servers.route("POST", "$host/oauth/token") {
-            val (code, body) = tokenResponses.removeFirstOrNull() ?: (200 to """{"access_token":"token-1","token_type":"Bearer"}""")
+        servers.route("POST", "$host/oauth/token") { request ->
+            val (code, body) = if (request.form("grant_type") == "client_credentials") {
+                appTokenResponse
+            } else {
+                tokenResponses.removeFirstOrNull() ?: (200 to """{"access_token":"token-1","token_type":"Bearer"}""")
+            }
             FakeServers.json(body, code)
         }
         servers.route("GET", "$host/api/v1/accounts/verify_credentials") { FakeServers.json(accountJson) }
@@ -149,6 +156,31 @@ class MastodonSignInTest {
         signIn().start("https://$host/")
 
         assertThat(registrations.get()).isEqualTo(1)
+    }
+
+    @Test
+    fun aRegistrationTheServerForgotIsMadeAgainBeforeTheBrowserOpens() = runBlocking<Unit> {
+        signIn().start(host)
+        // The server removed the registration, for example when its last token was revoked.
+        appTokenResponse = 401 to """{"error":"invalid_client","error_description":"Client authentication failed"}"""
+
+        val url = signIn().start(host)
+
+        assertThat(registrations.get()).isEqualTo(2)
+        assertThat(url.queryParameter("client_id")).isEqualTo("client-2")
+        assertThat(apps.get("https://$host")!!.clientId).isEqualTo("client-2")
+    }
+
+    @Test
+    fun aRegistrationIsKeptWhenTheCheckFailsForAnotherReason() = runBlocking<Unit> {
+        signIn().start(host)
+        // A server that does not give app tokens, or is down for a moment, says nothing about the registration.
+        appTokenResponse = 400 to """{"error":"unsupported_grant_type"}"""
+
+        val url = signIn().start(host)
+
+        assertThat(registrations.get()).isEqualTo(1)
+        assertThat(url.queryParameter("client_id")).isEqualTo("client-1")
     }
 
     @Test

@@ -162,6 +162,20 @@ class MastodonClient(
         return decode(send(Request.Builder().url(url("oauth/token")).post(form).build(), secrets))
     }
 
+    /**
+     * `POST /oauth/token` with `grant_type=client_credentials`: a token of the app itself, with no user. Its
+     * answer tells whether the server still knows the registration: `401 invalid_client` when it does not.
+     */
+    suspend fun appToken(clientId: String, clientSecret: String, scopes: String): Token {
+        val form = FormBody.Builder()
+            .add("grant_type", "client_credentials")
+            .add("client_id", clientId)
+            .add("client_secret", clientSecret)
+            .add("scope", scopes)
+            .build()
+        return decode(send(Request.Builder().url(url("oauth/token")).post(form).build(), listOf(clientId, clientSecret)))
+    }
+
     /** `POST /oauth/revoke`, called when an account is removed (networks.md N5). Idempotent on the server. */
     suspend fun revokeToken(clientId: String, clientSecret: String, token: String) {
         val form = FormBody.Builder()
