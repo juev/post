@@ -121,6 +121,24 @@ class AccountsRepositoryTest {
     }
 
     @Test
+    fun aBlueskyAccountThatMovedToAnotherPdsSignsInAgainAsTheSameAccount() = runBlocking<Unit> {
+        // A DID names one identity on every PDS; signing in after a move keeps the row and its stopped deliveries.
+        val first = repo.add(bluesky("me.bsky.social", "did:plc:me"), BlueskySecret("a", "r"))
+        repo.setLabel(first, "Sky")
+        repo.setState(first, AccountState.NEEDS_SIGN_IN)
+
+        val again = repo.add(bluesky("me.bsky.social", "did:plc:me").copy(server = "https://new-pds.example"), BlueskySecret("a2", "r2"))
+
+        assertThat(again).isEqualTo(first)
+        val account = repo.get(first)!!
+        assertThat(account.server).isEqualTo("https://new-pds.example")
+        assertThat(account.state).isEqualTo(AccountState.OK)
+        assertThat(account.label).isEqualTo("Sky")
+        assertThat(repo.readSecret(first)).isEqualTo(BlueskySecret("a2", "r2"))
+        assertThat(repo.observe().first()).hasSize(1)
+    }
+
+    @Test
     fun profileLimitsAndDefaultsSurviveTheirJsonColumns() = runBlocking<Unit> {
         val id = repo.add(mastodon("me", "1"), MastodonSecret("t"))
         val capabilities = MastodonCapabilities(

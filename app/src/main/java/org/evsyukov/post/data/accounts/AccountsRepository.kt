@@ -90,9 +90,14 @@ class RoomAccountsRepository(
         requireMatches(account.network, secret)
         val sealed = withContext(cipherDispatcher) { secrets.seal(secret) }
         return db.withTransaction {
-            val existing = dao.find(account.network, account.server, account.remoteId)
+            // A Bluesky DID is the same account on any PDS: after a move it signs in again, not as a second row.
+            val existing = if (account.network == Network.BLUESKY) {
+                dao.findByRemoteId(account.network, account.remoteId)
+            } else {
+                dao.find(account.network, account.server, account.remoteId)
+            }
             if (existing != null) {
-                dao.signedInAgain(existing.id, account.handle, account.displayName, account.avatarUrl, sealed)
+                dao.signedInAgain(existing.id, account.server, account.handle, account.displayName, account.avatarUrl, sealed)
                 existing.id
             } else {
                 dao.insert(

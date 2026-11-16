@@ -40,6 +40,10 @@ interface AccountDao {
     @Query("SELECT * FROM accounts WHERE network = :network AND server = :server AND remoteId = :remoteId")
     suspend fun find(network: Network, server: String, remoteId: String): AccountEntity?
 
+    /** A Bluesky DID names one identity whatever PDS holds it. */
+    @Query("SELECT * FROM accounts WHERE network = :network AND remoteId = :remoteId")
+    suspend fun findByRemoteId(network: Network, remoteId: String): AccountEntity?
+
     @Query("SELECT EXISTS(SELECT 1 FROM accounts WHERE id = :id)")
     suspend fun exists(id: Long): Boolean
 
@@ -73,15 +77,15 @@ interface AccountDao {
     @Query("UPDATE accounts SET secret = :secret WHERE id = :id")
     suspend fun updateSecret(id: Long, secret: ByteArray): Int
 
-    /** Signing in again (R5): new profile and tokens; label, position and defaults stay. */
+    /** Signing in again (R5): new profile, server (a Bluesky PDS move) and tokens; label, position and defaults stay. */
     @Query(
         """
-        UPDATE accounts SET handle = :handle, displayName = :displayName, avatarUrl = :avatarUrl,
+        UPDATE accounts SET server = :server, handle = :handle, displayName = :displayName, avatarUrl = :avatarUrl,
             secret = :secret, state = 'OK'
         WHERE id = :id
         """,
     )
-    suspend fun signedInAgain(id: Long, handle: String, displayName: String, avatarUrl: String?, secret: ByteArray): Int
+    suspend fun signedInAgain(id: Long, server: String, handle: String, displayName: String, avatarUrl: String?, secret: ByteArray): Int
 
     @Query("DELETE FROM accounts WHERE id = :id")
     suspend fun delete(id: Long): Int
