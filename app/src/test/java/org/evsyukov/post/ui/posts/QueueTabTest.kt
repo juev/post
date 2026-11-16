@@ -126,6 +126,8 @@ class QueueTabTest {
 
     @Test
     fun rescheduleIsHiddenWithoutAScheduleAndMovesLatePostsToFreeSlotsWithOne() {
+        // A new database has the default schedule (#9); this test starts without one.
+        h.slots()
         val a = held("A")
         show()
         h.waitFor(QueueTags.LATE_SEND_NOW)

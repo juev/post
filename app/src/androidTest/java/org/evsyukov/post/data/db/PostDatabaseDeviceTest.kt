@@ -9,10 +9,12 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.runBlocking
 import org.evsyukov.post.core.media.Network
+import org.evsyukov.post.core.schedule.WeeklySchedule
 import org.evsyukov.post.data.accounts.MastodonApp
 import org.evsyukov.post.data.accounts.NewAccount
 import org.evsyukov.post.data.accounts.RoomAccountsRepository
 import org.evsyukov.post.data.accounts.RoomMastodonAppsRepository
+import org.evsyukov.post.data.schedule.RoomScheduleRepository
 import org.evsyukov.post.data.secrets.KeystoreTokenCipher
 import org.evsyukov.post.data.secrets.MastodonSecret
 import org.evsyukov.post.data.secrets.SecretStore
@@ -22,9 +24,11 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
 import java.security.KeyStore
+import java.time.DayOfWeek
 import java.time.Instant
+import java.time.LocalTime
 
-/** The database on a device: a version 1 file opens with the entities, and tokens are sealed on disk (R4). */
+/** The database on a device: a version 1 file migrates to the current version, and tokens are sealed on disk (R4). */
 @RunWith(AndroidJUnit4::class)
 class PostDatabaseDeviceTest {
     private val context: Context = ApplicationProvider.getApplicationContext()
@@ -39,7 +43,7 @@ class PostDatabaseDeviceTest {
     }
 
     @Test
-    fun aDatabaseOfTheExportedVersionOneOpensWithTheCurrentEntities() = runBlocking<Unit> {
+    fun aDatabaseOfTheExportedVersionOneMigratesAndGetsTheDefaultSchedule() = runBlocking<Unit> {
         // MigrationTestHelper builds the file from the schema JSON packed into the test APK. The Room
         // plugin rewrites that JSON from the entities, and depending on the order of the tasks the APK
         // gets the old or the new one. Both cases fail here: a rewritten JSON no longer has the pinned
@@ -50,11 +54,29 @@ class PostDatabaseDeviceTest {
                 assertThat(cursor.getString(0)).isEqualTo(VERSION_1_IDENTITY)
             }
         }
+        helper.runMigrationsAndValidate(NAME, 2, true, PostDatabase.MIGRATION_1_2).close()
 
-        val db = Room.databaseBuilder(context, PostDatabase::class.java, NAME).build()
+        val db = PostDatabase.builder(context, NAME).build()
         try {
-            assertThat(db.scheduleDao().all()).isEmpty()
-            assertThat(db.openHelper.readableDatabase.version).isEqualTo(1)
+            // #9: 0.1.0-rc.1 had no default; a schedule that was never saved gets it with the migration.
+            assertThat(RoomScheduleRepository(db).get()).isEqualTo(WeeklySchedule.DEFAULT)
+            assertThat(db.openHelper.readableDatabase.version).isEqualTo(2)
+        } finally {
+            db.close()
+        }
+    }
+
+    @Test
+    fun theMigrationKeepsASavedSchedule() = runBlocking<Unit> {
+        helper.createDatabase(NAME, 1).use { file ->
+            // Monday 09:00.
+            file.execSQL("INSERT INTO schedule_slots (dayOfWeek, minuteOfDay) VALUES (1, 540)")
+        }
+
+        val db = PostDatabase.builder(context, NAME).build()
+        try {
+            assertThat(RoomScheduleRepository(db).get())
+                .isEqualTo(WeeklySchedule(mapOf(DayOfWeek.MONDAY to listOf(LocalTime.of(9, 0)))))
         } finally {
             db.close()
         }

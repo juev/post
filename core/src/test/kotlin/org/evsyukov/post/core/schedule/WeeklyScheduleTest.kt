@@ -54,4 +54,13 @@ class WeeklyScheduleTest {
         assertThat(schedule.timesOn(MONDAY)).containsExactly(LocalTime.of(9, 0), LocalTime.of(13, 0)).inOrder()
         assertThat(schedule.timesOn(SUNDAY)).isEmpty()
     }
+
+    @Test
+    fun `S1 the default schedule has three daytime slots three hours apart on every day`() {
+        val slots = listOf(LocalTime.of(10, 0), LocalTime.of(13, 0), LocalTime.of(16, 0))
+        assertThat(WeeklySchedule.DEFAULT.times.keys).containsExactlyElementsIn(java.time.DayOfWeek.entries)
+        for (day in java.time.DayOfWeek.entries) {
+            assertThat(WeeklySchedule.DEFAULT.timesOn(day)).containsExactlyElementsIn(slots).inOrder()
+        }
+    }
 }
