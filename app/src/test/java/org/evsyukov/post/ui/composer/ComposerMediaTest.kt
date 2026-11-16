@@ -150,6 +150,27 @@ class ComposerMediaTest {
     }
 
     @Test
+    fun aNetworkThatWouldGetNothingMakesAnEmptyPost() {
+        val limits = PollLimits.of(emptyList())
+        val accounts = listOf(mastodon(1), bluesky(2))
+        // A poll alone: Bluesky has no polls, so its post would be empty.
+        val poll = PollDraft(listOf("yes", "no"), 86_400)
+        val noFiles = planMedia(emptyList(), 1, accounts, Settings(), emptyMap(), hasPoll = true)
+        assertThat(blockers(listOf(1, 2), "", emptyList(), poll, limits, emptyList(), noFiles)).containsExactly(Blocker.EmptyPost)
+        // The poll alone is a Mastodon post.
+        val mastodonOnly = planMedia(emptyList(), 1, listOf(mastodon(1)), Settings(), emptyMap(), hasPoll = true)
+        assertThat(blockers(listOf(1), "", emptyList(), poll, limits, emptyList(), mastodonOnly)).isEmpty()
+
+        // An MP3 alone, sent to Bluesky without the file (media.md, "An MP3 to Mastodon and Bluesky").
+        val mp3 = listOf(audio(1))
+        val withoutFile = planMedia(mp3, 1, listOf(bluesky(2)), Settings(), mapOf(Network.BLUESKY to mapOf(ConflictKind.UNSUPPORTED_TYPE to FixKind.SEND_WITHOUT_FILE)), false)
+        assertThat(withoutFile.single().plan.excluded.keys).containsExactly(1L)
+        assertThat(blockers(listOf(2), " ", emptyList(), null, limits, mp3, withoutFile)).containsExactly(Blocker.EmptyPost)
+        // With text the post is not empty.
+        assertThat(blockers(listOf(2), "Listen", emptyList(), null, limits, mp3, withoutFile)).isEmpty()
+    }
+
+    @Test
     fun requireAltTextBlocksUntilEveryAttachmentHasOne() {
         val limits = PollLimits.of(emptyList())
         val files = listOf(image(1, alt = "a cat"), image(2), image(3, alt = "   "))
