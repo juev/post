@@ -1,7 +1,13 @@
 package org.evsyukov.post.ui
 
 import androidx.activity.compose.LocalActivity
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberNavBackStack
@@ -79,6 +85,9 @@ data object SendingSettingsKey : NavKey
 @Serializable
 data object AboutKey : NavKey
 
+/** The widest a screen gets: on a tablet or in landscape it stays this wide, in the middle. */
+val MaxContentWidth = 640.dp
+
 /**
  * The composer, with the other screens opened on top of it by its top bar and closed by their back
  * arrow or by the system back. There is no bottom navigation: the composer keeps the whole screen.
@@ -98,92 +107,95 @@ fun PostApp(openOnStart: NavKey? = null, draftId: Long? = null) {
         while (backStack.size > 1 && backStack.last() != AccountsKey) backStack.removeAt(backStack.lastIndex)
         if (backStack.last() != AccountsKey) backStack.add(AccountsKey)
     }
-    NavDisplay(
-        backStack = backStack,
-        onBack = back,
-        entryProvider = entryProvider {
-            entry<ComposerKey> { key ->
-                ComposerScreen(
-                    draftId = key.draftId,
-                    editHistoryId = key.editHistoryId,
-                    fromHistoryId = key.fromHistoryId,
-                    session = key.session,
-                    onOpenPosts = { open(PostsKey) },
-                    onOpenSchedule = { open(ScheduleKey) },
-                    onOpenSettings = { open(SettingsKey) },
-                    // The R15 question has been answered: leave as the system back would.
-                    onExit = { if (backStack.size > 1) back() else activity?.finish() },
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+        NavDisplay(
+            backStack = backStack,
+            modifier = Modifier.widthIn(max = MaxContentWidth).fillMaxSize(),
+            onBack = back,
+            entryProvider = entryProvider {
+                entry<ComposerKey> { key ->
+                    ComposerScreen(
+                        draftId = key.draftId,
+                        editHistoryId = key.editHistoryId,
+                        fromHistoryId = key.fromHistoryId,
+                        session = key.session,
+                        onOpenPosts = { open(PostsKey) },
+                        onOpenSchedule = { open(ScheduleKey) },
+                        onOpenSettings = { open(SettingsKey) },
+                        // The R15 question has been answered: leave as the system back would.
+                        onExit = { if (backStack.size > 1) back() else activity?.finish() },
+                    )
+                }
+                val sent = SentNavigation(
+                    onOpen = { open(PostDetailsKey(historyId = it)) },
+                    onEdit = { open(ComposerKey(editHistoryId = it, session = System.nanoTime())) },
+                    onNewFrom = { open(ComposerKey(fromHistoryId = it, session = System.nanoTime())) },
                 )
-            }
-            val sent = SentNavigation(
-                onOpen = { open(PostDetailsKey(historyId = it)) },
-                onEdit = { open(ComposerKey(editHistoryId = it, session = System.nanoTime())) },
-                onNewFrom = { open(ComposerKey(fromHistoryId = it, session = System.nanoTime())) },
-            )
-            entry<PostsKey> {
-                PostsScreen(
-                    onBack = back,
-                    onEdit = { open(ComposerKey(it)) },
-                    onOpenSchedule = { open(ScheduleKey) },
-                    onOpenDetails = { open(PostDetailsKey(postId = it)) },
-                    sent = sent,
-                )
-            }
-            entry<PostDetailsKey> { key ->
-                PostDetailsScreen(
-                    postId = key.postId,
-                    historyId = key.historyId,
-                    onBack = back,
-                    onEdit = { open(ComposerKey(it)) },
-                    onOpenSchedule = { open(ScheduleKey) },
-                    navigation = sent,
-                )
-            }
-            entry<ScheduleKey> { ScheduleScreen(onBack = back, onOpenPost = { open(ComposerKey(it)) }) }
-            entry<SettingsKey> {
-                SettingsScreen(
-                    onBack = back,
-                    onOpenAccounts = { open(AccountsKey) },
-                    onOpenDefaults = { open(DefaultsSettingsKey) },
-                    onOpenSending = { open(SendingSettingsKey) },
-                    onOpenSchedule = { open(ScheduleKey) },
-                    onOpenAbout = { open(AboutKey) },
-                )
-            }
-            entry<DefaultsSettingsKey> { DefaultsSettingsScreen(onBack = back) }
-            entry<SendingSettingsKey> { SendingSettingsScreen(onBack = back) }
-            entry<AboutKey> { AboutScreen(onBack = back) }
-            entry<AccountsKey> {
-                AccountsScreen(
-                    onBack = back,
-                    onOpenAccount = { open(AccountDetailsKey(it)) },
-                    onAdd = { network ->
-                        open(if (network == Network.MASTODON) AddMastodonKey() else AddBlueskyKey())
-                    },
-                )
-            }
-            entry<AddMastodonKey> { key ->
-                AddMastodonScreen(accountId = key.accountId, initialAddress = key.address, onBack = back, onDone = backToAccounts)
-            }
-            entry<AddBlueskyKey> { key ->
-                AddBlueskyScreen(accountId = key.accountId, initialHandle = key.handle, onBack = back, onDone = backToAccounts)
-            }
-            entry<AccountDetailsKey> { key ->
-                AccountDetailsScreen(
-                    accountId = key.accountId,
-                    onBack = back,
-                    onSignInAgain = { account ->
-                        open(
-                            if (account.network == Network.MASTODON) {
-                                AddMastodonKey(account.id, account.server)
-                            } else {
-                                AddBlueskyKey(account.id, account.handle)
-                            },
-                        )
-                    },
-                    onRemoved = back,
-                )
-            }
-        },
-    )
+                entry<PostsKey> {
+                    PostsScreen(
+                        onBack = back,
+                        onEdit = { open(ComposerKey(it)) },
+                        onOpenSchedule = { open(ScheduleKey) },
+                        onOpenDetails = { open(PostDetailsKey(postId = it)) },
+                        sent = sent,
+                    )
+                }
+                entry<PostDetailsKey> { key ->
+                    PostDetailsScreen(
+                        postId = key.postId,
+                        historyId = key.historyId,
+                        onBack = back,
+                        onEdit = { open(ComposerKey(it)) },
+                        onOpenSchedule = { open(ScheduleKey) },
+                        navigation = sent,
+                    )
+                }
+                entry<ScheduleKey> { ScheduleScreen(onBack = back, onOpenPost = { open(ComposerKey(it)) }) }
+                entry<SettingsKey> {
+                    SettingsScreen(
+                        onBack = back,
+                        onOpenAccounts = { open(AccountsKey) },
+                        onOpenDefaults = { open(DefaultsSettingsKey) },
+                        onOpenSending = { open(SendingSettingsKey) },
+                        onOpenSchedule = { open(ScheduleKey) },
+                        onOpenAbout = { open(AboutKey) },
+                    )
+                }
+                entry<DefaultsSettingsKey> { DefaultsSettingsScreen(onBack = back) }
+                entry<SendingSettingsKey> { SendingSettingsScreen(onBack = back) }
+                entry<AboutKey> { AboutScreen(onBack = back) }
+                entry<AccountsKey> {
+                    AccountsScreen(
+                        onBack = back,
+                        onOpenAccount = { open(AccountDetailsKey(it)) },
+                        onAdd = { network ->
+                            open(if (network == Network.MASTODON) AddMastodonKey() else AddBlueskyKey())
+                        },
+                    )
+                }
+                entry<AddMastodonKey> { key ->
+                    AddMastodonScreen(accountId = key.accountId, initialAddress = key.address, onBack = back, onDone = backToAccounts)
+                }
+                entry<AddBlueskyKey> { key ->
+                    AddBlueskyScreen(accountId = key.accountId, initialHandle = key.handle, onBack = back, onDone = backToAccounts)
+                }
+                entry<AccountDetailsKey> { key ->
+                    AccountDetailsScreen(
+                        accountId = key.accountId,
+                        onBack = back,
+                        onSignInAgain = { account ->
+                            open(
+                                if (account.network == Network.MASTODON) {
+                                    AddMastodonKey(account.id, account.server)
+                                } else {
+                                    AddBlueskyKey(account.id, account.handle)
+                                },
+                            )
+                        },
+                        onRemoved = back,
+                    )
+                }
+            },
+        )
+    }
 }
