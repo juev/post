@@ -1,6 +1,8 @@
 package org.evsyukov.post.share
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
@@ -72,6 +74,11 @@ class ShareActivityTest {
     private val app: ShareTestApplication = ApplicationProvider.getApplicationContext()
     private val container get() = app.container
     private var scenario: ActivityScenario<ShareActivity>? = null
+
+    init {
+        // A send asks for notifications only while they are not allowed (R32); the test of that asks for itself.
+        shadowOf(app as android.app.Application).grantPermissions(Manifest.permission.POST_NOTIFICATIONS)
+    }
 
     @After
     fun tearDown() {
@@ -192,6 +199,30 @@ class ShareActivityTest {
         assertThat(app.triggers.get()).isEqualTo(1)
         assertThat(ShadowToast.getTextOfLatestToast()).isEqualTo(app.resources.getQuantityString(R.plurals.composer_sending_to, 2, 2))
         runBlocking { assertThat(container.settings.current().defaultTargets).containsExactly(me, sky) }
+    }
+
+    /** R32: the first send asks for notifications, as the composer does; the sheet closes after the answer. */
+    @Test
+    fun theFirstSendAsksForNotificationsAndClosesAfterTheAnswer() {
+        shadowOf(app as android.app.Application).denyPermissions(Manifest.permission.POST_NOTIFICATIONS)
+        defaults(mastodon("me"))
+        share(sendIntent("text/plain", "Hello"))
+
+        click(ShareTags.SEND)
+        compose.waitUntil(TIMEOUT) { queue().isNotEmpty() }
+        compose.waitForIdle()
+
+        var request: org.robolectric.shadows.ShadowActivity.PermissionsRequest? = null
+        scenario!!.onActivity { request = shadowOf(it).lastRequestedPermission }
+        assertThat(request!!.requestedPermissions).asList().containsExactly(Manifest.permission.POST_NOTIFICATIONS)
+        assertThat(isFinished()).isFalse()
+        runBlocking { assertThat(container.settings.current().notificationPermissionAsked).isTrue() }
+
+        scenario!!.onActivity {
+            it.onRequestPermissionsResult(request!!.requestCode, arrayOf(Manifest.permission.POST_NOTIFICATIONS), intArrayOf(PackageManager.PERMISSION_DENIED))
+        }
+        waitFinished()
+        assertThat(ShadowToast.getTextOfLatestToast()).isEqualTo(app.resources.getQuantityString(R.plurals.composer_sending_to, 1, 1))
     }
 
     /** R9, R19: the file is copied while the activity lives; the post keeps the copy after the source is gone. */
