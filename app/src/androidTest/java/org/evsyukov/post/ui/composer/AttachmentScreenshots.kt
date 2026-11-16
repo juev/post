@@ -99,11 +99,17 @@ class AttachmentScreenshots {
         for (id in created) container.accounts.remove(id)
         container.settings.setDefaultTargets(emptyList())
         for (post in container.posts.observeDrafts().first()) container.posts.delete(post.id)
-        instrumentation.targetContext.cacheDir.listFiles { file -> file.name.startsWith("shot-") }?.forEach { it.delete() }
+        fixtureDir.listFiles { file -> file.name.startsWith("shot-") }?.forEach { it.delete() }
     }
 
+    /**
+     * Outside the app's own data directory: the importer refuses a file URI into it, as another app could share one
+     * to have Post copy its private files.
+     */
+    private val fixtureDir: File by lazy { requireNotNull(instrumentation.targetContext.externalCacheDir).also { it.mkdirs() } }
+
     private fun fixture(name: String, copy: Int): Uri {
-        val file = File(instrumentation.targetContext.cacheDir, "shot-$copy-$name")
+        val file = File(fixtureDir, "shot-$copy-$name")
         instrumentation.context.assets.open(name).use { input -> file.outputStream().use { input.copyTo(it) } }
         return Uri.fromFile(file)
     }
