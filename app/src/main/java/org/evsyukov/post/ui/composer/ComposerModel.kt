@@ -75,8 +75,8 @@ class ComposerModel(
     private val editHistoryId: Long? = null,
     /** New post from this (R31): a new draft with the text and options of this history record. */
     private val fromHistoryId: Long? = null,
-    /** The saved state of the screen: what the composer shows comes back from it after process death. */
-    private val savedState: SavedStateHandle = SavedStateHandle(),
+    /** The saved state of the screen: what the composer shows comes back from it after process death; null keeps nothing. */
+    private val savedState: SavedStateHandle? = null,
 ) : ViewModel() {
     val text = TextFieldState()
     val spoiler = TextFieldState()
@@ -172,10 +172,13 @@ class ComposerModel(
     init {
         viewModelScope.launch {
             // After process death the draft comes back as it was on screen, saved or not (R15, R27).
-            val snapshot = ComposerSnapshot.decode(savedState[KEY_SNAPSHOT])
+            val state = savedState
+            val snapshot = ComposerSnapshot.decode(state?.get<String>(KEY_SNAPSHOT))
             load(snapshot?.draftId ?: initialDraftId)
             if (snapshot != null) restore(snapshot)
-            snapshotFlow { if (loaded) toSnapshot() else null }.filterNotNull().collect { savedState[KEY_SNAPSHOT] = it.encode() }
+            if (state != null) {
+                snapshotFlow { if (loaded) toSnapshot() else null }.filterNotNull().collect { state[KEY_SNAPSHOT] = it.encode() }
+            }
         }
         viewModelScope.launch {
             snapshotFlow { renderInput() }
