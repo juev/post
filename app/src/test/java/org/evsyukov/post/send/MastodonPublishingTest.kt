@@ -363,6 +363,56 @@ class MastodonPublishingTest {
     }
 
     @Test
+    fun aGatewayTimeoutAfterTheStatusWasMadeIsLookedUpAndNotPostedTwice() {
+        // N12: a 504 from a proxy says nothing about the backend, which may have made the status. GoToSocial
+        // ignores Idempotency-Key, so only the lookup keeps the retry from making a second status.
+        val alice = f.mastodon()
+        server.honorsIdempotencyKey = false
+        server.listStatuses("101")
+        server.statusAnswer = { attempt, request ->
+            if (attempt == 1) {
+                server.statuses += FakeMastodon.Created("s1", kotlinx.serialization.json.Json.parseToJsonElement(request.body).let { it as kotlinx.serialization.json.JsonObject }, request.headers["Idempotency-Key"], f.clock.now)
+                FakeMastodon.error(504, "Gateway Timeout")
+            } else {
+                null
+            }
+        }
+        val id = f.queue("Hello through a proxy", listOf(alice))
+
+        f.run()
+        val waiting = f.post(id)!!.deliveries.single()
+        assertThat(waiting.state).isEqualTo(DeliveryState.WAITING)
+        assertThat(waiting.progress.parts.single().unknownSince).isNotNull()
+
+        f.clock.advance(Duration.ofSeconds(30))
+        f.run()
+
+        assertThat(server.keys).hasSize(1)
+        assertThat(server.statuses).hasSize(1)
+        val post = f.post(id)!!
+        assertThat(post.state).isEqualTo(PostState.SENT)
+        assertThat(post.deliveries.single().progress.parts.single().published!!.id).isEqualTo("s1")
+    }
+
+    @Test
+    fun aRefusedStatusIsNotLookedUpOnTheNextAttempt() {
+        // A 429 is a definite answer: nothing was made, so the retry posts without a lookup.
+        val alice = f.mastodon()
+        server.listStatuses("101")
+        server.statusAnswer = { attempt, _ -> if (attempt == 1) FakeMastodon.error(429, "Too many requests", mapOf("Retry-After" to "30")) else null }
+        val id = f.queue("Hello later", listOf(alice))
+
+        f.run()
+        assertThat(f.post(id)!!.deliveries.single().progress.parts.single().unknownSince).isNull()
+
+        f.clock.advance(Duration.ofSeconds(30))
+        f.run()
+
+        assertThat(f.servers.requests("mastodon.example/api/v1/accounts/101/statuses")).isEmpty()
+        assertThat(f.post(id)!!.state).isEqualTo(PostState.SENT)
+    }
+
+    @Test
     fun aMarkdownLinkMatchesTheStatusThatShowsOnlyItsLabel() {
         val status = Status(
             id = "s1",
@@ -641,6 +691,8 @@ class MastodonPublishingTest {
         val alice = f.mastodon()
         // The image uploads, then the status fails for a while.
         server.statusAnswer = { attempt, _ -> if (attempt == 1) FakeMastodon.error(503, "down") else null }
+        // A 503 leaves the outcome unknown: after the hour the retry looks the part up first (N12) and finds nothing.
+        server.listStatuses("101")
         val id = f.queue("Photo", listOf(alice), attachments = listOf(f.image()))
         f.run()
         assertThat(server.uploads).hasSize(1)

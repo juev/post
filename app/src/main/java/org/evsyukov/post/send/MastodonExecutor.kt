@@ -306,7 +306,9 @@ class MastodonExecutor(
             val status = try {
                 client.createStatus(token, params, state.key!!)
             } catch (e: MastodonException) {
-                if (e is MastodonException.Http) save(state.copy(unknownSince = null))
+                // Only a definite refusal (4xx: 422, 429, …) says the status was not made. A 5xx or 408 may come
+                // from a proxy while the backend made it, so the part stays unknown and the retry looks first (N12).
+                if (e is MastodonException.Http && !e.isTransient) save(state.copy(unknownSince = null))
                 throw e
             }
             val published = PublishedPart(id = status.id, uri = status.uri, url = status.url, media = mediaOf(part, state))
