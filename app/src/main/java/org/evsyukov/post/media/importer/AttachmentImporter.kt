@@ -4,6 +4,7 @@ import android.content.ContentResolver
 import android.net.Uri
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import org.evsyukov.post.data.posts.Attachment
@@ -48,17 +49,25 @@ class AttachmentImporter(
      * text the cursor was in (threads.md T14). A file that fails leaves nothing behind and does not stop the
      * others. The rows are new ([Attachment.id] 0).
      */
-    suspend fun import(uris: List<Uri>, pieceIndex: Int): Result = withContext(Dispatchers.IO) {
+    suspend fun import(uris: List<Uri>, pieceIndex: Int): Result {
         val attachments = ArrayList<Attachment>()
-        val failures = ArrayList<Failure>()
-        for (uri in uris) {
-            coroutineContext.ensureActive()
-            when (val one = importOne(uri, pieceIndex)) {
-                is One.Added -> attachments += one.attachment
-                is One.Failed -> failures += Failure(uri, one.reason)
+        try {
+            return withContext(Dispatchers.IO) {
+                val failures = ArrayList<Failure>()
+                for (uri in uris) {
+                    coroutineContext.ensureActive()
+                    when (val one = importOne(uri, pieceIndex)) {
+                        is One.Added -> attachments += one.attachment
+                        is One.Failed -> failures += Failure(uri, one.reason)
+                    }
+                }
+                Result(attachments.toList(), failures)
             }
+        } catch (e: CancellationException) {
+            // Cancelled (the sheet or the composer went away): no one gets the copies made so far, so they go.
+            withContext(NonCancellable + Dispatchers.IO) { attachments.forEach { file(it.path).delete() } }
+            throw e
         }
-        Result(attachments, failures)
     }
 
     /** The file of a stored [path], under the files directory. */
