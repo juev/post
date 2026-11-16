@@ -3,14 +3,19 @@ package org.evsyukov.post.ui
 import android.content.Context
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.annotation.StringRes
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ApplicationProvider
+import androidx.navigation3.runtime.NavKey
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.evsyukov.post.AppContainer
 import org.evsyukov.post.data.FakeCipher
@@ -39,9 +44,16 @@ class PostAppNavigationTest {
     // The composer reads accounts, settings and the queue.
     private val container = AppContainer(ApplicationProvider.getApplicationContext<Context>()) { FakeCipher() }
 
+    /** A screen asked for while the app runs, as a tapped notification does through MainActivity.onNewIntent. */
+    private var request by mutableStateOf<NavKey?>(null)
+
     @Before
     fun setUp() {
-        compose.setContent { CompositionLocalProvider(LocalAppContainer provides container) { PostTheme { PostApp() } } }
+        compose.setContent {
+            CompositionLocalProvider(LocalAppContainer provides container) {
+                PostTheme { PostApp(request = request, onRequestHandled = { request = null }) }
+            }
+        }
     }
 
     @After
@@ -91,6 +103,23 @@ class PostAppNavigationTest {
         compose.onNodeWithContentDescription(string(R.string.posts)).performClick()
         assertOnly(PostsTags.SCREEN, title = R.string.posts)
 
+        systemBack()
+        assertOnly(ComposerTags.SCREEN)
+    }
+
+    @Test
+    fun reviewFromTheLateNotificationShowsTheQueueWhenPostsIsOpenOnAnotherTab() {
+        // Q6: Review opens the Late group of the Queue tab, also when Posts is already shown on Sent.
+        compose.onNodeWithContentDescription(string(R.string.posts)).performClick()
+        compose.onNodeWithTag(PostsTags.TAB_SENT).performClick()
+        compose.onNodeWithTag(PostsTags.TAB_SENT).assertIsSelected()
+
+        compose.runOnUiThread { request = PostsKey }
+        compose.waitForIdle()
+
+        assertOnly(PostsTags.SCREEN, title = R.string.posts)
+        compose.onNodeWithTag(PostsTags.TAB_QUEUE).assertIsSelected()
+        // Still one Posts screen: one back returns to the composer.
         systemBack()
         assertOnly(ComposerTags.SCREEN)
     }

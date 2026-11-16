@@ -10,6 +10,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -40,8 +41,17 @@ fun PostsScreen(
     onOpenSchedule: () -> Unit = {},
     onOpenDetails: (Long) -> Unit = {},
     sent: SentNavigation = SentNavigation({}, {}, {}),
+    /** Grows with every request to show the queue (Q6, Review of the late notification): the Queue tab is selected. */
+    queueRequests: Int = 0,
 ) {
     var tab by rememberSaveable { mutableIntStateOf(0) }
+    var shownRequests by rememberSaveable { mutableIntStateOf(queueRequests) }
+    LaunchedEffect(queueRequests) {
+        if (shownRequests != queueRequests) {
+            shownRequests = queueRequests
+            tab = 0
+        }
+    }
     val snackbar = remember { SnackbarHostState() }
     Scaffold(
         modifier = Modifier.testTag(PostsTags.SCREEN),
