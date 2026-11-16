@@ -97,6 +97,8 @@ class SchemaTest {
          */
         val PINNED_IDENTITIES = mapOf(
             1 to "7cd92fd81f0bb17c9c302716c7245eb8",
+            // Version 2 keeps the tables of version 1; its migration only writes the default schedule.
+            2 to "7cd92fd81f0bb17c9c302716c7245eb8",
         )
     }
 }

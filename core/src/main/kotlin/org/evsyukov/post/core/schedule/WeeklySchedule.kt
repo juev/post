@@ -34,5 +34,10 @@ class WeeklySchedule(times: Map<DayOfWeek, List<LocalTime>>) {
 
     companion object {
         val EMPTY = WeeklySchedule(emptyMap())
+
+        /** The schedule a new install starts with (S1): every day at 10:00, 13:00 and 16:00. */
+        val DEFAULT = WeeklySchedule(
+            DayOfWeek.entries.associateWith { listOf(LocalTime.of(10, 0), LocalTime.of(13, 0), LocalTime.of(16, 0)) },
+        )
     }
 }

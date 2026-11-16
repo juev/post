@@ -342,6 +342,8 @@ class ShareActivityTest {
     /** Without a schedule there is no slot: Send later asks for a date and time. */
     @Test
     fun sendLaterWithoutAScheduleOpensTheDateAndTimePicker() {
+        // A new database has the default schedule (#9); this test needs none.
+        runBlocking { container.schedule.save(WeeklySchedule.EMPTY) }
         val me = mastodon("me")
         defaults(me)
         share(sendIntent("text/plain", "Later"))

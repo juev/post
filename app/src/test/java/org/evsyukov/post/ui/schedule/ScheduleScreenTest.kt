@@ -43,6 +43,8 @@ class ScheduleScreenTest {
 
     @Test
     fun plusAddsATimeToTheDay() {
+        // A new database has the default schedule (#9); this test starts without one.
+        h.slots()
         show()
 
         h.click(ScheduleTags.add(DayOfWeek.TUESDAY))
@@ -140,6 +142,8 @@ class ScheduleScreenTest {
 
     @Test
     fun theTimeZoneInUseIsShownAndEveryRowIsLabelled() {
+        // A new database has the default schedule (#9); this test starts without one.
+        h.slots()
         show()
 
         h.reveal(ScheduleTags.ZONE)

@@ -6,7 +6,7 @@ Decisions of 2026-11-15: the schedule is a set of weekly slots; scheduled posts 
 
 ## Schedule
 
-- S1. The schedule is a list of times for each weekday, for example Monday–Friday 09:00, 13:00, 18:00 and Saturday 11:00. An empty schedule is allowed; then "Next free slot" is unavailable and Send later asks for a time.
+- S1. The schedule is a list of times for each weekday, for example Monday–Friday 09:00, 13:00, 18:00 and Saturday 11:00. An empty schedule is allowed; then "Next free slot" is unavailable and Send later asks for a time. A new install starts with a default schedule: every day at 10:00, 13:00 and 16:00. The default is written once, when the database is created, or for an install of 0.1.0-rc.1 when it is updated (that version had no default, and its schedule is empty only if it was never saved). A schedule the user clears afterwards stays empty, and a saved schedule is never replaced.
 - S2. Times are local wall-clock times in the device time zone. A slot that does not exist on a daylight-saving change day is moved to the first minute after the gap; a slot that occurs twice is used once, at its first occurrence. A slot-based post stores the local date and time of its slot and is converted to an instant in the time zone the device has when the alarm is set, so it follows the device to a new zone. A post with an explicit time stores an absolute instant.
 - S3. A slot is free when no queued post is assigned to it. Each slot holds at most one post.
 - S4. "Next free slot" assigns the earliest free slot that is at least one minute after now.

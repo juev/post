@@ -74,6 +74,8 @@ class ComposerSchedulingTest {
 
     @Test
     fun withoutAScheduleSendLaterOffersThePickerAndALinkToSchedule() {
+        // A new database has the default schedule (#9); this test needs none.
+        runBlocking { h.container.schedule.save(WeeklySchedule.EMPTY) }
         val alice = h.mastodon("alice")
         h.defaultTargets(alice)
         h.show()
