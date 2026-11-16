@@ -1,5 +1,9 @@
 package org.evsyukov.post.share
 
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -41,6 +45,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
@@ -50,6 +55,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
 import org.evsyukov.post.R
@@ -117,9 +123,32 @@ fun ShareSheet(
     var moreTimes by rememberSaveable { mutableStateOf(false) }
     val defaultAction = settings?.shareAction ?: ShareAction.COMPOSER
 
+    // R32: the first send asks for notifications once, as the composer does; the sheet closes after the answer,
+    // since the request needs this activity.
+    val context = LocalContext.current
+    var closingWith by rememberSaveable { mutableStateOf<String?>(null) }
+    val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
+        closingWith?.let { message ->
+            closingWith = null
+            onDone(message)
+        }
+    }
+
+    fun queued(message: String) {
+        val current = settings
+        val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+        if (current == null || current.notificationPermissionAsked || granted) {
+            onDone(message)
+            return
+        }
+        container.scope.launch { container.settings.setNotificationPermissionAsked(true) }
+        closingWith = message
+        permission.launch(Manifest.permission.POST_NOTIFICATIONS)
+    }
+
     fun finish(outcome: ShareModel.Outcome) {
         when (outcome) {
-            is ShareModel.Outcome.Queued -> onDone(queuedMessage(resources, outcome))
+            is ShareModel.Outcome.Queued -> queued(queuedMessage(resources, outcome))
             is ShareModel.Outcome.Draft -> onOpenComposer(outcome.id, false)
             ShareModel.Outcome.NeedsTime -> picking = true
             is ShareModel.Outcome.Blocked, ShareModel.Outcome.Ignored -> Unit
