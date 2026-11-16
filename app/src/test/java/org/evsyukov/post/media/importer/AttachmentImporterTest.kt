@@ -6,6 +6,7 @@ import androidx.exifinterface.media.ExifInterface
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.google.common.truth.Truth.assertThat
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.evsyukov.post.core.media.MediaKind
 import org.evsyukov.post.data.posts.Attachment
@@ -52,6 +53,32 @@ class AttachmentImporterTest {
     }
 
     private fun stored(): List<String> = File(filesDir, AttachmentImporter.DIR).list().orEmpty().sorted()
+
+    @Test
+    fun anImportCancelledHalfwayLeavesNoCopiesBehind() {
+        // The Share sheet is closed while its files are copied: the copies made so far belong to no post (R9).
+        val first = Uri.fromFile(source("photo_exif_rot90.jpg"))
+        val second = Uri.parse("content://org.evsyukov.post.test/second.jpg")
+        lateinit var job: kotlinx.coroutines.Job
+        val bytes = source("photo_exif_rot90.jpg").readBytes()
+        org.robolectric.Shadows.shadowOf(context.contentResolver).registerInputStream(
+            second,
+            object : java.io.ByteArrayInputStream(bytes) {
+                override fun read(b: ByteArray, off: Int, len: Int): Int {
+                    job.cancel()
+                    return super.read(b, off, len)
+                }
+            },
+        )
+
+        runBlocking {
+            job = launch(kotlinx.coroutines.Dispatchers.Default) { importer.import(listOf(first, second), 0) }
+            job.join()
+        }
+
+        assertThat(job.isCancelled).isTrue()
+        assertThat(stored()).isEmpty()
+    }
 
     @Test
     fun aFileIsCopiedAtOnceAndOutlivesItsSource() {
