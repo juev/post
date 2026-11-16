@@ -257,9 +257,18 @@ class MastodonExecutor(
             var state = partProgress(index).let { it.copy(key = it.key ?: part.key ?: "${job.delivery.id}-$index") }
             val now = clock.millis()
             val unknownSince = state.unknownSince
-            if (unknownSince != null && now - unknownSince >= UNKNOWN_WINDOW.toMillis()) {
-                // N12: the idempotency cache of the server may have forgotten the key; look before posting again.
-                val found = findPublished(part, inReplyToId, unknownSince)
+            if (unknownSince != null) {
+                // N12: look before posting again. After an hour the server's idempotency cache may have forgotten
+                // the key. Within the hour the key is enough on Mastodon, but GoToSocial ignores Idempotency-Key, so a
+                // lost answer would make the part twice (found in the step 15 end-to-end run). A failed lookup within
+                // the hour falls back to the key.
+                val withinKeyWindow = now - unknownSince < UNKNOWN_WINDOW.toMillis()
+                val found = try {
+                    findPublished(part, inReplyToId, unknownSince)
+                } catch (e: MastodonException) {
+                    if (!withinKeyWindow) throw e
+                    null
+                }
                 if (found != null) {
                     val published = PublishedPart(id = found.id, uri = found.uri, url = found.url, media = mediaOf(part, state))
                     save(state.copy(published = published, unknownSince = null))
@@ -401,8 +410,13 @@ object StatusMatch {
         val created = status.createdAt?.let { runCatching { OffsetDateTime.parse(it).toInstant() }.getOrNull() } ?: return false
         if (created.isBefore(since.minus(CLOCK_SKEW))) return false
         val wanted = normalize(text)
-        return normalize(status.text ?: "") == wanted || normalize(plainOf(status.content)) == wanted
+        if (normalize(status.text ?: "") == wanted) return true
+        // A Markdown link `[label](url)` renders as its label alone; the address is only in the href.
+        val plain = normalize(plainOf(status.content))
+        return plain == wanted || plain == normalize(MARKDOWN_LINK.replace(text) { it.groupValues[1] })
     }
+
+    private val MARKDOWN_LINK = Regex("""\[([^\]]*)]\([^)\s]*(?:\s+"[^"]*")?\)""")
 
     /** Letters and digits only, lowercased: the HTML a server renders and the source text then compare. */
     internal fun normalize(text: String): String = buildString {

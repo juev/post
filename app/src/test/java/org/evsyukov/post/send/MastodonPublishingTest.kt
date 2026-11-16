@@ -11,6 +11,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import mockwebserver3.MockResponse
 import org.evsyukov.post.core.markdown.MANUAL_BREAK
+import org.evsyukov.post.core.mastodon.Status
 import org.evsyukov.post.core.mastodon.Visibility
 import org.evsyukov.post.core.media.Conversion
 import org.evsyukov.post.core.media.MediaKind
@@ -30,6 +31,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
 import java.time.Duration
+import java.time.Instant
 
 /**
  * Publishing to Mastodon end to end on the JVM, with MockWebServer as the server (product.md R5, R27–R31;
@@ -330,8 +332,47 @@ class MastodonPublishingTest {
 
         assertThat(server.keys).hasSize(2)
         assertThat(server.keys.toSet()).hasSize(1)
-        assertThat(f.servers.requests("mastodon.example/api/v1/accounts/101/statuses")).isEmpty()
+        // The app looked first; the lookup failed (no route, 404), and within the hour the key covers the retry.
+        assertThat(f.servers.requests("mastodon.example/api/v1/accounts/101/statuses")).hasSize(1)
         assertThat(f.post(id)!!.state).isEqualTo(PostState.SENT)
+    }
+
+    @Test
+    fun aLostAnswerMidThreadOnAServerThatIgnoresTheKeyIsFoundAndNotPostedTwice() {
+        // Step 15 end-to-end run on GoToSocial: the answer to part two was lost, the retry within the hour made
+        // part two again, because GoToSocial ignores Idempotency-Key.
+        val alice = f.mastodon()
+        server.honorsIdempotencyKey = false
+        server.listStatuses("101")
+        var drops = 1
+        f.dropAnswer = { request ->
+            request.url.encodedPath == "/api/v1/statuses" && server.statuses.size == 2 && drops-- > 0
+        }
+        val id = f.queue(thread("one", "two", "three"), listOf(alice))
+
+        f.run()
+        assertThat(f.post(id)!!.deliveries.single().state).isEqualTo(DeliveryState.WAITING)
+        f.clock.advance(Duration.ofSeconds(30))
+        f.run()
+
+        assertThat(server.statuses.map { it.text }).containsExactly("one", "two", "three").inOrder()
+        assertThat(server.statuses.last().inReplyTo).isEqualTo("s2")
+        val delivery = f.post(id)!!.deliveries.single()
+        assertThat(delivery.progress.parts.map { it.published!!.id }).containsExactly("s1", "s2", "s3").inOrder()
+        assertThat(f.post(id)!!.state).isEqualTo(PostState.SENT)
+    }
+
+    @Test
+    fun aMarkdownLinkMatchesTheStatusThatShowsOnlyItsLabel() {
+        val status = Status(
+            id = "s1",
+            createdAt = "2026-11-16T01:00:00Z",
+            content = """<p>Read <strong>this</strong> <a href="https://example.org/page" rel="nofollow">a link</a></p>""",
+        )
+        val since = Instant.parse("2026-11-16T01:00:00Z")
+
+        assertThat(StatusMatch.matches(status, "Read **this** [a link](https://example.org/page)", null, since)).isTrue()
+        assertThat(StatusMatch.matches(status, "Read **this** [other](https://example.org/page)", null, since)).isFalse()
     }
 
     @Test
