@@ -237,6 +237,9 @@ class FakeMastodon(private val servers: FakeServers, val host: String = "mastodo
     var processingError: String? = null
     val polls = AtomicInteger()
 
+    /** False makes the server ignore Idempotency-Key, as GoToSocial does: every request makes a status. */
+    var honorsIdempotencyKey = true
+
     /** Whether a created status is also given in `accountStatuses`. */
     var listCreated = true
 
@@ -245,7 +248,7 @@ class FakeMastodon(private val servers: FakeServers, val host: String = "mastodo
             val key = request.headers["Idempotency-Key"]
             keys += key
             statusAnswer(keys.size, request)?.let { return@route it }
-            val cached = key?.let { byKey[it] }
+            val cached = key?.takeIf { honorsIdempotencyKey }?.let { byKey[it] }
             val created = cached ?: Created("s${statuses.size + 1}", json.parseToJsonElement(request.body).jsonObject, key, clock()).also {
                 statuses += it
                 if (key != null) byKey[key] = it
