@@ -64,9 +64,15 @@ Tokens are stored on the device, encrypted with a key in Android Keystore.
 
 ## Permissions
 
-<!-- To re-check against the final app/src/main/AndroidManifest.xml before the release. -->
+<!-- The list follows the merged manifest; ReadmePermissionsTest fails when a permission is missing here.
+     INTERNET, POST_NOTIFICATIONS, USE_EXACT_ALARM, RECEIVE_BOOT_COMPLETED, FOREGROUND_SERVICE,
+     FOREGROUND_SERVICE_DATA_SYNC and FOREGROUND_SERVICE_MEDIA_PROCESSING come from
+     app/src/main/AndroidManifest.xml; WAKE_LOCK and ACCESS_NETWORK_STATE from WorkManager. The app's own
+     DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION, added by AndroidX Core, is internal and not listed. -->
 
 - **Internet**: to publish to your accounts' servers.
+- **Network state** (`ACCESS_NETWORK_STATE`): sending waits until the phone is online.
+- **Keep awake** (`WAKE_LOCK`): the phone does not fall asleep in the middle of a send.
 - **Notifications**: progress of long uploads, failed deliveries, posts that missed their time and, if you turn it on, a summary of successful sends. Android 13 and later ask for it the first time you send.
 - **Exact alarms** (`USE_EXACT_ALARM`): to send a scheduled post at its minute even when the phone is idle. Android's ordinary background jobs can be delayed by many minutes in Doze.
 - **Run at startup**: alarms are lost on reboot, so the app sets the next one again after the phone starts and checks for posts that missed their time.

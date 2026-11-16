@@ -13,7 +13,7 @@
     <string name="share_will_change">Что изменится</string>
     <string name="share_change">%1$s: %2$s. %3$s</string>
     <string name="share_problem">%1$s (%2$s): %3$s</string>
-    <string name="share_problem_too_long">слово или ссылка длиннее %1$d символов и не делится на части</string>
+    <string name="share_problem_too_long">слово или ссылка длиннее одной части (предел: %1$d) и не делится на части</string>
     <string name="share_problem_too_many_parts">для треда нужно частей: %1$d, допустимо: %2$d</string>
     <string name="share_problem_spoiler">предупреждение о содержимом не оставляет места для текста</string>
     <string name="share_problem_alt_missing">Нужно описание для каждого файла</string>

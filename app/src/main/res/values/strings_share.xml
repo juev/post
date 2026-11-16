@@ -18,8 +18,8 @@
     <string name="share_change">%1$s: %2$s. %3$s</string>
     <!-- A problem that keeps Send disabled (R22, A13). %1$s names the accounts, %2$s their network, %3$s the problem. -->
     <string name="share_problem">%1$s (%2$s): %3$s</string>
-    <string name="share_problem_too_long">a word or link is longer than %1$d characters and cannot be split</string>
-    <string name="share_problem_too_many_parts">the thread would need %1$d parts, %2$d are allowed</string>
+    <string name="share_problem_too_long">a word or link is longer than one part may be (limit: %1$d) and cannot be split</string>
+    <string name="share_problem_too_many_parts">parts the thread would need: %1$d; allowed: %2$d</string>
     <string name="share_problem_spoiler">the content warning leaves no room for the text</string>
     <string name="share_problem_alt_missing">Alt text is required for every file</string>
     <string name="share_problem_alt_too_long">Alt text is longer than allowed</string>

@@ -44,7 +44,6 @@
 
     <string name="edit_title">Правка</string>
     <string name="edit_save">Сохранить</string>
-    <string name="edit_queued">Изменения поставлены в очередь</string>
     <string name="edit_not_available">Поста больше нет в истории, изменить его нельзя</string>
     <string name="edit_bluesky_account">Bluesky: %1$s</string>
     <string name="edit_bluesky_leave">Оставить как есть</string>

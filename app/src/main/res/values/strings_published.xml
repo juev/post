@@ -53,7 +53,6 @@
     <!-- Editing a published post (R40; networks.md N28–N32). -->
     <string name="edit_title">Editing</string>
     <string name="edit_save">Save</string>
-    <string name="edit_queued">Changes queued</string>
     <string name="edit_not_available">This post is no longer in history and cannot be edited</string>
     <!-- %1$s is the Bluesky account handle. -->
     <string name="edit_bluesky_account">Bluesky: %1$s</string>
