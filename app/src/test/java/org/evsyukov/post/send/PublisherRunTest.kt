@@ -118,4 +118,44 @@ class PublisherRunTest {
         assertThat(server.statuses.map { it.text }).containsExactly("first", "later").inOrder()
         assertThat(f.post(due)!!.state).isEqualTo(PostState.QUEUED)
     }
+
+    @Test
+    fun aPostWaitingForARetryKeepsTheNextPostToTheSameAccountBehindIt() {
+        // Q8: posts due together go out in queue order per account, even when the first one has to wait.
+        val alice = f.mastodon()
+        server.statusAnswer = { attempt, _ -> if (attempt == 1) FakeMastodon.error(503, "Service Unavailable") else null }
+        val first = f.queue("first", listOf(alice))
+        val second = f.queue("second", listOf(alice))
+
+        f.run()
+
+        assertThat(server.statuses).isEmpty()
+        assertThat(f.post(first)!!.deliveries.single().state).isEqualTo(DeliveryState.WAITING)
+        assertThat(f.post(second)!!.deliveries.single().attempts).isEqualTo(0)
+
+        // A run before the retry is due does not let the second one pass either.
+        f.clock.advance(Duration.ofSeconds(10))
+        f.run()
+        assertThat(server.statuses).isEmpty()
+
+        f.clock.advance(Duration.ofSeconds(20))
+        f.run()
+
+        assertThat(server.statuses.map { it.text }).containsExactly("first", "second").inOrder()
+        assertThat(f.post(second)?.state ?: PostState.SENT).isEqualTo(PostState.SENT)
+    }
+
+    @Test
+    fun aPostWaitingForARetryDoesNotHoldBackAnotherAccount() {
+        val alice = f.mastodon()
+        val bob = f.mastodon(host = "b.example", remoteId = "202")
+        val other = FakeMastodon(f.servers, "b.example") { f.clock.now }
+        server.statusAnswer = { _, _ -> FakeMastodon.error(503, "Service Unavailable") }
+        f.queue("first", listOf(alice))
+        f.queue("second", listOf(bob))
+
+        f.run()
+
+        assertThat(other.statuses.map { it.text }).containsExactly("second")
+    }
 }
