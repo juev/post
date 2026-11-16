@@ -131,7 +131,9 @@ class AndroidSendNotifier(context: Context) : SendNotifier {
 
     private fun openIntent(open: String?, accountId: Long?, requestCode: Int): PendingIntent {
         val intent = Intent(context, MainActivity::class.java)
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+            // The open app takes the intent as it is (MainActivity.onNewIntent): clearing the task would drop
+            // an unsaved draft in the composer without the R15 question.
+            .addFlags(OPEN_FLAGS)
         if (open != null) intent.putExtra(EXTRA_OPEN, open)
         if (accountId != null) intent.putExtra(EXTRA_ACCOUNT_ID, accountId)
         return PendingIntent.getActivity(context, requestCode, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
@@ -147,6 +149,12 @@ class AndroidSendNotifier(context: Context) : SendNotifier {
         const val CHANNEL_FAILURES = "failures"
         const val CHANNEL_SUCCESS = "success"
         const val CHANNEL_ACCOUNTS = "accounts"
+
+        /**
+         * How a notification opens MainActivity: a running app gets the intent in onNewIntent and opens the screen
+         * over what it shows; otherwise a new task starts.
+         */
+        const val OPEN_FLAGS = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
 
         /** The extra of MainActivity that names the screen to open: [OPEN_QUEUE] or [OPEN_ACCOUNT]. */
         const val EXTRA_OPEN = "org.evsyukov.post.extra.OPEN"
