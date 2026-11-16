@@ -214,6 +214,40 @@ class ComposerSchedulingTest {
     }
 
     @Test
+    fun saveDraftOfAQueuedPostWithoutTargetsShowsWhyAndLeavesThePostAsItWas() {
+        // A queued post needs a target; with none, saving it shows the blockers instead of crashing.
+        val alice = h.mastodon("alice")
+        val id = queuedAndOpened(alice)
+        h.click(ComposerTags.target(alice))
+        h.waitUntil { h.model.targets.isEmpty() }
+
+        h.menu(ComposerTags.MENU_SAVE)
+
+        h.waitFor(ComposerTags.DETAILS)
+        val post = runBlocking { h.container.posts.get(id) }!!
+        assertThat(post.text).isEqualTo("Old text")
+        assertThat(post.targets).containsExactly(alice)
+        assertThat(post.state).isEqualTo(PostState.QUEUED)
+        assertThat(h.model.hasUnsavedChanges()).isTrue()
+    }
+
+    @Test
+    fun keepOnLeaveOfAQueuedPostWithoutTargetsStaysToShowWhy() {
+        val alice = h.mastodon("alice")
+        val id = queuedAndOpened(alice)
+        h.click(ComposerTags.target(alice))
+        h.waitUntil { h.model.targets.isEmpty() }
+
+        h.click(ComposerTags.SETTINGS)
+        h.waitFor(ComposerTags.LEAVE_KEEP)
+        h.click(ComposerTags.LEAVE_KEEP)
+
+        h.waitFor(ComposerTags.DETAILS)
+        assertThat(h.settingsOpened.get()).isEqualTo(0)
+        assertThat(runBlocking { h.container.posts.get(id) }!!.targets).containsExactly(alice)
+    }
+
+    @Test
     fun keepDraftOnLeaveAfterTheQueuedPostWasDeletedSavesTheEditsAndLeaves() {
         val alice = h.mastodon("alice")
         val id = queuedAndOpened(alice)

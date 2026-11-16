@@ -456,6 +456,10 @@ private fun ComposerContent(
                 onSaveDraft = {
                     scope.launch {
                         val save = model.keepDraft()
+                        if (save.blocked.isNotEmpty()) {
+                            sheet = Sheet.Details
+                            return@launch
+                        }
                         snackbar.showSnackbar(
                             resources.getString(if (save.keptAsNew) R.string.schedule_edit_kept_as_draft else R.string.composer_draft_saved),
                         )
@@ -620,8 +624,12 @@ private fun ComposerContent(
                     onClick = {
                         leaving = null
                         scope.launch {
-                            // An edited post that started sending meanwhile is kept as a new draft (Q2).
-                            model.keepDraft()
+                            // An edited post that started sending meanwhile is kept as a new draft (Q2). A queued
+                            // post that cannot be sent as it is stays open with the reasons shown.
+                            if (model.keepDraft().blocked.isNotEmpty()) {
+                                sheet = Sheet.Details
+                                return@launch
+                            }
                             perform(action)
                         }
                     },
