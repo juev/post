@@ -67,6 +67,8 @@
     <string name="problem_account_inactive">This account is deactivated or suspended.</string>
     <string name="problem_account_taken_down">This account has been taken down.</string>
     <string name="problem_rate_limited">Too many sign-in attempts. Wait a few minutes and try again.</string>
+    <string name="problem_wrong_account">You signed in as another account, not the one that needs sign-in.</string>
+    <string name="problem_wrong_account_named">You signed in as @%1$s, not @%2$s.</string>
 
     <!-- Account details -->
     <string name="account_details_title">Account</string>

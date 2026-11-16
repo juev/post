@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import okhttp3.HttpUrl
+import org.evsyukov.post.accounts.AccountMismatch
 import org.evsyukov.post.accounts.MastodonSignIn
 import org.evsyukov.post.accounts.SignInException
 import org.evsyukov.post.accounts.SignInProblem
@@ -27,7 +28,8 @@ sealed interface MastodonFlowState {
 
     data class Done(val accountId: Long) : MastodonFlowState
 
-    data class Failed(val problem: SignInProblem) : MastodonFlowState
+    /** The sign-in failed for [problem]; [mismatch] names both accounts for [SignInProblem.WRONG_ACCOUNT]. */
+    data class Failed(val problem: SignInProblem, val mismatch: AccountMismatch? = null) : MastodonFlowState
 }
 
 /**
@@ -92,7 +94,7 @@ class MastodonSignInFlow(private val signIn: MastodonSignIn, private val scope: 
                 mutableState.value = if (e.problem == SignInProblem.UNKNOWN_STATE && previous == MastodonFlowState.InBrowser) {
                     previous
                 } else {
-                    MastodonFlowState.Failed(e.problem)
+                    MastodonFlowState.Failed(e.problem, e.mismatch)
                 }
             } catch (e: Exception) {
                 mutableState.value = MastodonFlowState.Failed(SignInProblem.SERVER)

@@ -276,6 +276,73 @@ class MastodonSignInTest {
     }
 
     @Test
+    fun anotherAccountSigningInAgainIsRejectedAndTheStoppedOneStaysAsItWas() = runBlocking<Unit> {
+        val signedIn = mutableListOf<Long>()
+        val flow = MastodonSignIn(accounts, apps, FilePendingSignInStore(pendingFile), servers.http, ServerPolicy(false), clock) { signedIn += it }
+        val id = (flow.complete(redirect(flow.start(host))) as MastodonSignIn.Completion.Done).accountId
+        accounts.setState(id, AccountState.NEEDS_SIGN_IN)
+        signedIn.clear()
+        val me = accountJson
+        accountJson = """{"id":"43","username":"bob","acct":"bob","display_name":"Bob"}"""
+        tokenResponses.add(200 to """{"access_token":"token-bob"}""")
+
+        val e = assertThrows(SignInException::class.java) { runBlocking { flow.complete(redirect(flow.start(host, accountId = id))) } }
+
+        assertThat(e.problem).isEqualTo(SignInProblem.WRONG_ACCOUNT)
+        assertThat(e.mismatch).isEqualTo(AccountMismatch(signedIn = "bob@$host", expected = "me@$host"))
+        // R5: no second account; the stopped one keeps its state, token and deliveries.
+        assertThat(accounts.observe().first().map { it.id }).containsExactly(id)
+        assertThat(accounts.get(id)!!.state).isEqualTo(AccountState.NEEDS_SIGN_IN)
+        assertThat(accounts.readSecret(id)).isEqualTo(MastodonSecret("token-1"))
+        assertThat(signedIn).isEmpty()
+        // Post keeps nothing of the other account: its token is revoked.
+        assertThat(servers.requests("$host/oauth/revoke").map { it.form("token") }).contains("token-bob")
+        // The pending sign-in stays, and signing in as the right account completes the next try.
+        assertThat(FilePendingSignInStore(pendingFile).get()!!.accountId).isEqualTo(id)
+        accountJson = me
+        tokenResponses.add(200 to """{"access_token":"token-2"}""")
+
+        val again = (flow.complete(redirect(flow.start(host, accountId = id))) as MastodonSignIn.Completion.Done).accountId
+
+        assertThat(again).isEqualTo(id)
+        assertThat(accounts.get(id)!!.state).isEqualTo(AccountState.OK)
+        assertThat(accounts.readSecret(id)).isEqualTo(MastodonSecret("token-2"))
+        assertThat(signedIn).containsExactly(id)
+    }
+
+    @Test
+    fun theSameAccountIdOnAnotherInstanceIsAnotherAccount() = runBlocking<Unit> {
+        val other = "other.example"
+        servers.json("GET", "$other/api/v2/instance", """{"domain":"$other"}""")
+        servers.json("POST", "$other/api/v1/apps", """{"client_id":"other-client","client_secret":"other-secret"}""")
+        servers.json("POST", "$other/oauth/token", """{"access_token":"other-token"}""")
+        servers.json("GET", "$other/api/v1/accounts/verify_credentials", """{"id":"42","username":"me","acct":"me"}""")
+        servers.json("POST", "$other/oauth/revoke", "{}")
+        val flow = signIn()
+        val id = (flow.complete(redirect(flow.start(host))) as MastodonSignIn.Completion.Done).accountId
+
+        val e = assertThrows(SignInException::class.java) { runBlocking { flow.complete(redirect(flow.start(other, accountId = id))) } }
+
+        assertThat(e.problem).isEqualTo(SignInProblem.WRONG_ACCOUNT)
+        assertThat(e.mismatch).isEqualTo(AccountMismatch(signedIn = "me@$other", expected = "me@$host"))
+        assertThat(accounts.observe().first()).hasSize(1)
+        assertThat(accounts.get(id)!!.server).isEqualTo("https://$host")
+        assertThat(servers.requests("$other/oauth/revoke").single().form("token")).isEqualTo("other-token")
+    }
+
+    @Test
+    fun anAccountRemovedDuringItsSignInIsAddedAgain() = runBlocking<Unit> {
+        val flow = signIn()
+        val id = (flow.complete(redirect(flow.start(host))) as MastodonSignIn.Completion.Done).accountId
+        val url = flow.start(host, accountId = id)
+        accounts.remove(id)
+
+        val done = flow.complete(redirect(url)) as MastodonSignIn.Completion.Done
+
+        assertThat(accounts.get(done.accountId)!!.handle).isEqualTo("me@$host")
+    }
+
+    @Test
     fun aDeniedAuthorizationClearsThePendingSignIn() = runBlocking<Unit> {
         val flow = signIn()
         val url = flow.start(host)

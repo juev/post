@@ -69,6 +69,7 @@ fun SignInProblem.message(): Int = when (this) {
     SignInProblem.ACCOUNT_INACTIVE -> R.string.problem_account_inactive
     SignInProblem.ACCOUNT_TAKEN_DOWN -> R.string.problem_account_taken_down
     SignInProblem.RATE_LIMITED -> R.string.problem_rate_limited
+    SignInProblem.WRONG_ACCOUNT -> R.string.problem_wrong_account
 }
 
 /**
@@ -163,7 +164,8 @@ fun AddMastodonContent(
             }
             if (state is MastodonFlowState.Failed) {
                 Text(
-                    stringResource(state.problem.message()),
+                    state.mismatch?.let { stringResource(R.string.problem_wrong_account_named, it.signedIn, it.expected) }
+                        ?: stringResource(state.problem.message()),
                     color = MaterialTheme.colorScheme.error,
                     modifier = Modifier.testTag(AddMastodonTags.ERROR),
                 )

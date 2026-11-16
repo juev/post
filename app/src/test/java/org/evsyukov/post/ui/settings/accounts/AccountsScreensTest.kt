@@ -23,6 +23,7 @@ import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.google.common.truth.Truth.assertThat
 import org.evsyukov.post.R
+import org.evsyukov.post.accounts.AccountMismatch
 import org.evsyukov.post.accounts.SignInProblem
 import org.evsyukov.post.core.mastodon.MastodonCapabilities
 import org.evsyukov.post.core.mastodon.Visibility
@@ -172,6 +173,15 @@ class AccountsScreensTest {
         }
 
         compose.onNodeWithText(string(R.string.problem_not_mastodon)).assertIsDisplayed()
+        compose.onNodeWithText(string(R.string.try_again)).assertIsDisplayed().assertIsEnabled()
+    }
+
+    @Test
+    fun signingInAgainAsAnotherAccountSaysWhoSignedIn() {
+        val failed = MastodonFlowState.Failed(SignInProblem.WRONG_ACCOUNT, AccountMismatch(signedIn = "bob@mastodon.social", expected = "alice@mastodon.social"))
+        compose.setContent { PostTheme { AddMastodonContent("mastodon.social", {}, true, failed, true, {}, {}, {}) } }
+
+        compose.onNodeWithText("You signed in as @bob@mastodon.social, not @alice@mastodon.social.").assertIsDisplayed()
         compose.onNodeWithText(string(R.string.try_again)).assertIsDisplayed().assertIsEnabled()
     }
 
