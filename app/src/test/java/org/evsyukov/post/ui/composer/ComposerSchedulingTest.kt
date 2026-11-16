@@ -232,6 +232,19 @@ class ComposerSchedulingTest {
     }
 
     @Test
+    fun saveDraftOfAQueuedPostOverALimitShowsWhyAndLeavesThePostAsItWas() {
+        // Q2: editing re-runs the limit checks; a word longer than the server's limit cannot be split (T9).
+        val alice = h.mastodon("alice")
+        val id = queuedAndOpened(alice)
+        h.type(" " + "a".repeat(600))
+
+        h.menu(ComposerTags.MENU_SAVE)
+
+        h.waitFor(ComposerTags.DETAILS)
+        assertThat(runBlocking { h.container.posts.get(id) }!!.text).isEqualTo("Old text")
+    }
+
+    @Test
     fun keepOnLeaveOfAQueuedPostWithoutTargetsStaysToShowWhy() {
         val alice = h.mastodon("alice")
         val id = queuedAndOpened(alice)
