@@ -57,6 +57,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material3.MaterialTheme
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
 import org.evsyukov.post.R
@@ -186,7 +187,7 @@ fun ComposerScreen(
 ) {
     val container = LocalAppContainer.current
     val model: ComposerModel = viewModel(key = composerModelKey(draftId, editHistoryId, fromHistoryId, session)) {
-        ComposerModel(container, draftId, editHistoryId, fromHistoryId)
+        ComposerModel(container, draftId, editHistoryId, fromHistoryId, createSavedStateHandle())
     }
     ComposerContent(model, onOpenPosts, onOpenSchedule, onOpenSettings, onExit)
 }
