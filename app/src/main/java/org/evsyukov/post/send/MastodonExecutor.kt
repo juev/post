@@ -413,12 +413,18 @@ object StatusMatch {
         if (created.isBefore(since.minus(CLOCK_SKEW))) return false
         val wanted = normalize(text)
         if (normalize(status.text ?: "") == wanted) return true
-        // A Markdown link `[label](url)` renders as its label alone; the address is only in the href.
+        // A Markdown link `[label](url)` renders as its label alone; the address is only in the href. Mastodon
+        // renders a mention `@user@domain` as `@user`, with the domain only in the href.
         val plain = normalize(plainOf(status.content))
-        return plain == wanted || plain == normalize(MARKDOWN_LINK.replace(text) { it.groupValues[1] })
+        val linksShown = MARKDOWN_LINK.replace(text) { it.groupValues[1] }
+        val mentionsShown = MENTION.replace(linksShown) { "@" + it.groupValues[1] }
+        return plain == wanted || plain == normalize(linksShown) || plain == normalize(mentionsShown)
     }
 
     private val MARKDOWN_LINK = Regex("""\[([^\]]*)]\([^)\s]*(?:\s+"[^"]*")?\)""")
+
+    /** `@user@domain`, not inside an e-mail address. */
+    private val MENTION = Regex("""(?<![\w@])@(\w+)@[\w.-]*\w""")
 
     /** Letters and digits only, lowercased: the HTML a server renders and the source text then compare. */
     internal fun normalize(text: String): String = buildString {

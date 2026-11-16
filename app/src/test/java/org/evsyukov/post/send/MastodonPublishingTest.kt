@@ -426,6 +426,23 @@ class MastodonPublishingTest {
     }
 
     @Test
+    fun aMentionMatchesTheStatusThatShowsItWithoutTheDomain() {
+        // Mastodon renders `@alice@mastodon.social` as `@alice`; the domain is only in the href.
+        val status = Status(
+            id = "s1",
+            createdAt = "2026-11-16T01:00:00Z",
+            content = """<p>Thanks <span class="h-card" translate="no"><a href="https://mastodon.social/@alice" class="u-url mention">@<span>alice</span></a></span>, see you</p>""",
+        )
+        val since = Instant.parse("2026-11-16T01:00:00Z")
+
+        assertThat(StatusMatch.matches(status, "Thanks @alice@mastodon.social, see you", null, since)).isTrue()
+        assertThat(StatusMatch.matches(status, "Thanks @bob@mastodon.social, see you", null, since)).isFalse()
+        // A server that shows the domain still matches.
+        val withDomain = status.copy(content = """<p>Thanks <a href="https://mastodon.social/@alice">@alice@mastodon.social</a>, see you</p>""")
+        assertThat(StatusMatch.matches(withDomain, "Thanks @alice@mastodon.social, see you", null, since)).isTrue()
+    }
+
+    @Test
     fun aLostAnswerIsRetriedWithTheSameKeyAndTheServerDoesNotDuplicate() {
         val alice = f.mastodon()
         var drops = 1
