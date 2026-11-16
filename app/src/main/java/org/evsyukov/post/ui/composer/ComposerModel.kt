@@ -455,7 +455,9 @@ class ComposerModel(
      */
     suspend fun keepDraft(): DraftSave {
         if (editingQueued) {
-            val blocked = listOfNotNull(Blocker.NoTarget.takeIf { liveTargets().isEmpty() })
+            // Q2, R11: editing a queued post re-runs the limit checks; it stays in the queue only as it can be
+            // sent. A running import is not a limit: the files still copying stay unsaved.
+            val blocked = blockersNow(importing = false).second
             if (blocked.isNotEmpty()) return DraftSave(draftId ?: 0L, keptAsNew = false, blocked = blocked)
         }
         var id = 0L
@@ -678,13 +680,7 @@ class ComposerModel(
         if (sending) return SendResult.AlreadySending
         sending = true
         try {
-            val input = renderInput().copy(targets = liveTargets())
-            val list = accounts.filterNotNull().first()
-            val settings = settings.filterNotNull().first()
-            val fresh = render(input, list, settings)
-            renders = input to fresh
-            val media = mediaOf(input, list, settings)
-            val blocked = blockers(input.targets, input.text, fresh, poll, pollLimits(), attachments, media, settings.requireAltText, importing > 0)
+            val (input, blocked) = blockersNow(importing = importing > 0)
             if (blocked.isNotEmpty()) return SendResult.Blocked(blocked)
             if (editUnavailable) return SendResult.NoLongerEditable
             if (editing != null && !editingQueued) {
@@ -708,6 +704,17 @@ class ComposerModel(
         } finally {
             sending = false
         }
+    }
+
+    /** Counts the text again for the selected accounts and returns what blocks sending it now. */
+    private suspend fun blockersNow(importing: Boolean): Pair<RenderInput, List<Blocker>> {
+        val input = renderInput().copy(targets = liveTargets())
+        val list = accounts.filterNotNull().first()
+        val settings = settings.filterNotNull().first()
+        val fresh = render(input, list, settings)
+        renders = input to fresh
+        val media = mediaOf(input, list, settings)
+        return input to blockers(input.targets, input.text, fresh, poll, pollLimits(), attachments, media, settings.requireAltText, importing)
     }
 
     /** Runs [save]; false, with the composer let go of the post ([detach]), when the post can no longer be changed. */
