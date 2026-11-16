@@ -57,10 +57,10 @@ Instances and forks change the limits: glitch-soc and Hometown read the text lim
 
 ### Idempotency
 
-The server keeps `Idempotency-Key` for one hour per account; a repeat within the hour returns the status already created.
+Mastodon keeps `Idempotency-Key` for one hour per account; a repeat within the hour returns the status already created. Not every server does: in the E2E run of 2026-11-16, GoToSocial 0.22.3 created two statuses for two requests with the same key.
 
 - N11. Each delivery part has a stable key stored with it, used for every retry.
-- N12. If the outcome of a request is unknown and the last attempt is older than one hour, Post looks for the status in the account's latest statuses (`GET /api/v1/accounts/:id/statuses`) by text and time before sending it again. (Design choice; the matching rule needs testing.)
+- N12. If the outcome of a request is unknown, Post looks for the status in the account's latest statuses (`GET /api/v1/accounts/:id/statuses`) by text, reply target and time before sending it again, at any age of the last attempt. If the lookup itself fails, Post repeats the request with the same key. (The match is a heuristic: two identical texts posted to the same place within minutes can be taken for each other.)
 
 ## Bluesky
 
