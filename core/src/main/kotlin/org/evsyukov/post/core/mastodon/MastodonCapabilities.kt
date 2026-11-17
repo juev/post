@@ -19,6 +19,9 @@ import kotlinx.serialization.Serializable
  *   applies, a safe subset of what Pleroma accepts.
  * @property postFormatsDeclared true when the server listed its formats in one of the F1
  *   sources; false when [postFormats] is the plain-text fallback.
+ * @property supportsEdit whether the server edits published statuses (N28, N31). Vanilla Mastodon
+ *   has done so since 3.5; an older one has only delete and post again. A fork's version says
+ *   nothing about Mastodon's releases and is taken as able to edit until it answers otherwise.
  */
 @Serializable
 data class MastodonCapabilities(
@@ -40,6 +43,7 @@ data class MastodonCapabilities(
     val postFormatsDeclared: Boolean = false,
     val mastodonApiVersion: Int? = null,
     val supportsQuotePolicy: Boolean = false,
+    val supportsEdit: Boolean = true,
     val softwareName: String? = null,
     val version: String? = null,
 ) {
@@ -142,9 +146,35 @@ data class MastodonCapabilities(
                 postFormatsDeclared = declaredFormats != null,
                 mastodonApiVersion = apiVersion,
                 supportsQuotePolicy = apiVersion != null && apiVersion >= QUOTE_POLICY_API_VERSION,
+                supportsEdit = editsStatuses(nodeInfo?.software?.name, nodeInfo?.software?.version ?: v2?.version ?: v1?.version),
                 softwareName = nodeInfo?.software?.name,
                 version = nodeInfo?.software?.version ?: v2?.version ?: v1?.version,
             )
+        }
+
+        /** The first Mastodon release that edits a status with `PUT /api/v1/statuses/:id` (N28). */
+        private const val EDIT_SINCE_MAJOR = 3
+        private const val EDIT_SINCE_MINOR = 5
+
+        private val VERSION = Regex("""^v?(\d+)\.(\d+)""")
+
+        /**
+         * N31: vanilla Mastodon edits statuses since 3.5, an older one does not. Hometown reports the
+         * Mastodon release it is based on first (`3.4.6+hometown-1.0.8`), so its version is compared too.
+         * Any other software, Pleroma, Akkoma, GoToSocial and the rest, numbers its releases its own way:
+         * it is taken as able to edit, and its answer to `PUT` decides.
+         */
+        private fun editsStatuses(softwareName: String?, version: String?): Boolean {
+            val name = softwareName?.trim()?.lowercase()
+            if (name != null && name != "mastodon" && name != "hometown") return true
+            // Pleroma and Akkoma write the version they are compatible with first: "2.7.2 (compatible; Akkoma 3.15.2)".
+            if (name == null && version?.contains('(') == true) return true
+            val match = VERSION.find(version?.trim().orEmpty()) ?: return true
+            val major = match.groupValues[1].toIntOrNull() ?: return true
+            val minor = match.groupValues[2].toIntOrNull() ?: return true
+            // No Mastodon release has a major below 2; a nameless 0.x is another server, such as GoToSocial.
+            if (name == null && major < 2) return true
+            return major > EDIT_SINCE_MAJOR || (major == EDIT_SINCE_MAJOR && minor >= EDIT_SINCE_MINOR)
         }
 
         /** Placeholder that names no media type (see [supportedMediaMimeTypes]). */
