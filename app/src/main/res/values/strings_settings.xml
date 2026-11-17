@@ -24,6 +24,9 @@
     <string name="bluesky_links_facet">Link text as a link</string>
     <string name="bluesky_links_short_url">Text and short address</string>
     <string name="bluesky_links_short_url_example">text (example.com/page)</string>
+    <string name="defaults_translate">Translate to</string>
+    <string name="defaults_translate_summary">Adds a translate action to the composer. Off by default.</string>
+    <string name="translate_off">Off</string>
 
     <!-- Settings → Sending (screens.md; R31, R32, Q4, T11, A6) -->
     <string name="sending_notifications">Notifications</string>

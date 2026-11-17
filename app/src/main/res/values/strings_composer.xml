@@ -16,6 +16,15 @@
     <string name="composer_list">List</string>
     <string name="composer_link">Link</string>
     <string name="composer_language_description">Language: %1$s</string>
+    <string name="composer_translate">Translate</string>
+    <string name="composer_translating">Translating…</string>
+    <string name="composer_translated">Translated into %1$s</string>
+    <string name="composer_translate_same">The post is already in %1$s.</string>
+    <string name="composer_translate_nothing">Nothing to translate.</string>
+    <string name="composer_translate_model">The translation model could not be downloaded. The draft is unchanged.</string>
+    <string name="composer_translate_unsupported">This language pair cannot be translated.</string>
+    <string name="composer_translate_markup">The translation changed the formatting, so the draft is unchanged.</string>
+    <string name="composer_translate_failed">Translation failed. The draft is unchanged.</string>
     <string name="composer_more">More actions</string>
     <string name="composer_add_poll">Add poll</string>
     <string name="composer_remove_poll">Remove poll</string>

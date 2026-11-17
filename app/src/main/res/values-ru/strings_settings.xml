@@ -24,6 +24,9 @@
     <string name="bluesky_links_facet">Текст ссылки как ссылка</string>
     <string name="bluesky_links_short_url">Текст и короткий адрес</string>
     <string name="bluesky_links_short_url_example">текст (example.com/page)</string>
+    <string name="defaults_translate">Переводить на</string>
+    <string name="defaults_translate_summary">Добавляет в редактор кнопку перевода. По умолчанию выключено.</string>
+    <string name="translate_off">Выключено</string>
 
     <!-- Настройки → Отправка -->
     <string name="sending_notifications">Уведомления</string>

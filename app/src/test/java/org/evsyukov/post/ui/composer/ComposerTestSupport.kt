@@ -31,6 +31,7 @@ import org.evsyukov.post.data.accounts.NewAccount
 import org.evsyukov.post.data.secrets.BlueskySecret
 import org.evsyukov.post.data.secrets.MastodonSecret
 import org.evsyukov.post.media.probe.MediaDecodeCheck
+import org.evsyukov.post.translate.TranslationEngine
 import org.evsyukov.post.ui.LocalAppContainer
 import org.evsyukov.post.ui.theme.PostTheme
 import java.io.File
@@ -38,7 +39,11 @@ import java.time.Instant
 import java.util.concurrent.atomic.AtomicInteger
 
 /** A composer on a fresh app container with publish and prepare triggers that count their calls. */
-class ComposerHarness(private val compose: AndroidComposeTestRule<ActivityScenarioRule<ComponentActivity>, ComponentActivity>) {
+class ComposerHarness(
+    private val compose: AndroidComposeTestRule<ActivityScenarioRule<ComponentActivity>, ComponentActivity>,
+    /** Translates the draft; null leaves the ML Kit engine, which tests never call. */
+    translationEngine: TranslationEngine? = null,
+) {
     val context: Context = ApplicationProvider.getApplicationContext()
     val triggers = AtomicInteger()
     val prepares = AtomicInteger()
@@ -50,6 +55,7 @@ class ComposerHarness(private val compose: AndroidComposeTestRule<ActivityScenar
         publishTrigger = PublishTrigger { triggers.incrementAndGet() },
         prepareTrigger = PrepareTrigger { prepares.incrementAndGet() },
         mediaDecodeCheck = MediaDecodeCheck { file, mime -> decodeProblem(file, mime) },
+        translationEngine = translationEngine,
     ) { FakeCipher() }
     val exits = AtomicInteger()
     val postsOpened = AtomicInteger()
