@@ -89,6 +89,7 @@ object ShareTags {
     const val STATUS = "share-status"
     const val COPYING = "share-copying"
     const val FAILED = "share-failed"
+    const val MISSING = "share-missing"
     const val CHANGES = "share-changes"
     const val PROBLEMS = "share-problems"
     const val OPEN_COMPOSER = "share-open-composer"
@@ -219,6 +220,14 @@ fun ShareSheet(
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.error,
                         modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp).testTag(ShareTags.FAILED),
+                    )
+                }
+                if (model.missingFiles > 0) {
+                    Text(
+                        pluralStringResource(R.plurals.media_files_missing, model.missingFiles, model.missingFiles),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp).testTag(ShareTags.MISSING),
                     )
                 }
                 StatusRow(check, hasTargets = model.targets.orEmpty().isNotEmpty())

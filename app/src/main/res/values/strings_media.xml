@@ -8,6 +8,10 @@
         <item quantity="one">Could not add %d file</item>
         <item quantity="other">Could not add %d files</item>
     </plurals>
+    <plurals name="media_files_missing">
+        <item quantity="one">%d file is gone from app storage and was removed</item>
+        <item quantity="other">%d files are gone from app storage and were removed</item>
+    </plurals>
 
     <!-- Attachment strip (screens.md) -->
     <string name="media_strip">Attachments</string>
