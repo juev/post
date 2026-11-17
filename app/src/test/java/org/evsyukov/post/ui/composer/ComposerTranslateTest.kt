@@ -8,6 +8,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.google.common.truth.Truth.assertThat
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.runBlocking
 import org.evsyukov.post.R
 import org.evsyukov.post.translate.EngineResult
@@ -30,8 +31,16 @@ class ComposerTranslateTest {
         var answer: (String) -> EngineResult = { EngineResult.Translated(it.uppercase()) }
         var seen: String? = null
 
+        /** Completed when the engine is called. */
+        val started = CompletableDeferred<Unit>()
+
+        /** When set, the engine waits for it before answering, as a model download would. */
+        var gate: CompletableDeferred<Unit>? = null
+
         override suspend fun translate(text: String, sourceLanguage: String, targetLanguage: String): EngineResult {
             seen = text
+            started.complete(Unit)
+            gate?.await()
             return answer(text)
         }
     }
@@ -89,6 +98,23 @@ class ComposerTranslateTest {
 
         assertThat(h.model.text.text.toString()).isEqualTo("Hallo **Welt**")
         assertThat(h.model.language).isEqualTo(before)
+    }
+
+    @Test
+    fun textTypedWhileTheTranslationRunsIsKept() {
+        composerTranslatingInto("de")
+        h.type("Hallo")
+        val gate = CompletableDeferred<Unit>()
+        engine.gate = gate
+
+        h.click(ComposerTags.TRANSLATE)
+        compose.waitUntil(5_000) { engine.started.isCompleted }
+        h.type(" Welt")
+        gate.complete(Unit)
+
+        h.waitUntil { !h.model.translating }
+        assertThat(h.model.text.text.toString()).isEqualTo("Hallo Welt")
+        compose.onNodeWithText(h.string(R.string.composer_translate_changed)).assertExists()
     }
 
     @Test

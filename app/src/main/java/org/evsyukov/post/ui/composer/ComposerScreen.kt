@@ -495,6 +495,8 @@ private fun ComposerContent(
                             ComposerModel.TranslateResult.NothingToTranslate ->
                                 snackbar.showSnackbar(resources.getString(R.string.composer_translate_nothing))
                             ComposerModel.TranslateResult.AlreadyTranslating -> Unit
+                            ComposerModel.TranslateResult.TextChanged ->
+                                snackbar.showSnackbar(resources.getString(R.string.composer_translate_changed))
                             is ComposerModel.TranslateResult.Failed ->
                                 snackbar.showSnackbar(resources.getString(translationFailureText(result.reason)))
                         }
