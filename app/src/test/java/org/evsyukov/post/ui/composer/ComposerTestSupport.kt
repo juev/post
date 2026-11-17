@@ -31,6 +31,7 @@ import org.evsyukov.post.data.accounts.NewAccount
 import org.evsyukov.post.data.secrets.BlueskySecret
 import org.evsyukov.post.data.secrets.MastodonSecret
 import org.evsyukov.post.media.probe.MediaDecodeCheck
+import org.evsyukov.post.translate.LanguageDetector
 import org.evsyukov.post.translate.TranslationEngine
 import org.evsyukov.post.ui.LocalAppContainer
 import org.evsyukov.post.ui.theme.PostTheme
@@ -43,6 +44,8 @@ class ComposerHarness(
     private val compose: AndroidComposeTestRule<ActivityScenarioRule<ComponentActivity>, ComponentActivity>,
     /** Translates the draft; null leaves the ML Kit engine, which tests never call. */
     translationEngine: TranslationEngine? = null,
+    /** Tells the language of the draft; null leaves the ML Kit detector, which tests never call. */
+    languageDetector: LanguageDetector? = null,
 ) {
     val context: Context = ApplicationProvider.getApplicationContext()
     val triggers = AtomicInteger()
@@ -56,6 +59,7 @@ class ComposerHarness(
         prepareTrigger = PrepareTrigger { prepares.incrementAndGet() },
         mediaDecodeCheck = MediaDecodeCheck { file, mime -> decodeProblem(file, mime) },
         translationEngine = translationEngine,
+        languageDetector = languageDetector,
     ) { FakeCipher() }
     val exits = AtomicInteger()
     val postsOpened = AtomicInteger()

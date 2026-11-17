@@ -1,15 +1,11 @@
 package org.evsyukov.post.translate
 
-import com.google.android.gms.tasks.Task
 import com.google.mlkit.common.MlKitException
 import com.google.mlkit.common.model.DownloadConditions
 import com.google.mlkit.nl.translate.TranslateLanguage
 import com.google.mlkit.nl.translate.Translation
 import com.google.mlkit.nl.translate.TranslatorOptions
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.suspendCancellableCoroutine
-import kotlin.coroutines.resume
-import kotlin.coroutines.resumeWithException
 
 /**
  * Translation by Google's ML Kit on the device. The model of a language pair is downloaded on demand
@@ -44,11 +40,4 @@ class MlKitTranslationEngine : TranslationEngine {
             EngineResult.Failed(TranslationFailure.ENGINE)
         }
     }
-}
-
-/** Waits for a Google Play services task without pulling in the play-services coroutines adapter. */
-private suspend fun <T> Task<T>.await(): T = suspendCancellableCoroutine { continuation ->
-    addOnSuccessListener { continuation.resume(it) }
-    addOnFailureListener { continuation.resumeWithException(it) }
-    addOnCanceledListener { continuation.cancel() }
 }

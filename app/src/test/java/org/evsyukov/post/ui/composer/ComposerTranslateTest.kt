@@ -12,6 +12,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.runBlocking
 import org.evsyukov.post.R
 import org.evsyukov.post.translate.EngineResult
+import org.evsyukov.post.translate.LanguageDetector
 import org.evsyukov.post.translate.TranslationEngine
 import org.evsyukov.post.translate.TranslationFailure
 import org.junit.After
@@ -45,12 +46,24 @@ class ComposerTranslateTest {
         }
     }
 
+    /** The detector behind the composer; it answers with [answer]. */
+    private class FakeDetector : LanguageDetector {
+        var answer: String? = null
+        var seen: String? = null
+
+        override suspend fun detect(text: String): String? {
+            seen = text
+            return answer
+        }
+    }
+
     private val engine = FakeEngine()
+    private val detector = FakeDetector()
     private lateinit var h: ComposerHarness
 
     @Before
     fun setUp() {
-        h = ComposerHarness(compose, engine)
+        h = ComposerHarness(compose, engine, detector)
     }
 
     @After
@@ -115,6 +128,51 @@ class ComposerTranslateTest {
         h.waitUntil { !h.model.translating }
         assertThat(h.model.text.text.toString()).isEqualTo("Hallo Welt")
         compose.onNodeWithText(h.string(R.string.composer_translate_changed)).assertExists()
+    }
+
+    @Test
+    fun aDraftThatClaimsTheTargetLanguageIsTranslatedFromTheLanguageOfItsText() {
+        composerTranslatingInto("de")
+        h.type("Hello world")
+        // The chip still says German after an earlier translation, while the text is English.
+        h.model.chooseLanguage("de")
+        detector.answer = "en"
+
+        h.click(ComposerTags.TRANSLATE)
+
+        h.waitUntil { h.model.text.text.toString() == "HELLO WORLD" }
+        assertThat(detector.seen).isEqualTo("Hello world")
+        assertThat(h.model.language).isEqualTo("de")
+    }
+
+    @Test
+    fun aTextInTheTargetLanguageIsLeftAsItIs() {
+        composerTranslatingInto("de")
+        h.type("Hallo Welt")
+        h.model.chooseLanguage("de")
+        detector.answer = "de"
+
+        h.click(ComposerTags.TRANSLATE)
+
+        compose.waitUntil(5_000) {
+            compose.onAllNodes(hasText(h.string(R.string.composer_translate_same, "German"))).fetchSemanticsNodes().isNotEmpty()
+        }
+        assertThat(h.model.text.text.toString()).isEqualTo("Hallo Welt")
+    }
+
+    @Test
+    fun aTextWhoseLanguageCannotBeToldIsLeftAsItIs() {
+        composerTranslatingInto("de")
+        h.type("Hallo")
+        h.model.chooseLanguage("de")
+        detector.answer = null
+
+        h.click(ComposerTags.TRANSLATE)
+
+        compose.waitUntil(5_000) {
+            compose.onAllNodes(hasText(h.string(R.string.composer_translate_same, "German"))).fetchSemanticsNodes().isNotEmpty()
+        }
+        assertThat(h.model.text.text.toString()).isEqualTo("Hallo")
     }
 
     @Test

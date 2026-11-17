@@ -719,10 +719,17 @@ class ComposerModel(
         if (translating) return TranslateResult.AlreadyTranslating
         val source = text.text.toString()
         if (source.isBlank()) return TranslateResult.NothingToTranslate
-        if (language.equals(target, ignoreCase = true)) return TranslateResult.AlreadyInLanguage
         translating = true
         try {
-            return when (val result = container.translator.translate(source, language, target)) {
+            // The chip may name the language a previous translation wrote, while the text typed since is in
+            // another one. When the chip is already the target, the language of the text itself decides.
+            val sourceLanguage = if (language.equals(target, ignoreCase = true)) {
+                container.languageDetector.detect(source) ?: return TranslateResult.AlreadyInLanguage
+            } else {
+                language
+            }
+            if (sourceLanguage.equals(target, ignoreCase = true)) return TranslateResult.AlreadyInLanguage
+            return when (val result = container.translator.translate(source, sourceLanguage, target)) {
                 is TranslationResult.Translated -> {
                     // The engine may take a while, the first time for the model download: text typed meanwhile is kept.
                     if (text.text.toString() != source) return TranslateResult.TextChanged

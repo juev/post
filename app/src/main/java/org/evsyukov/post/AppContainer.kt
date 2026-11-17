@@ -62,6 +62,8 @@ import kotlinx.coroutines.launch
 import org.evsyukov.post.data.db.PostState
 import java.time.ZoneId
 import org.evsyukov.post.text.AndroidTextSegmenter
+import org.evsyukov.post.translate.LanguageDetector
+import org.evsyukov.post.translate.MlKitLanguageDetector
 import org.evsyukov.post.translate.MlKitTranslationEngine
 import org.evsyukov.post.translate.PostTranslator
 import org.evsyukov.post.translate.TranslationEngine
@@ -83,6 +85,8 @@ class AppContainer(
     val mediaDecodeCheck: MediaDecodeCheck = DeviceMediaDecodeCheck(),
     /** Translates the draft; null uses ML Kit on the device, tests pass an engine that answers at once. */
     translationEngine: TranslationEngine? = null,
+    /** Tells the language of the draft; null uses ML Kit, tests pass a detector that answers at once. */
+    languageDetector: LanguageDetector? = null,
     // Tests on the JVM pass a stand-in: Robolectric has no Android Keystore. It stays the last parameter,
     // so `AppContainer(context) { FakeCipher() }` keeps meaning the cipher.
     private val cipher: () -> TokenCipher = { KeystoreTokenCipher() },
@@ -111,6 +115,9 @@ class AppContainer(
 
     /** Translation of the draft text (screens.md, Composer). ML Kit builds its client on first use. */
     val translationEngine: TranslationEngine = translationEngine ?: MlKitTranslationEngine()
+
+    /** The language of the draft text, for a translation into the language the post already claims. */
+    val languageDetector: LanguageDetector = languageDetector ?: MlKitLanguageDetector()
 
     val translator: PostTranslator by lazy { PostTranslator(this.translationEngine) }
 
