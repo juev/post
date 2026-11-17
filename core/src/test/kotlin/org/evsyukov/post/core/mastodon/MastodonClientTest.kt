@@ -552,6 +552,20 @@ class MastodonClientTest {
         assertThat(body.keys).containsNoneOf("visibility", "in_reply_to_id")
     }
 
+    // N31: a 404 to PUT may also be a status deleted elsewhere; GET tells it from a server without edit.
+    @Test
+    fun getStatusAnswersNullWhenTheStatusIsGone() = runBlocking<Unit> {
+        server.enqueue(json(STATUS_JSON))
+        assertThat(client.getStatus(token, "103254962155278888")).isNotNull()
+        val found = take()
+        assertThat(found.method).isEqualTo("GET")
+        assertThat(found.target).isEqualTo("/api/v1/statuses/103254962155278888")
+        found.assertBearer()
+
+        server.enqueue(json("""{"error":"Record not found"}""", 404))
+        assertThat(client.getStatus(token, "103254962155278888")).isNull()
+    }
+
     // N30: removing every attachment sends an empty media_ids, not nothing.
     @Test
     fun editStatusSendsEmptyMediaIdsWhenAllMediaAreRemoved() = runBlocking<Unit> {

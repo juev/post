@@ -5,6 +5,7 @@ import kotlinx.coroutines.delay
 import okhttp3.OkHttpClient
 import org.evsyukov.post.accounts.AccountSessions
 import org.evsyukov.post.accounts.NeedsSignInException
+import org.evsyukov.post.accounts.canEdit
 import org.evsyukov.post.core.mastodon.MastodonClient
 import org.evsyukov.post.core.mastodon.MastodonException
 import org.evsyukov.post.core.mastodon.MediaAttribute
@@ -15,6 +16,7 @@ import org.evsyukov.post.core.mastodon.StatusEditParams
 import org.evsyukov.post.core.mastodon.StatusParams
 import org.evsyukov.post.core.mastodon.Visibility
 import org.evsyukov.post.core.media.Network
+import org.evsyukov.post.data.accounts.AccountLimits
 import org.evsyukov.post.data.accounts.AccountNotFound
 import org.evsyukov.post.data.accounts.AccountsRepository
 import org.evsyukov.post.data.db.AccountState
@@ -71,13 +73,19 @@ class MastodonExecutor(
         return try {
             when (job.post.kind) {
                 PostKind.NEW -> run.publishAll()
-                PostKind.EDIT -> run.editAll(job.previous ?: return DeliveryOutcome.Failed(Publisher.NO_RECORD))
+                // N31: a server that cannot edit gets delete and post again.
+                PostKind.EDIT -> {
+                    val previous = job.previous ?: return DeliveryOutcome.Failed(Publisher.NO_RECORD)
+                    if (job.account.canEdit()) run.editAll(previous) else run.repost(previous)
+                }
                 PostKind.DELETE -> run.deleteAll(job.previous ?: return DeliveryOutcome.Failed(Publisher.NO_RECORD))
             }
         } catch (e: CancellationException) {
             throw e
         } catch (_: EditUnsupported) {
             DeliveryOutcome.Failed(EDIT_UNSUPPORTED)
+        } catch (_: StatusGone) {
+            DeliveryOutcome.Failed(STATUS_GONE)
         } catch (e: MastodonException) {
             outcomeOf(e, job)
         } catch (e: IllegalArgumentException) {
@@ -113,6 +121,21 @@ class MastodonExecutor(
     private suspend fun markNeedsSignIn(id: Long) {
         try {
             accounts.setState(id, AccountState.NEEDS_SIGN_IN)
+        } catch (_: AccountNotFound) {
+            // Removed meanwhile; its deliveries already failed with that reason.
+        }
+    }
+
+    /**
+     * N31: the server answered that it cannot edit. The account keeps the answer, so the composer offers
+     * "Delete and post again" for it next time instead of another edit that cannot succeed.
+     */
+    private suspend fun markCannotEdit(job: DeliveryJob) {
+        // Sign-in reads the limits before the account can send, so the capabilities are there; without them
+        // there is nothing to mark, and storing defaults would lose what the server reported.
+        val limits = job.account.limits as? AccountLimits.Mastodon ?: return
+        try {
+            accounts.updateLimits(job.account.id, AccountLimits.Mastodon(limits.capabilities.copy(supportsEdit = false)), job.account.limitsFetchedAt ?: clock.instant())
         } catch (_: AccountNotFound) {
             // Removed meanwhile; its deliveries already failed with that reason.
         }
@@ -167,6 +190,17 @@ class MastodonExecutor(
             return DeliveryOutcome.Sent(progress)
         }
 
+        /**
+         * N31: delete and post again on a server that cannot edit. The old thread goes first, last part first:
+         * a status takes a media attachment only while it belongs to no status (Mastodon
+         * `PostStatusService#validate_media!`), so the delete releases the files the edit keeps, as Mastodon's
+         * own delete and redraft does. A part already deleted is not deleted again, so a retry goes on.
+         */
+        suspend fun repost(previous: HistoryItem): DeliveryOutcome {
+            for (part in previous.parts.reversed()) part.id?.let { delete(it) }
+            return publishAll()
+        }
+
         /** R39, N31: every part, last first; a part already gone counts as deleted, 429 waits (via [outcomeOf]). */
         suspend fun deleteAll(previous: HistoryItem): DeliveryOutcome {
             for (part in previous.parts.reversed()) part.id?.let { delete(it) }
@@ -194,6 +228,16 @@ class MastodonExecutor(
             optionsChanged || published.text != part.text || published.spoilerText.orEmpty() != part.spoilerText.orEmpty() ||
                 part.attachmentIds.isNotEmpty() || keptOf(index) != published.media
 
+        /** N31: the files the edit keeps in part [index] when the account deletes and posts again. */
+        private fun keptReposted(index: Int): List<PublishedMedia> =
+            if (job.post.kind == PostKind.EDIT && !job.account.canEdit()) keptOf(index) else emptyList()
+
+        /** N31: the kept files of part [index] whose alt text was changed in the composer. */
+        private fun keptRelabelled(index: Int): List<PublishedMedia> {
+            val published = job.previous?.parts?.getOrNull(index)?.media.orEmpty()
+            return keptReposted(index).filter { media -> published.firstOrNull { it.id == media.id }?.alt != media.alt }
+        }
+
         private suspend fun editPart(index: Int, part: PlannedPart, published: PublishedPart): PublishedPart {
             val kept = keptOf(index)
             val uploaded = uploadAll(index, part)
@@ -212,8 +256,17 @@ class MastodonExecutor(
             val status = try {
                 client.editStatus(token, published.id!!, params)
             } catch (e: MastodonException.Http) {
-                // N31: a server older than 3.5, or a fork without edit, answers 404 or 405 to PUT.
-                if (e.status == 404 || e.status == 405) throw EditUnsupported()
+                // N31: 405 says the server cannot edit. A 404 may also be a status deleted elsewhere, so ask
+                // for it: a 200 means the server cannot edit, a 404 means the status is gone.
+                if (e.status == 405) {
+                    markCannotEdit(job)
+                    throw EditUnsupported()
+                }
+                if (e.status == 404) {
+                    if (client.getStatus(token, published.id!!) == null) throw StatusGone()
+                    markCannotEdit(job)
+                    throw EditUnsupported()
+                }
                 throw e
             }
             val state = partProgress(index)
@@ -246,6 +299,7 @@ class MastodonExecutor(
         private suspend fun publishPart(index: Int, part: PlannedPart, inReplyToId: String?): PublishedPart {
             var state = partProgress(index).let { it.copy(key = it.key ?: part.key ?: "${job.delivery.id}-$index") }
             val now = clock.millis()
+            val kept = keptReposted(index)
             val unknownSince = state.unknownSince
             if (unknownSince != null) {
                 // N12: look before posting again. After an hour the server's idempotency cache may have forgotten
@@ -260,12 +314,13 @@ class MastodonExecutor(
                     null
                 }
                 if (found != null) {
-                    val published = PublishedPart(id = found.id, uri = found.uri, url = found.url, media = mediaOf(part, state))
+                    val published = PublishedPart(id = found.id, uri = found.uri, url = found.url, media = kept + mediaOf(part, state))
                     save(state.copy(published = published, unknownSince = null))
                     return published
                 }
             }
-            val mediaIds = part.attachmentIds.map { id ->
+            // N31: the kept files of a repost are the published media, by their ids, ahead of the new ones.
+            val mediaIds = kept.map { it.id } + part.attachmentIds.map { id ->
                 val uploaded = state.uploaded[id]
                 val at = state.uploadedAt[id]
                 if (uploaded != null && at != null && now - at < MEDIA_LIFETIME.toMillis()) {
@@ -290,20 +345,55 @@ class MastodonExecutor(
                 quoteApprovalPolicy = options?.quoteApprovalPolicy,
                 contentType = part.contentType,
             )
+            // N31: an alt text changed in the composer takes effect once the file is free of the old status.
+            for (media in keptRelabelled(index)) relabel(media)
             // Until an answer comes, the part may be on the server: a crash or a lost answer leaves it unknown.
             state = state.copy(unknownSince = state.unknownSince ?: clock.millis())
             save(state)
             val status = try {
-                client.createStatus(token, params, state.key!!)
+                createStatusWaitingForMedia(params, state.key!!, kept.map { it.id })
             } catch (e: MastodonException) {
                 // Only a definite refusal (4xx: 422, 429, …) says the status was not made. A 5xx or 408 may come
                 // from a proxy while the backend made it, so the part stays unknown and the retry looks first (N12).
                 if (e is MastodonException.Http && !e.isTransient) save(state.copy(unknownSince = null))
                 throw e
             }
-            val published = PublishedPart(id = status.id, uri = status.uri, url = status.url, media = mediaOf(part, state))
+            val published = PublishedPart(id = status.id, uri = status.uri, url = status.url, media = kept + mediaOf(part, state))
             save(state.copy(published = published, unknownSince = null))
             return published
+        }
+
+        /**
+         * N31: the delete that released the kept media runs in a background job on the server, so a create may
+         * come too early and be refused with 422 for the media it names. Wait for the release a few times; a
+         * refusal that names none of them, such as a text over the limit, comes back at once.
+         */
+        private suspend fun createStatusWaitingForMedia(params: StatusParams, key: String, kept: List<String>): Status {
+            var waits = 0
+            while (true) {
+                try {
+                    return client.createStatus(token, params, key)
+                } catch (e: MastodonException.Http) {
+                    if (e.status != 422 || kept.isEmpty() || waits >= MEDIA_RELEASE_WAITS || !e.namesAnyOf(kept)) throw e
+                    waits++
+                    sleep(MEDIA_RELEASE_WAIT.toMillis())
+                }
+            }
+        }
+
+        /** N31: an alt text of a kept file, set once the file no longer belongs to the deleted status. */
+        private suspend fun relabel(media: PublishedMedia) {
+            var waits = 0
+            while (true) {
+                try {
+                    client.updateMedia(token, media.id, media.alt, null)
+                    return
+                } catch (e: MastodonException.Http) {
+                    if (e.status != 404 || waits >= MEDIA_RELEASE_WAITS) throw e
+                    waits++
+                    sleep(MEDIA_RELEASE_WAIT.toMillis())
+                }
+            }
         }
 
         private fun mediaOf(part: PlannedPart, state: PartProgress): List<PublishedMedia> =
@@ -352,8 +442,11 @@ class MastodonExecutor(
         }
     }
 
-    /** The server answered 404 or 405 to an edit (N31). */
+    /** The server answered that it cannot edit (N31): a 405, or a 404 for a status that is still there. */
     private class EditUnsupported : Exception()
+
+    /** N31: the status the edit would change was deleted elsewhere; the 404 on `PUT` was not about editing. */
+    private class StatusGone : Exception()
 
     /** The server could not process an uploaded file (N7: 422 on `GET /api/v1/media/:id`). */
     private class MediaFailed(message: String) : Exception(message)
@@ -362,11 +455,18 @@ class MastodonExecutor(
         /** N31: the failure of an edit on a server that cannot edit; the user can delete and post again. */
         const val EDIT_UNSUPPORTED = "this server cannot edit posts: delete the post and post it again"
 
+        /** N31: the edit names a status that was deleted elsewhere, not a server without edit support. */
+        const val STATUS_GONE = "a part of the published post is no longer on the server"
+
         /** How long the server's idempotency cache keeps a key (N12). */
         val UNKNOWN_WINDOW: Duration = Duration.ofHours(1)
 
         /** Unattached media are deleted by the server after a day (N8). */
         val MEDIA_LIFETIME: Duration = Duration.ofHours(24)
+
+        /** N31: how long a server may take to release the media of a deleted status, in waits of this length. */
+        val MEDIA_RELEASE_WAIT: Duration = Duration.ofSeconds(1)
+        const val MEDIA_RELEASE_WAITS = 5
 
         private val FIRST_POLL: Duration = Duration.ofSeconds(1)
         private val MAX_POLL: Duration = Duration.ofSeconds(10)
@@ -390,6 +490,12 @@ class MastodonExecutor(
             is ConversionException.ImageFailed -> "the image could not be converted"
         }
     }
+}
+
+/** N31: whether the server's refusal names one of [ids], as "Media attachments not found: 1, 2" does. */
+private fun MastodonException.Http.namesAnyOf(ids: List<String>): Boolean {
+    val texts = listOfNotNull(error, description)
+    return texts.any { text -> ids.any { id -> Regex("""(?<!\d)${Regex.escape(id)}(?!\d)""").containsMatchIn(text) } }
 }
 
 /** N12: how a status found among the account's latest ones is recognized as the part sent before. */

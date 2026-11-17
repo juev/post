@@ -41,3 +41,9 @@ fun Account.mediaRules(): NetworkMediaRules = when (network) {
     Network.MASTODON -> limits.mastodonCapabilities().toMediaRules()
     Network.BLUESKY -> NetworkMediaRules.bluesky()
 }
+
+/**
+ * Whether the account's copy of a published post is edited in place (networks.md N31, N32): a Mastodon
+ * server since 3.5 does, Bluesky never does and is deleted and posted again.
+ */
+fun Account.canEdit(): Boolean = network == Network.MASTODON && limits.mastodonCapabilities().supportsEdit
