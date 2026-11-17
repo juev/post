@@ -11,7 +11,10 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.long
 import org.evsyukov.post.core.markdown.MANUAL_BREAK
+import org.evsyukov.post.core.media.ConflictKind
+import org.evsyukov.post.core.media.FixKind
 import org.evsyukov.post.core.media.MediaKind
+import org.evsyukov.post.core.media.Network
 import org.evsyukov.post.data.accounts.ReplyRule
 import org.evsyukov.post.data.db.DeliveryState
 import org.evsyukov.post.data.db.PostKind
@@ -23,6 +26,7 @@ import org.evsyukov.post.data.posts.DraftInput
 import org.evsyukov.post.data.posts.KeptMedia
 import org.evsyukov.post.data.posts.PostOptions
 import org.evsyukov.post.data.posts.Schedule
+import org.evsyukov.post.send.FakeMastodon
 import org.evsyukov.post.send.PublishedActions
 import org.evsyukov.post.send.SendFixture
 import org.evsyukov.post.send.blocking
@@ -174,6 +178,67 @@ class BlueskyEditDeleteTest {
         val after = blocking { f.history.get(record.id) }!!.items.single().parts.single().media
         assertThat(after.map { it.id to it.alt }).containsExactly("bafkblob1" to "first", "bafkblob2" to "second, fixed").inOrder()
         assertThat(after.map { it.blob }).containsExactly(published[0].blob, published[1].blob).inOrder()
+    }
+
+    /**
+     * A two-part thread: the first part carries an audio file, the second a photo. Bluesky takes the post
+     * without the audio (A10), so its first part has no media and its photo comes at another place than in
+     * the Mastodon copy the composer lists.
+     */
+    private fun photoAfterAudio(): Pair<HistoryRecord, Long> {
+        val alice = f.mastodon()
+        val bob = f.bluesky()
+        FakeMastodon(f.servers) { f.clock.now }
+        pds.keepsBlobs = true
+        val audio = Attachment(
+            kind = MediaKind.AUDIO,
+            path = f.file("episode.mp3"),
+            mime = "audio/mpeg",
+            sizeBytes = 2048,
+            alt = "the episode",
+        )
+        val photo = f.image("a.jpg", "a cat").copy(pieceIndex = 1)
+        val fixes = mapOf(Network.BLUESKY to mapOf(ConflictKind.UNSUPPORTED_TYPE to FixKind.SEND_WITHOUT_FILE))
+        val id = f.queue(thread("Listen", "Photos"), listOf(alice, bob), PostOptions(chosenFixes = fixes), attachments = listOf(audio, photo))
+        f.run()
+        check(f.post(id)!!.state == PostState.SENT)
+        val record = blocking { f.history.observe().first().single() }
+        val mastodon = record.items.first { it.network == Network.MASTODON }
+        assertThat(mastodon.parts.map { it.media.size }).containsExactly(1, 1)
+        assertThat(mastodon.parts.flatMap { it.media }.map { it.attachmentId }).doesNotContain(null)
+        val bluesky = record.items.first { it.network == Network.BLUESKY }
+        assertThat(bluesky.parts.map { it.media.size }).containsExactly(0, 1)
+        return record to bob
+    }
+
+    @Test
+    fun anEditOfAFileOneCopyLacksLeavesTheOtherFilesOfThatCopyAsTheyAre() {
+        // The composer lists the files of the first Mastodon copy, where place 0 is the audio. In the Bluesky
+        // copy that place is the photo, so the edit must not relabel the photo.
+        val (record, bob) = photoAfterAudio()
+        val audio = record.items.first { it.network == Network.MASTODON }.parts[0].media.single()
+        val edits = listOf(KeptMedia(0, 0, "the episode, fixed", ordinal = 0, attachmentId = audio.attachmentId))
+
+        val editId = edit(record, bob, "Listen, fixed\n$MANUAL_BREAK\nPhotos", record.options.copy(keptMedia = edits))
+        f.run()
+
+        assertThat(f.post(editId)).isNull()
+        val images = pds.posts.last().value["embed"]!!.jsonObject["images"]!!.jsonArray.map { it.jsonObject }
+        assertThat(images.map { it.string("alt") }).containsExactly("a cat")
+    }
+
+    @Test
+    fun aRemovedFileOneCopyLacksLeavesTheOtherFilesOfThatCopyAsTheyAre() {
+        // The photo is the file the edit removes, at place 1 among all files of the composer's list.
+        val (record, bob) = photoAfterAudio()
+        val photo = record.items.first { it.network == Network.MASTODON }.parts[1].media.single()
+        val edits = listOf(KeptMedia(1, 0, "a cat", removed = true, ordinal = 1, attachmentId = photo.attachmentId))
+
+        val editId = edit(record, bob, "Listen, fixed\n$MANUAL_BREAK\nPhotos", record.options.copy(keptMedia = edits))
+        f.run()
+
+        assertThat(f.post(editId)).isNull()
+        assertThat(pds.posts.last().value["embed"]).isNull()
     }
 
     @Test

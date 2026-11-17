@@ -259,7 +259,12 @@ class ComposerPublishedEditTest {
     fun aRemovedPublishedFileAndANewAltAreSavedWithTheEdit() {
         val id = record(
             "photo",
-            listOf(mastodonItem(alice, PublishedPart(id = "a1", text = "photo", media = listOf(PublishedMedia("m1", "old"), PublishedMedia("m2", "second"))))),
+            listOf(
+                mastodonItem(
+                    alice,
+                    PublishedPart(id = "a1", text = "photo", media = listOf(PublishedMedia("m1", "old", attachmentId = 11), PublishedMedia("m2", "second", attachmentId = 12))),
+                ),
+            ),
         )
         show(editHistoryId = id)
 
@@ -270,9 +275,10 @@ class ComposerPublishedEditTest {
 
         h.waitUntil { queue().isNotEmpty() }
         assertThat(queue().single().options.keptMedia).containsExactly(
-            // The place among all files names the same file in every Mastodon copy (T3).
-            KeptMedia(0, 0, "new alt", ordinal = 0),
-            KeptMedia(0, 1, "second", removed = true, ordinal = 1),
+            // The attachment names the same file in every copy (#27); the place among all files, in every
+            // Mastodon copy whatever its split (T3).
+            KeptMedia(0, 0, "new alt", ordinal = 0, attachmentId = 11),
+            KeptMedia(0, 1, "second", removed = true, ordinal = 1, attachmentId = 12),
         ).inOrder()
     }
 

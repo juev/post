@@ -271,7 +271,9 @@ class MastodonExecutor(
             }
             val state = partProgress(index)
             val media = kept + part.attachmentIds.mapNotNull { id ->
-                state.uploaded[id]?.let { PublishedMedia(it, job.post.attachments.firstOrNull { a -> a.id == id }?.alt.orEmpty()) }
+                state.uploaded[id]?.let {
+                    PublishedMedia(it, job.post.attachments.firstOrNull { a -> a.id == id }?.alt.orEmpty(), attachmentId = id)
+                }
             }
             val result = PublishedPart(id = status.id, uri = status.uri ?: published.uri, url = status.url ?: published.url, media = media)
             save(state.copy(published = result))
@@ -398,7 +400,9 @@ class MastodonExecutor(
 
         private fun mediaOf(part: PlannedPart, state: PartProgress): List<PublishedMedia> =
             part.attachmentIds.mapNotNull { id ->
-                state.uploaded[id]?.let { PublishedMedia(it, job.post.attachments.firstOrNull { a -> a.id == id }?.alt.orEmpty()) }
+                state.uploaded[id]?.let {
+                    PublishedMedia(it, job.post.attachments.firstOrNull { a -> a.id == id }?.alt.orEmpty(), attachmentId = id)
+                }
             }
 
         private suspend fun upload(attachmentId: Long): String {

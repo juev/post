@@ -141,6 +141,11 @@ data class KeptMedia(
      * saved before, which go by [part] and [index].
      */
     val ordinal: Int? = null,
+    /**
+     * The draft attachment the file came from: every copy that published it names it the same, whatever files
+     * that copy lacks (#27). Null in records written before it, which go by [ordinal] or else [part] and [index].
+     */
+    val attachmentId: Long? = null,
 )
 
 /** When a queued post is sent (scheduling.md S2, S5). */
@@ -296,6 +301,8 @@ data class MastodonStatusOptions(
  * GIF. Records written before these fields have none; such a file cannot be posted again.
  *
  * @property blob the Bluesky blob reference as JSON: `$type`, `ref` (the CID), `mimeType` and `size`.
+ * @property attachmentId the draft attachment this file came from. An edit names the file by it, so it finds
+ *   the same file in a copy that lacks some of the post's files (#27); a record written before it has none.
  */
 @Serializable
 data class PublishedMedia(
@@ -305,6 +312,7 @@ data class PublishedMedia(
     val width: Int? = null,
     val height: Int? = null,
     val gif: Boolean = false,
+    val attachmentId: Long? = null,
 )
 
 /**
