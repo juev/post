@@ -26,6 +26,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import org.evsyukov.post.R
+import org.evsyukov.post.accounts.canEdit
 import org.evsyukov.post.core.media.Network
 import org.evsyukov.post.data.accounts.Account
 import org.evsyukov.post.data.history.HistoryRecord
@@ -38,15 +39,16 @@ enum class EditMark { UNCHANGED, EDITED, ADDED }
 data class EditMarks(val parts: List<EditMark>, val deleted: Int)
 
 /**
- * The marks of each render of the edit preview (N29, N32): for Mastodon a part is unchanged when its text,
- * content warning and media stay, edited otherwise, added past the published thread, and the published parts
- * past the new thread are deleted. A Bluesky copy is deleted and posted again, so every part is added. Null for
- * a render no account of which holds the post.
+ * The marks of each render of the edit preview (N29, N31, N32): for a Mastodon server that edits in place a
+ * part is unchanged when its text, content warning and media stay, edited otherwise, added past the published
+ * thread, and the published parts past the new thread are deleted. A copy whose server cannot edit, Bluesky or
+ * an old Mastodon, is deleted and posted again, so every part is added. Null for a render no account of which
+ * holds the post.
  */
 fun editMarks(renders: List<ProfileRender>, record: HistoryRecord, kept: List<KeptMedia>): List<EditMarks?> = renders.map { render ->
     val item = record.items.firstOrNull { item -> render.accounts.any { it.id == item.accountId } } ?: return@map null
     val parts = render.render.parts
-    if (render.network == Network.BLUESKY) return@map EditMarks(parts.map { EditMark.ADDED }, item.parts.size)
+    if (render.accounts.none { it.canEdit() }) return@map EditMarks(parts.map { EditMark.ADDED }, item.parts.size)
     val marks = parts.mapIndexed { index, part ->
         val old = item.parts.getOrNull(index) ?: return@mapIndexed EditMark.ADDED
         val mediaChanged = old.media.withIndex().any { (position, media) ->
@@ -80,33 +82,38 @@ fun filesNotPostedAgain(record: HistoryRecord): Set<Long> = record.items
     .toSet()
 
 /**
- * N32: for each Bluesky account holding the post, "Leave unchanged" (the default) or "Delete and post again",
- * with the warning that likes, reposts and replies are lost, and for an account in [filesLost] that its files are
- * not posted again.
+ * N31, N32: for each account whose copy of the post cannot be edited in place, "Leave unchanged" (the default)
+ * or "Delete and post again", with the warning that likes, reposts and replies are lost, and for a Bluesky
+ * account in [filesLost] that its files are not posted again.
  */
 @Composable
-fun BlueskyEditChoices(accounts: List<Account>, targets: List<Long>, onToggle: (Long) -> Unit, filesLost: Set<Long> = emptySet()) {
+fun RepostEditChoices(accounts: List<Account>, targets: List<Long>, onToggle: (Long) -> Unit, filesLost: Set<Long> = emptySet()) {
     if (accounts.isEmpty()) return
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         for (account in accounts) {
             val repost = account.id in targets
-            Text(stringResource(R.string.edit_bluesky_account, account.handle), style = MaterialTheme.typography.labelLarge)
+            val bluesky = account.network == Network.BLUESKY
+            val label = if (bluesky) R.string.edit_bluesky_account else R.string.edit_mastodon_account
+            Text(stringResource(label, account.handle), style = MaterialTheme.typography.labelLarge)
             Row(Modifier.selectableGroup(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilterChip(
                     selected = !repost,
                     onClick = { if (repost) onToggle(account.id) },
                     label = { Text(stringResource(R.string.edit_bluesky_leave)) },
-                    modifier = Modifier.semantics { role = Role.RadioButton }.testTag(ComposerTags.blueskyLeave(account.id)),
+                    modifier = Modifier.semantics { role = Role.RadioButton }
+                        .testTag(if (bluesky) ComposerTags.blueskyLeave(account.id) else ComposerTags.mastodonLeave(account.id)),
                 )
                 FilterChip(
                     selected = repost,
                     onClick = { if (!repost) onToggle(account.id) },
                     label = { Text(stringResource(R.string.edit_bluesky_repost)) },
-                    modifier = Modifier.semantics { role = Role.RadioButton }.testTag(ComposerTags.blueskyRepost(account.id)),
+                    modifier = Modifier.semantics { role = Role.RadioButton }
+                        .testTag(if (bluesky) ComposerTags.blueskyRepost(account.id) else ComposerTags.mastodonRepost(account.id)),
                 )
             }
             if (repost) {
-                Text(stringResource(R.string.edit_bluesky_warning), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                val warning = if (bluesky) R.string.edit_bluesky_warning else R.string.edit_mastodon_warning
+                Text(stringResource(warning), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                 if (account.id in filesLost) {
                     Text(
                         stringResource(R.string.edit_bluesky_files_lost),

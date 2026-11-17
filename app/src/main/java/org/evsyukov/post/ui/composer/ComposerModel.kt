@@ -27,6 +27,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.evsyukov.post.AppContainer
+import org.evsyukov.post.accounts.canEdit
 import org.evsyukov.post.core.media.ConflictKind
 import org.evsyukov.post.core.media.FixKind
 import org.evsyukov.post.core.media.Network
@@ -264,8 +265,12 @@ class ComposerModel(
                 editing = record
                 // The record's own options may hold the edits of an earlier edit, by places that have moved since.
                 keptMedia = keptMediaOf(record, emptyList())
-                // R40: Mastodon copies are edited in place; a Bluesky copy is left unchanged by default (N32).
-                targets = record.items.filter { it.network == Network.MASTODON && it.accountId in existing }.map { it.accountId }
+                // R40: a Mastodon copy is edited in place where the server can; a copy that cannot be edited,
+                // Bluesky or an old Mastodon server, is left unchanged by default (N31, N32).
+                targets = record.items.filter { item ->
+                    item.network == Network.MASTODON && item.accountId in existing &&
+                        accounts.firstOrNull { it.id == item.accountId }?.canEdit() == true
+                }.map { it.accountId }
             }
         } else if (post == null && fromHistoryId != null && id == null) {
             val record = container.history.get(fromHistoryId)
