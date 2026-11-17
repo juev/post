@@ -42,13 +42,21 @@ class BlueskySignIn(
      * Signs in [identifier], a handle (with or without `@`) or a DID, with [appPassword], and with
      * [code] when the PDS asked for one.
      *
+     * With [accountId] it signs that account in again, which must bring back the same DID (product.md R5):
+     * another one is rejected with [SignInProblem.WRONG_ACCOUNT] before the password leaves the device. The
+     * same DID on another PDS is the same account.
+     *
      * @throws SignInException
      */
-    suspend fun signIn(identifier: String, appPassword: String, code: String? = null): Result {
+    suspend fun signIn(identifier: String, appPassword: String, code: String? = null, accountId: Long? = null): Result {
         try {
             val resolver = IdentityResolver(http, json, appView, plc)
             val input = IdentityResolver.normalizeHandle(identifier)
             val (did, handle) = resolve(resolver, input)
+            val expected = accountId?.let { accounts.get(it) }
+            if (expected != null && (expected.network != Network.BLUESKY || expected.remoteId != did)) {
+                throw SignInException(SignInProblem.WRONG_ACCOUNT, mismatch = AccountMismatch(handle, expected.handle))
+            }
             val doc = resolver.didDocument(did)
             if (!doc.handleMatches(handle)) throw SignInException(SignInProblem.HANDLE_MISMATCH)
             val pds = doc.pdsEndpoint()?.takeIf { policy.accepts(it) } ?: throw SignInException(SignInProblem.NO_PDS)

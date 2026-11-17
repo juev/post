@@ -45,6 +45,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import org.evsyukov.post.R
+import org.evsyukov.post.accounts.AccountMismatch
 import org.evsyukov.post.accounts.BlueskySignIn
 import org.evsyukov.post.accounts.SignInException
 import org.evsyukov.post.accounts.SignInProblem
@@ -73,7 +74,8 @@ sealed interface BlueskyFormState {
     /** The PDS asked for the code from the e-mail (AuthFactorTokenRequired). */
     data object NeedsCode : BlueskyFormState
 
-    data class Failed(val problem: SignInProblem, val codeAsked: Boolean) : BlueskyFormState
+    /** The sign-in failed for [problem]; [mismatch] names both accounts for [SignInProblem.WRONG_ACCOUNT]. */
+    data class Failed(val problem: SignInProblem, val codeAsked: Boolean, val mismatch: AccountMismatch? = null) : BlueskyFormState
 }
 
 /** The page where Bluesky users create app passwords. */
@@ -122,7 +124,7 @@ fun AddBlueskyScreen(accountId: Long?, initialHandle: String, onBack: () -> Unit
         onCodeChange = { code = it },
         state = form.state,
         reSignIn = accountId != null,
-        onSignIn = { form.signIn(container.blueskySignIn, handle, code) },
+        onSignIn = { form.signIn(container.blueskySignIn, handle, code, accountId) },
         onBack = onBack,
     )
 }
@@ -141,13 +143,14 @@ class BlueskyFormModel : ViewModel() {
 
     private var job: Job? = null
 
-    fun signIn(signIn: BlueskySignIn, handle: String, code: String) {
+    /** Signs [handle] in; with [accountId] it signs that account in again and accepts no other (R5). */
+    fun signIn(signIn: BlueskySignIn, handle: String, code: String, accountId: Long? = null) {
         val codeAsked = state == BlueskyFormState.NeedsCode || (state as? BlueskyFormState.Failed)?.codeAsked == true
         val password = password
         state = BlueskyFormState.Working
         job = viewModelScope.launch {
             state = try {
-                when (signIn.signIn(handle, password, code.takeIf { codeAsked })) {
+                when (signIn.signIn(handle, password, code.takeIf { codeAsked }, accountId)) {
                     is BlueskySignIn.Result.Done -> {
                         this@BlueskyFormModel.password = ""
                         done = true
@@ -156,7 +159,7 @@ class BlueskyFormModel : ViewModel() {
                     BlueskySignIn.Result.NeedsCode -> BlueskyFormState.NeedsCode
                 }
             } catch (e: SignInException) {
-                BlueskyFormState.Failed(e.problem, codeAsked)
+                BlueskyFormState.Failed(e.problem, codeAsked, e.mismatch)
             }
         }
     }
@@ -263,7 +266,12 @@ fun AddBlueskyContent(
                 Text(stringResource(R.string.signing_in), style = MaterialTheme.typography.bodyMedium)
             }
             if (state is BlueskyFormState.Failed) {
-                Text(stringResource(state.problem.message()), color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag(AddBlueskyTags.ERROR))
+                Text(
+                    state.mismatch?.let { stringResource(R.string.problem_wrong_account_named, it.signedIn, it.expected) }
+                        ?: stringResource(state.problem.message()),
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.testTag(AddBlueskyTags.ERROR),
+                )
             }
             Button(onClick = onSignIn, enabled = canSignIn, modifier = Modifier.testTag(AddBlueskyTags.SIGN_IN)) {
                 Text(stringResource(if (state is BlueskyFormState.Failed) R.string.try_again else R.string.add_bluesky_sign_in))
