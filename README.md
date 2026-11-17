@@ -26,7 +26,7 @@ Post is an Android app that publishes one message to several Bluesky and Mastodo
 
 ## Requirements
 
-Android 13 (API 33) or later.
+Android 13 (API 33) or later, on a 64-bit ARM device (`arm64-v8a`).
 
 ## Install and update
 

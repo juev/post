@@ -21,7 +21,7 @@ Post is an Android app only, with no web part. The composer is its start screen.
 
 Out of scope: reading timelines, notifications, replies to other people's posts, quoting other people's posts, direct messages, other networks. The data model must allow more network types later (see R3).
 
-Android 13 (API 33) and newer. Kotlin, Jetpack Compose, Room, WorkManager, as in Brook. Application ID `org.evsyukov.post`. Distribution only through Obtainium from GitHub Releases.
+Android 13 (API 33) and newer, on 64-bit ARM (`arm64-v8a`). Kotlin, Jetpack Compose, Room, WorkManager, as in Brook. Application ID `org.evsyukov.post`. Distribution only through Obtainium from GitHub Releases.
 
 ## Terms
 

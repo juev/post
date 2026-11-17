@@ -22,6 +22,7 @@ coil = "3.6.3"
 commonmark = "0.32.0"
 jsoup = "1.23.2"
 mlkitTranslate = "17.0.3"
+mlkitLanguageId = "17.0.6"
 icu4j = "79.1"
 junit = "4.13.2"
 robolectric = "4.17"
@@ -71,6 +72,7 @@ commonmark = { module = "org.commonmark:commonmark", version.ref = "commonmark" 
 commonmark-strikethrough = { module = "org.commonmark:commonmark-ext-gfm-strikethrough", version.ref = "commonmark" }
 jsoup = { module = "org.jsoup:jsoup", version.ref = "jsoup" }
 mlkit-translate = { module = "com.google.mlkit:translate", version.ref = "mlkitTranslate" }
+mlkit-language-id = { module = "com.google.mlkit:language-id", version.ref = "mlkitLanguageId" }
 icu4j = { module = "com.ibm.icu:icu4j", version.ref = "icu4j" }
 junit = { module = "junit:junit", version.ref = "junit" }
 robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }

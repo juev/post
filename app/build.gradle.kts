@@ -54,8 +54,18 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            // ML Kit ships its translation engine for four ABIs, about 62 MB together (docs/spec/
+            // distribution.md, D3). A release keeps 64-bit ARM only: that is every phone the app runs on.
+            // Debug builds keep all ABIs, so the emulator of the instrumented tests can install them.
+            ndk { abiFilters += "arm64-v8a" }
             if (keystore != null) signingConfig = signingConfigs.getByName("release")
         }
+    }
+
+    packaging {
+        // Compressing the native libraries shrinks the APK from about 70 MB to about 15 MB; Android
+        // extracts them at install instead of mapping them from the APK.
+        jniLibs.useLegacyPackaging = true
     }
 
     // The dependency block is encrypted by Google and tells nothing to users of a GitHub release.
@@ -139,8 +149,10 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.okhttp)
     implementation(libs.jsoup)
-    // On-device translation of the draft (screens.md, Composer); see docs/privacy.md for its metrics.
+    // On-device translation of the draft and, when the post's language is the target, its detection
+    // (screens.md, Composer); see docs/privacy.md for their metrics.
     implementation(libs.mlkit.translate)
+    implementation(libs.mlkit.language.id)
     implementation(libs.coil.compose)
     implementation(libs.coil.network.okhttp)
 
