@@ -349,6 +349,30 @@ class MastodonCapabilitiesTest {
         assertThat(MastodonCapabilities.from(blank, null, null).postFormatsDeclared).isFalse()
     }
 
+    // networks.md N31: vanilla Mastodon edits statuses since 3.5; an older one gets only delete and post again.
+    @Test
+    fun onlyVanillaMastodonOlderThanThirtyFiveCannotEdit() {
+        val vanilla = v2("mastodon-4.5-instance-v2.json")
+        assertThat(MastodonCapabilities.from(vanilla, null, null).supportsEdit).isTrue()
+        assertThat(MastodonCapabilities.from(null, v1("mastodon-3.3-instance-v1.json"), null).supportsEdit).isFalse()
+
+        // The nodeinfo version decides, and 3.5 itself already edits.
+        assertThat(MastodonCapabilities.from(null, null, NodeInfo(software = NodeInfoSoftware(name = "mastodon", version = "3.5.0"))).supportsEdit).isTrue()
+        assertThat(MastodonCapabilities.from(null, null, NodeInfo(software = NodeInfoSoftware(name = "mastodon", version = "3.4.99"))).supportsEdit).isFalse()
+        // Hometown reports the Mastodon release it is based on first: 3.4.6+hometown-1.0.8.
+        assertThat(MastodonCapabilities.from(null, v1("hometown-1.0.8-instance-v1.json"), null).supportsEdit).isFalse()
+        // A fork numbers its own releases or writes its version after "(compatible; ...)": without a name it is
+        // taken as able to edit until its PUT says otherwise.
+        assertThat(MastodonCapabilities.from(null, v1("akkoma-instance-v1.json"), null).supportsEdit).isTrue()
+        assertThat(MastodonCapabilities.from(null, v1("pleroma-instance-v1.json"), null).supportsEdit).isTrue()
+        assertThat(MastodonCapabilities.from(v2("gotosocial-instance-v2.json"), null, nodeInfo("gotosocial-nodeinfo-2.0.json")).supportsEdit).isTrue()
+        assertThat(MastodonCapabilities.from(v2("pleroma-instance-v2.json"), null, nodeInfo("pleroma-nodeinfo-2.1.json")).supportsEdit).isTrue()
+        // Without a name a plain release number is compared; a major below 2 names no Mastodon release.
+        assertThat(MastodonCapabilities.from(null, InstanceV1(version = "2.9.1"), null).supportsEdit).isFalse()
+        assertThat(MastodonCapabilities.from(null, InstanceV1(version = "0.22.3"), null).supportsEdit).isTrue()
+        assertThat(MastodonCapabilities.from(null, null, null).supportsEdit).isTrue()
+    }
+
     @Test
     fun capabilitiesSurviveAJsonRoundTripForStorage() {
         val c = MastodonCapabilities.from(v2("pleroma-instance-v2.json"), v1("pleroma-instance-v1.json"), nodeInfo("pleroma-nodeinfo-2.1.json"))
