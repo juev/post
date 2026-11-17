@@ -113,6 +113,36 @@ class ComposerProcessDeathTest {
     }
 
     @Test
+    fun anUnsavedFileWhoseCopyIsGoneIsDroppedAndCounted() {
+        val state = SavedStateHandle()
+        val before = model(null, state)
+        before.text.setTextAndPlaceCursorAtEnd("with two files")
+        before.viewModelScope.launch { before.addAttachments(listOf(source("alpha.png"), source("photo_exif_rot90.jpg"))) }
+        waitUntil { before.attachments.size == 2 }
+        val (gone, kept) = before.attachments
+        waitUntil { true }
+        // media.md A1: the sweep deleted one copy while the process was gone.
+        assertThat(container.attachmentImporter.file(gone.path).delete()).isTrue()
+
+        val after = model(null, afterProcessDeath(state))
+        waitUntil { after.text.text.toString() == "with two files" }
+
+        assertThat(after.attachments.map { it.path }).containsExactly(kept.path)
+        assertThat(after.missingFiles).isEqualTo(1)
+        after.missingFilesShown()
+        assertThat(after.missingFiles).isEqualTo(0)
+    }
+
+    @Test
+    fun anOpenComposerHoldsItsFilesAgainstTheSweep() {
+        val model = model(null, SavedStateHandle())
+        model.viewModelScope.launch { model.addAttachments(listOf(source("alpha.png"))) }
+        waitUntil { model.attachments.size == 1 }
+
+        assertThat(container.filesInUse.paths()).containsExactly(model.attachments.single().path)
+    }
+
+    @Test
     fun aSavedDraftComesBackWithTheEditsMadeSinceItWasSaved() {
         val id = runBlocking { container.posts.saveDraft(DraftInput(text = "saved text", targets = listOf(alice))) }
         val state = SavedStateHandle()

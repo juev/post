@@ -7,6 +7,9 @@ import kotlinx.coroutines.launch
 import org.evsyukov.post.accounts.LimitsRefreshWorker
 import org.evsyukov.post.accounts.LimitsRefresher
 import org.evsyukov.post.accounts.LimitsRefresherHost
+import org.evsyukov.post.data.posts.AttachmentSweepWorker
+import org.evsyukov.post.data.posts.AttachmentSweeper
+import org.evsyukov.post.data.posts.AttachmentSweeperHost
 import org.evsyukov.post.send.PublishScheduler
 import org.evsyukov.post.send.Publisher
 import org.evsyukov.post.send.PublisherHost
@@ -17,9 +20,11 @@ import org.evsyukov.post.send.schedule.SchedulingHost
 import org.evsyukov.post.share.DirectShare
 import java.time.Instant
 
-class PostApplication : Application(), AppContainerHost, LimitsRefresherHost, PublisherHost, SchedulingHost {
+class PostApplication : Application(), AppContainerHost, LimitsRefresherHost, PublisherHost, SchedulingHost, AttachmentSweeperHost {
     override lateinit var container: AppContainer
         private set
+
+    override val attachmentSweeper: AttachmentSweeper get() = container.attachmentSweeper
 
     override val limitsRefresher: LimitsRefresher get() = container.limitsRefresher
 
@@ -57,5 +62,16 @@ class PostApplication : Application(), AppContainerHost, LimitsRefresherHost, Pu
                 // The next start tries again.
             }
         }
+        // media.md A1: copies and variants that nothing refers to go at start and once a day.
+        container.scope.launch {
+            try {
+                container.attachmentSweeper.sweep()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                // The daily job or the next start tries again.
+            }
+        }
+        AttachmentSweepWorker.schedule(WorkManager.getInstance(this))
     }
 }

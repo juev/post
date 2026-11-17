@@ -70,6 +70,10 @@ class ShareModel(
     var failedFiles by mutableStateOf(saved.get<Int>(KEY_FAILED) ?: 0)
         private set
 
+    /** Copied files that did not come back after process death because their copy is gone from app storage (media.md A1). */
+    var missingFiles by mutableStateOf(saved.get<Int>(KEY_MISSING) ?: 0)
+        private set
+
     /** The shared files are still being copied; nothing can be sent or opened until they are in. */
     var importing by mutableStateOf(saved.get<Boolean>(KEY_IMPORTED) != true && shared.uris.isNotEmpty())
         private set
@@ -85,6 +89,9 @@ class ShareModel(
     val settings: StateFlow<Settings?> = container.settings.settings.stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     init {
+        // The copies on screen stay while the sheet lives (media.md A1).
+        container.filesInUse.hold(this) { attachments.map { it.path } }
+        if (attachments.isNotEmpty()) dropMissingFiles()
         if (importing) viewModelScope.launch { importFiles(shared) }
         if (targets == null) {
             viewModelScope.launch {
@@ -93,6 +100,19 @@ class ShareModel(
                 if (targets == null) updateTargets(settings.filterNotNull().first().defaultTargets.filter { it in existing })
             }
         }
+    }
+
+    /**
+     * After process death the copies come from the saved state; one the sweep deleted meanwhile is dropped. It
+     * runs before the sheet shows anything, so it checks the few files right here rather than off the main thread.
+     */
+    private fun dropMissingFiles() {
+        val present = attachments.filter { container.attachmentImporter.file(it.path).isFile }
+        if (present.size == attachments.size) return
+        missingFiles += attachments.size - present.size
+        attachments = present
+        saved[KEY_FILES] = encode(present)
+        saved[KEY_MISSING] = missingFiles
     }
 
     private suspend fun importFiles(shared: SharedContent) {
@@ -231,6 +251,7 @@ class ShareModel(
      * a saved post stay with it.
      */
     override fun onCleared() {
+        container.filesInUse.release(this)
         if (handedOver) return
         val paths = attachments.map { it.path }
         if (paths.isNotEmpty()) container.scope.launch(Dispatchers.IO) { container.attachmentFiles.delete(paths) }
@@ -259,6 +280,7 @@ class ShareModel(
         private const val KEY_FILES = "share.files"
         private const val KEY_FAILED = "share.failed"
         private const val KEY_IMPORTED = "share.imported"
+        private const val KEY_MISSING = "share.missing"
 
         private val serializer = ListSerializer(SavedFile.serializer())
 

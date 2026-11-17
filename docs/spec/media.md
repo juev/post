@@ -6,7 +6,7 @@ Decisions of 2026-11-15: the user attaches files once. The app adapts each file 
 
 ## Model
 
-- A1. An attachment is one original file copied into app storage when it is added (R9), with its alt text and, for images, a focus point.
+- A1. An attachment is one original file copied into app storage when it is added (R9), with its alt text and, for images, a focus point. A copy or a variant that no saved post and no open composer or Share sheet refers to is deleted at app start and once a day once it is older than 24 hours: such files are left when the process dies while a draft has unsaved attachments. A composer or Share sheet that comes back after process death drops an unsaved attachment whose copy is gone and says so.
 - A2. For each target account the app builds a plan: which attachments go to which thread part, and which variant of each file is uploaded. A variant is the original or a converted copy.
 - A3. The plan is rebuilt whenever attachments, targets or account limits change. The composer shows its result per network: nothing when every file goes as it is, a note when files are converted, a conflict when a choice is needed.
 - A4. Variants are prepared when the post is saved for sending or queued, not at send time, so a failed conversion shows up while the user is still in the composer. They are deleted together with the original after all deliveries succeed.

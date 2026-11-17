@@ -39,6 +39,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -229,6 +230,15 @@ private fun ComposerContent(
     // R9: picked files are copied into app storage right away, while the grant of the picker lasts.
     fun attach(uris: List<android.net.Uri>) = model.attach(uris) { failed ->
         if (failed > 0) scope.launch { snackbar.showSnackbar(resources.getQuantityString(R.plurals.media_import_failed, failed, failed)) }
+    }
+    // media.md A1: unsaved files whose copies were deleted while the process was gone are dropped, and the screen says so.
+    val missing = model.missingFiles
+    LaunchedEffect(missing) {
+        if (missing > 0) {
+            // The count goes back to 0 and restarts this effect, so the snackbar runs on the screen's scope.
+            model.missingFilesShown()
+            scope.launch { snackbar.showSnackbar(resources.getQuantityString(R.plurals.media_files_missing, missing, missing)) }
+        }
     }
     val pickMedia = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia()) { attach(it) }
     val pickFiles = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { attach(it) }

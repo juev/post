@@ -244,6 +244,14 @@ interface AttachmentDao {
     @Query("SELECT path FROM variants WHERE attachmentId IN (:attachmentIds)")
     suspend fun variantPaths(attachmentIds: List<Long>): List<String>
 
+    /** The files of every attachment and every variant, for the sweep of files no row refers to. */
+    @Query("SELECT path FROM attachments UNION SELECT path FROM variants")
+    suspend fun allPaths(): List<String>
+
+    /** The posts that have attachments: their variant directories stay, even empty, for a conversion to fill. */
+    @Query("SELECT DISTINCT postId FROM attachments")
+    suspend fun postsWithAttachments(): List<Long>
+
     @Query("SELECT * FROM variants WHERE attachmentId = :attachmentId AND profileKey = :profileKey")
     suspend fun variant(attachmentId: Long, profileKey: String): VariantEntity?
 

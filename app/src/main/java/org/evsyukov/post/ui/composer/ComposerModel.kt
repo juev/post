@@ -109,6 +109,13 @@ class ComposerModel(
     var importing by mutableStateOf(0)
         private set
 
+    /**
+     * Unsaved attachments that did not come back after process death because their copy is gone from app storage
+     * (media.md A1); the screen says so once and calls [missingFilesShown].
+     */
+    var missingFiles by mutableStateOf(0)
+        private set
+
     private var nextNewId = -1L
 
     /**
@@ -170,6 +177,8 @@ class ComposerModel(
     val queueCount: StateFlow<Int> = container.posts.observeQueue().map { it.size }.stateIn(viewModelScope, SharingStarted.Eagerly, 0)
 
     init {
+        // The copies on screen stay while the composer lives, saved or not (media.md A1).
+        container.filesInUse.hold(this) { attachments.map { it.path } }
         viewModelScope.launch {
             // After process death the draft comes back as it was on screen, saved or not (R15, R27).
             val state = savedState
@@ -309,7 +318,7 @@ class ComposerModel(
     /**
      * Puts back what the screen showed before process death over the draft [load] read. A saved attachment
      * comes from the database with its variants and takes the edits of the snapshot; one added since the last
-     * save comes back while its copy is still in app storage.
+     * save comes back while its copy is still in app storage, and [missingFiles] counts those that do not.
      */
     private suspend fun restore(snapshot: ComposerSnapshot) {
         text.setTextAndPlaceCursorAtEnd(snapshot.text)
@@ -322,16 +331,22 @@ class ComposerModel(
         chosenFixes = snapshot.chosenFixes
         if (editing != null) keptMedia = snapshot.keptMedia
         val stored = attachments.associateBy { it.id }
+        var missing = 0
         val restored = withContext(Dispatchers.IO) {
             snapshot.attachments.mapNotNull { file ->
                 if (file.id >= 0) {
                     stored[file.id]?.copy(pieceIndex = file.pieceIndex, alt = file.alt, focusX = file.focusX, focusY = file.focusY)
                 } else {
-                    file.toAttachment().takeIf { container.attachmentImporter.file(it.path).isFile }
+                    // The sweep deletes a copy no row refers to once it is a day old.
+                    file.toAttachment().takeIf { container.attachmentImporter.file(it.path).isFile } ?: run {
+                        missing++
+                        null
+                    }
                 }
             }
         }
         attachments = restored
+        missingFiles = missing
         nextNewId = minOf(-1L, (restored.minOfOrNull { it.id } ?: 0L) - 1)
     }
 
@@ -516,6 +531,15 @@ class ComposerModel(
     suspend fun startNew() {
         newDraft(accounts.filterNotNull().first(), settings.filterNotNull().first())
         saved = content()
+    }
+
+    /** The screen told the user about [missingFiles]. */
+    fun missingFilesShown() {
+        missingFiles = 0
+    }
+
+    override fun onCleared() {
+        container.filesInUse.release(this)
     }
 
     private suspend fun deleteUnsavedFiles() {

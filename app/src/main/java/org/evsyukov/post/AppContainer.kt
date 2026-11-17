@@ -21,7 +21,9 @@ import org.evsyukov.post.data.db.PostDatabase
 import org.evsyukov.post.data.history.HistoryRepository
 import org.evsyukov.post.data.history.RoomHistoryRepository
 import org.evsyukov.post.data.posts.AttachmentFiles
+import org.evsyukov.post.data.posts.AttachmentSweeper
 import org.evsyukov.post.data.posts.FilesDirAttachmentFiles
+import org.evsyukov.post.data.posts.FilesInUse
 import org.evsyukov.post.data.posts.PostsRepository
 import org.evsyukov.post.data.posts.RoomPostsRepository
 import org.evsyukov.post.data.schedule.RoomScheduleRepository
@@ -103,6 +105,12 @@ class AppContainer(
     val secrets: SecretStore by lazy { SecretStore(cipher()) }
 
     val attachmentFiles: AttachmentFiles by lazy { FilesDirAttachmentFiles(this.context.filesDir) }
+
+    /** The copies that open composers and Share sheets hold before they are saved. */
+    val filesInUse: FilesInUse = FilesInUse()
+
+    /** Deletes copies and variants that nothing refers to (media.md A1). */
+    val attachmentSweeper: AttachmentSweeper by lazy { AttachmentSweeper(database.attachmentDao(), this.context.filesDir, filesInUse) }
 
     /** Copies picked and shared files into app storage and reads their metadata (R9). */
     val attachmentImporter: AttachmentImporter by lazy { AttachmentImporter(this.context.contentResolver, this.context.filesDir, privateDir = this.context.dataDir) }

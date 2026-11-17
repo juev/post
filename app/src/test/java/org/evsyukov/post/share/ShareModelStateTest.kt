@@ -78,5 +78,34 @@ class ShareModelStateTest {
         assertThat(second.attachments).containsExactly(copied)
         assertThat(second.failedFiles).isEqualTo(0)
         assertThat(File(context.filesDir, AttachmentImporter.DIR).list().orEmpty().toList()).containsExactly(File(copied.path).name)
+        assertThat(second.missingFiles).isEqualTo(0)
+        assertThat(container.filesInUse.paths()).containsExactly(copied.path)
+    }
+
+    @Test
+    fun aCopyThatIsGoneAfterProcessDeathIsDroppedAndCounted() {
+        val folder = temp.newFolder()
+        val uris = listOf("alpha.png", "photo_exif_rot90.jpg").map { name ->
+            val file = File(folder, name)
+            requireNotNull(javaClass.getResourceAsStream("/media/$name")).use { input -> file.outputStream().use { input.copyTo(it) } }
+            Uri.fromFile(file)
+        }
+        val shared = SharedContent("Shared", uris)
+        val saved = SavedStateHandle()
+        val first = ShareModel(container, saved, shared)
+        until { !first.importing }
+        val (gone, kept) = first.attachments
+
+        // media.md A1: the sweep deleted one copy while the process was gone.
+        assertThat(File(context.filesDir, gone.path).delete()).isTrue()
+        val restored = SavedStateHandle(saved.keys().associateWith { saved.get<Any?>(it) })
+        val second = ShareModel(container, restored, shared)
+
+        assertThat(second.attachments).containsExactly(kept)
+        assertThat(second.missingFiles).isEqualTo(1)
+        // Another death of the process keeps both the list without the file and the count.
+        val third = ShareModel(container, SavedStateHandle(restored.keys().associateWith { restored.get<Any?>(it) }), shared)
+        assertThat(third.attachments).containsExactly(kept)
+        assertThat(third.missingFiles).isEqualTo(1)
     }
 }
