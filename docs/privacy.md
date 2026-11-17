@@ -18,7 +18,7 @@ Removing the app deletes all of it.
 
 ## What Post does not do
 
-- No analytics, crash reporting, advertising or tracking of any kind run by Post itself. The translation feature uses Google's ML Kit on the device, and ML Kit sends Google metrics about its own use: device and app versions, the language pair, the size of the input and output, and error codes (the ML Kit terms and the Android data disclosure page list them). The text you translate is not among that data and never leaves the phone.
+- No analytics, crash reporting, advertising or tracking of any kind run by Post itself. The translation feature uses Google's ML Kit on the device, and ML Kit sends Google metrics about its own use: device and app information, device or other identifiers, the language pair, the size of the input and output, performance metrics and error codes (the ML Kit terms and the Android data disclosure page list them). The text you translate is not among that data and never leaves the phone.
 - No backup: app data is excluded from Android cloud backup and from device-to-device transfer. After moving to a new phone, you sign in to your accounts again.
 - No account or service run by the developer. Nothing goes to the developer.
 
