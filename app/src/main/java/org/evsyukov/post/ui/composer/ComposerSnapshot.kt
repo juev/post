@@ -25,6 +25,8 @@ internal data class ComposerSnapshot(
     val spoilerShown: Boolean,
     val language: String,
     val targets: List<Long>,
+    /** The copies chosen to be deleted and posted again (N31); empty in a snapshot written before that choice. */
+    val repostAccounts: Set<Long> = emptySet(),
     val accountOptions: Map<Long, AccountPostOptions>,
     val poll: PollDraft?,
     val attachments: List<SnapshotFile>,

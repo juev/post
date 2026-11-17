@@ -371,7 +371,8 @@ private fun ComposerContent(
                 RepostEditChoices(
                     accounts = holding.filter { !it.canEdit() },
                     targets = model.targets,
-                    onToggle = model::toggleTarget,
+                    reposted = model.repostAccounts,
+                    onToggle = model::toggleRepost,
                     filesLost = filesNotPostedAgain(editing),
                 )
             }
@@ -525,7 +526,7 @@ private fun ComposerContent(
             PreviewSheet(
                 renders = renders,
                 onDismiss = { sheet = null },
-                marks = if (record == null) emptyList() else editMarks(renders, record, model.keptMedia),
+                marks = if (record == null) emptyList() else editMarks(renders, record, model.keptMedia, model.repostAccounts),
             )
         }
         Sheet.OptionsList -> OptionsListSheet(

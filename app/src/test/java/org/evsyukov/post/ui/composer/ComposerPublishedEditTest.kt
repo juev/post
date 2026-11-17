@@ -150,9 +150,26 @@ class ComposerPublishedEditTest {
         assertThat(exists(ComposerTags.mastodonLeave(old))).isTrue()
         h.click(ComposerTags.mastodonRepost(old))
         assertThat(h.model.targets).contains(old)
+        assertThat(h.model.repostAccounts).containsExactly(old)
         compose.onNodeWithText(string(R.string.edit_mastodon_warning)).assertExists()
         h.click(ComposerTags.mastodonLeave(old))
         assertThat(h.model.targets).doesNotContain(old)
+        assertThat(h.model.repostAccounts).isEmpty()
+    }
+
+    @Test
+    fun theRepostChoiceIsSavedWithTheEdit() {
+        val old = h.mastodon("old", capabilities = MastodonCapabilities(supportsEdit = false))
+        val id = record("one", listOf(mastodonItem(old, PublishedPart(id = "o1", text = "one"))))
+        show(editHistoryId = id)
+
+        h.click(ComposerTags.mastodonRepost(old))
+        h.click(ComposerTags.SEND)
+        h.waitUntil { queue().isNotEmpty() }
+
+        // N31: the executor deletes the published copy only because the choice travelled with the post.
+        assertThat(queue().single().targets).containsExactly(old)
+        assertThat(queue().single().options.repostAccounts).containsExactly(old)
     }
 
     @Test
@@ -166,7 +183,7 @@ class ComposerPublishedEditTest {
         h.click(ComposerTags.mastodonRepost(old))
         settle { h.model.renders?.second?.isNotEmpty() == true }
 
-        val marks = editMarks(h.model.renders!!.second, h.model.editing!!, h.model.keptMedia).single()!!
+        val marks = editMarks(h.model.renders!!.second, h.model.editing!!, h.model.keptMedia, h.model.repostAccounts).single()!!
 
         // N31: the old thread is deleted and every part of the new one is added.
         assertThat(marks.parts).containsExactly(EditMark.ADDED, EditMark.ADDED).inOrder()

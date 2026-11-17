@@ -331,7 +331,7 @@ class MastodonEditDeleteTest {
         withoutEdit(alice)
         val record = published(thread("one", "two"), listOf(alice))
 
-        val editId = edit(record, thread("one, new", "two, new"), listOf(alice))
+        val editId = edit(record, thread("one, new", "two, new"), listOf(alice), record.options.copy(repostAccounts = setOf(alice)))
         f.run()
 
         // N31: the old thread goes first, last part first, as Mastodon's own delete and redraft does; the new
@@ -357,7 +357,11 @@ class MastodonEditDeleteTest {
             FakeServers.json("""{"id":"m1","type":"image","url":"https://${server.host}/media/m1"}""")
         }
 
-        edit(record, "A photo, new text", listOf(alice), record.options.copy(keptMedia = listOf(KeptMedia(0, 0, "new alt", ordinal = 0))))
+        val options = record.options.copy(
+            keptMedia = listOf(KeptMedia(0, 0, "new alt", ordinal = 0)),
+            repostAccounts = setOf(alice),
+        )
+        edit(record, "A photo, new text", listOf(alice), options)
         f.run()
 
         // N31: a status takes a file only while it belongs to none, so the delete released m1 for the new status.
@@ -383,7 +387,7 @@ class MastodonEditDeleteTest {
             }
         }
 
-        edit(record, "A photo, new text", listOf(alice))
+        edit(record, "A photo, new text", listOf(alice), record.options.copy(repostAccounts = setOf(alice)))
         f.run()
 
         assertThat(server.statuses.map { it.text }).containsExactly("A photo", "A photo, new text").inOrder()
@@ -400,7 +404,7 @@ class MastodonEditDeleteTest {
             if (attempt == 2) FakeMastodon.error(422, "Validation failed: Text is too long") else null
         }
 
-        val editId = edit(record, "A photo, new text", listOf(alice))
+        val editId = edit(record, "A photo, new text", listOf(alice), record.options.copy(repostAccounts = setOf(alice)))
         f.run()
 
         assertThat(f.post(editId)!!.state).isEqualTo(PostState.FAILED)
@@ -422,6 +426,28 @@ class MastodonEditDeleteTest {
         assertThat(f.post(editId)!!.deliveries.single().error).isEqualTo(MastodonExecutor.EDIT_UNSUPPORTED)
         // N31: the answer refines what sign-in read from the version; the next edit offers to post again.
         assertThat(canEdit(alice)).isFalse()
+    }
+
+    @Test
+    fun anEditQueuedBeforeTheServerAnsweredCannotEditIsNotTurnedIntoARepostByItsRetry() {
+        val alice = f.mastodon()
+        withEdit(alice)
+        val record = published(thread("one", "two"), listOf(alice))
+        editAnswer = { FakeMastodon.error(405, "Method Not Allowed") }
+
+        // The edit was queued for an in-place change, before the account knew the server cannot edit.
+        val editId = edit(record, "one, new", listOf(alice))
+        f.run()
+        assertThat(f.post(editId)!!.deliveries.single().error).isEqualTo(MastodonExecutor.EDIT_UNSUPPORTED)
+        assertThat(calls).containsExactly("PUT s1")
+
+        // The retry keeps the user's choice: the edit is tried again and nothing is deleted.
+        assertThat(blocking { f.posts.retryDelivery(f.post(editId)!!.deliveries.single().id) }).isTrue()
+        f.run()
+
+        assertThat(calls).containsExactly("PUT s1", "PUT s1").inOrder()
+        assertThat(f.post(editId)!!.deliveries.single().error).isEqualTo(MastodonExecutor.EDIT_UNSUPPORTED)
+        assertThat(record(record.id)!!.items.single().parts.map { it.id }).containsExactly("s1", "s2").inOrder()
     }
 
     @Test

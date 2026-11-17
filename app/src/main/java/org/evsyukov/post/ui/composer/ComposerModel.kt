@@ -89,6 +89,10 @@ class ComposerModel(
         private set
     var targets by mutableStateOf<List<Long>>(emptyList())
         private set
+
+    /** The copies the user chose to delete and post again rather than edit in place (N31). */
+    var repostAccounts by mutableStateOf<Set<Long>>(emptySet())
+        private set
     var accountOptions by mutableStateOf<Map<Long, AccountPostOptions>>(emptyMap())
         private set
     var poll by mutableStateOf<PollDraft?>(null)
@@ -289,6 +293,7 @@ class ComposerModel(
             spoilerShown = post.options.spoilerText.isNotEmpty()
             language = post.options.language ?: defaultLanguage(accounts.filter { it.id in post.targets })
             targets = post.targets
+            repostAccounts = post.options.repostAccounts
             accountOptions = post.options.accounts
             poll = post.options.poll
             attachments = post.attachments
@@ -313,6 +318,7 @@ class ComposerModel(
         spoilerShown = spoilerShown,
         language = language,
         targets = targets,
+        repostAccounts = repostAccounts,
         accountOptions = accountOptions,
         poll = poll,
         attachments = attachments.map(SnapshotFile::of),
@@ -331,6 +337,7 @@ class ComposerModel(
         spoilerShown = snapshot.spoilerShown
         language = snapshot.language
         targets = snapshot.targets
+        repostAccounts = snapshot.repostAccounts
         accountOptions = snapshot.accountOptions
         poll = snapshot.poll
         chosenFixes = snapshot.chosenFixes
@@ -395,6 +402,7 @@ class ComposerModel(
         editing = null
         editUnavailable = false
         keptMedia = emptyList()
+        repostAccounts = emptySet()
         val existing = accounts.associateBy { it.id }
         val defaults = settings.defaultTargets.filter { it in existing }
         val selected = defaults.mapNotNull { existing[it] }
@@ -445,6 +453,7 @@ class ComposerModel(
         poll = poll,
         chosenFixes = chosenFixes,
         keptMedia = if (editing != null) keptMedia else emptyList(),
+        repostAccounts = if (editing != null) repostAccounts else emptySet(),
     )
 
     private fun draftInput() = DraftInput(
@@ -508,6 +517,7 @@ class ComposerModel(
     private fun detach() {
         draftId = null
         editingQueued = false
+        repostAccounts = emptySet()
         attachments = attachments.filter { it.id < 0 }
         saved = null
     }
@@ -626,6 +636,7 @@ class ComposerModel(
         if (fix == FixKind.REMOVE_ACCOUNT) {
             val ids = accounts.value.orEmpty().filter { it.network == network }.map { it.id }.toSet()
             targets = targets.filter { it !in ids }
+            repostAccounts = repostAccounts - ids
             return
         }
         chosenFixes = chosenFixes + (network to (chosenFixes[network].orEmpty() + (kind to fix)))
@@ -652,6 +663,17 @@ class ComposerModel(
         // R40: an edit goes only to the accounts that hold the post.
         if (editing != null && id !in holders) return
         targets = if (id in targets) targets - id else targets + id
+    }
+
+    /**
+     * N31, N32: "Delete and post again" for a copy that cannot be edited in place. The choice is kept with
+     * the post, so the executor deletes the published copy only when the user asked for it.
+     */
+    fun toggleRepost(id: Long) {
+        if (editing != null && id !in holders) return
+        val repost = id !in targets
+        targets = if (repost) targets + id else targets - id
+        repostAccounts = if (repost) repostAccounts + id else repostAccounts - id
     }
 
     /** The options [account] gets for this post: its own entry, or its defaults (R17). */
