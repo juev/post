@@ -25,12 +25,16 @@ class MlKitTranslationEngine : TranslationEngine {
             ?: return EngineResult.Failed(TranslationFailure.UNSUPPORTED_LANGUAGE)
         val target = TranslateLanguage.fromLanguageTag(targetLanguage)
             ?: return EngineResult.Failed(TranslationFailure.UNSUPPORTED_LANGUAGE)
-        val client = Translation.getClient(
-            TranslatorOptions.Builder().setSourceLanguage(source).setTargetLanguage(target).build(),
-        )
         return try {
-            client.downloadModelIfNeeded(DownloadConditions.Builder().build()).await()
-            EngineResult.Translated(client.translate(text).await())
+            val client = Translation.getClient(
+                TranslatorOptions.Builder().setSourceLanguage(source).setTargetLanguage(target).build(),
+            )
+            try {
+                client.downloadModelIfNeeded(DownloadConditions.Builder().build()).await()
+                EngineResult.Translated(client.translate(text).await())
+            } finally {
+                client.close()
+            }
         } catch (e: CancellationException) {
             throw e
         } catch (e: MlKitException) {
@@ -38,8 +42,6 @@ class MlKitTranslationEngine : TranslationEngine {
             EngineResult.Failed(TranslationFailure.MODEL_UNAVAILABLE)
         } catch (e: Exception) {
             EngineResult.Failed(TranslationFailure.ENGINE)
-        } finally {
-            client.close()
         }
     }
 }
