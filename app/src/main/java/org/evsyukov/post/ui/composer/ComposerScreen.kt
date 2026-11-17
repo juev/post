@@ -135,6 +135,7 @@ object ComposerTags {
     fun previewDeleted(profile: Int) = "composer-preview-deleted-$profile"
     fun blueskyLeave(id: Long) = "composer-bluesky-leave-$id"
     fun blueskyRepost(id: Long) = "composer-bluesky-repost-$id"
+    fun blueskyFilesLost(id: Long) = "composer-bluesky-files-lost-$id"
     fun keptMedia(part: Int, index: Int) = "composer-kept-media-$part-$index"
     fun keptMediaToggle(part: Int, index: Int) = "composer-kept-media-toggle-$part-$index"
     fun breakRemove(index: Int) = "composer-break-remove-$index"
@@ -367,6 +368,7 @@ private fun ComposerContent(
                     accounts = accounts.orEmpty().filter { it.id in holders && it.network == Network.BLUESKY },
                     targets = model.targets,
                     onToggle = model::toggleTarget,
+                    filesLost = filesNotPostedAgain(editing),
                 )
             }
             if (model.editUnavailable) {

@@ -136,6 +136,26 @@ class ComposerPublishedEditTest {
     }
 
     @Test
+    fun aBlueskyCopyWithFilesRecordedWithoutTheirBlobWarnsTheyAreNotPostedAgain() {
+        val sky2 = h.bluesky("sky2")
+        val blob = """{"${'$'}type":"blob","ref":{"${'$'}link":"bafk2"},"mimeType":"image/jpeg","size":10}"""
+        val id = record(
+            "photos",
+            listOf(
+                HistoryItem(sky, Network.BLUESKY, "https://pds.example", "sky.bsky.social", listOf(PublishedPart(uri = "at://did:plc:sky/app.bsky.feed.post/3k", media = listOf(PublishedMedia("bafk1", "old"))))),
+                HistoryItem(sky2, Network.BLUESKY, "https://pds.example", "sky2.bsky.social", listOf(PublishedPart(uri = "at://did:plc:sky2/app.bsky.feed.post/3m", media = listOf(PublishedMedia("bafk2", "new", blob = blob))))),
+            ),
+        )
+        show(editHistoryId = id)
+
+        // N32: a file recorded before history kept its blob reference cannot be embedded again.
+        assertThat(filesNotPostedAgain(h.model.editing!!)).containsExactly(sky)
+        assertThat(exists(ComposerTags.blueskyFilesLost(sky))).isFalse()
+        h.click(ComposerTags.blueskyRepost(sky))
+        compose.onNodeWithText(string(R.string.edit_bluesky_files_lost)).assertExists()
+    }
+
+    @Test
     fun saveQueuesAnEditOfTheRecordForTheChosenAccounts() {
         val id = published()
         show(editHistoryId = id)

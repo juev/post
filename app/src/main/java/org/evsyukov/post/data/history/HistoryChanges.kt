@@ -1,5 +1,6 @@
 package org.evsyukov.post.data.history
 
+import org.evsyukov.post.core.media.Network
 import org.evsyukov.post.data.db.PostKind
 import org.evsyukov.post.data.posts.DeliveryPlan
 import org.evsyukov.post.data.posts.DeliveryProgress
@@ -21,6 +22,8 @@ internal fun HistoryItem.after(kind: PostKind, plan: DeliveryPlan?, progress: De
         PostKind.NEW -> return this
         PostKind.DELETE -> parts.filter { it.left() }
         PostKind.EDIT -> {
+            // N32: a Bluesky repost deletes the old thread after the new one is up; until then the copy is the old one.
+            if (network == Network.BLUESKY && !progress.oldRemoved) return this
             val published = progress.parts.mapNotNull { part -> part.published?.let { part.index to it } }.toMap()
             val count = maxOf(parts.size, (published.keys.maxOrNull() ?: -1) + 1)
             (0 until count).mapNotNull { index ->

@@ -49,6 +49,7 @@
     <string name="edit_bluesky_leave">Оставить как есть</string>
     <string name="edit_bluesky_repost">Удалить и опубликовать заново</string>
     <string name="edit_bluesky_warning">Bluesky не умеет изменять посты. При повторной публикации пропадут лайки, репосты и ответы.</string>
+    <string name="edit_bluesky_files_lost">Картинки и видео этого поста опубликованы прежней версией Post и заново не публикуются.</string>
     <string name="edit_poll_warning">Изменение вариантов опроса обнулит голоса.</string>
     <string name="edit_visibility_locked">Видимость опубликованного поста изменить нельзя.</string>
     <string name="edit_kept_media">Опубликованные файлы</string>

@@ -118,10 +118,10 @@ data class PostOptions(
 }
 
 /**
- * An edit of a media file a published Mastodon post keeps (R40, N28, N30), by its place: the [index]-th file of
+ * An edit of a media file a published post keeps (R40, N28, N30, N32), by its place: the [index]-th file of
  * thread part [part]. A file without an entry is kept as published; [removed] leaves it out of the edit, and
- * [alt] is its alt text, sent as `media_attributes`. Media files themselves are not kept (R38), so a kept file
- * can only stay or go, not change.
+ * [alt] is its alt text, sent as Mastodon `media_attributes` or in the new Bluesky record. Media files themselves
+ * are not kept (R38), so a kept file can only stay or go, not change.
  */
 @Serializable
 data class KeptMedia(
@@ -281,9 +281,25 @@ data class MastodonStatusOptions(
     val poll: PollDraft? = null,
 )
 
-/** A media file uploaded to the server: its id there and the alt text it was sent with (R38). */
+/**
+ * A media file uploaded to the server: its id there (Mastodon media id, Bluesky blob CID) and the alt text it
+ * was sent with (R38). The file itself is not kept.
+ *
+ * A Bluesky file also keeps what a new record needs to embed the same blob when the post is deleted and posted
+ * again (N32): the blob reference as the record carried it, its aspect ratio and whether the video shows as a
+ * GIF. Records written before these fields have none; such a file cannot be posted again.
+ *
+ * @property blob the Bluesky blob reference as JSON: `$type`, `ref` (the CID), `mimeType` and `size`.
+ */
 @Serializable
-data class PublishedMedia(val id: String, val alt: String = "")
+data class PublishedMedia(
+    val id: String,
+    val alt: String = "",
+    val blob: String? = null,
+    val width: Int? = null,
+    val height: Int? = null,
+    val gif: Boolean = false,
+)
 
 /**
  * A published thread part (R38): the Mastodon status [id], or the Bluesky [uri] and [cid]; [url] opens it

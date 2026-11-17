@@ -31,7 +31,7 @@ data class HistoryItem(
     val mastodon: MastodonStatusOptions? = null,
 )
 
-/** A record of the Sent tab (R31, R38). Media files are not kept, only their server ids and alt text. */
+/** A record of the Sent tab (R31, R38). Media files are not kept, only their server ids or blob references and alt text. */
 data class HistoryRecord(
     val id: Long,
     val postId: Long?,

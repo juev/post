@@ -40,6 +40,17 @@ class HistoryChangesTest {
     }
 
     @Test
+    fun aRepostCutShortBeforeTheOldThreadWentKeepsTheOldThread() {
+        // N32: the new thread goes up first; while the old one is online the record names it, not a mix of both.
+        val old = bluesky("a", "b")
+        val progress = DeliveryProgress(
+            parts = listOf(PartProgress(0, key = "n", published = PublishedPart(uri = "at://did:plc:bob/app.bsky.feed.post/n", cid = "cn"))),
+        )
+
+        assertThat(old.after(PostKind.EDIT, plan("new one", "new two"), progress, succeeded = false)).isEqualTo(old)
+    }
+
+    @Test
     fun aRepostThatDidNotStartLeavesTheCopyAsItWas() {
         val old = bluesky("a", "b")
 
