@@ -20,6 +20,7 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.rules.ActivityScenarioRule
 import kotlinx.coroutines.runBlocking
 import org.evsyukov.post.AppContainer
+import org.evsyukov.post.PrepareTrigger
 import org.evsyukov.post.PublishTrigger
 import org.evsyukov.post.core.mastodon.MastodonCapabilities
 import org.evsyukov.post.core.media.Network
@@ -29,16 +30,27 @@ import org.evsyukov.post.data.accounts.AccountOptions
 import org.evsyukov.post.data.accounts.NewAccount
 import org.evsyukov.post.data.secrets.BlueskySecret
 import org.evsyukov.post.data.secrets.MastodonSecret
+import org.evsyukov.post.media.probe.MediaDecodeCheck
 import org.evsyukov.post.ui.LocalAppContainer
 import org.evsyukov.post.ui.theme.PostTheme
+import java.io.File
 import java.time.Instant
 import java.util.concurrent.atomic.AtomicInteger
 
-/** A composer on a fresh app container with a publish trigger that counts its calls. */
+/** A composer on a fresh app container with publish and prepare triggers that count their calls. */
 class ComposerHarness(private val compose: AndroidComposeTestRule<ActivityScenarioRule<ComponentActivity>, ComponentActivity>) {
     val context: Context = ApplicationProvider.getApplicationContext()
     val triggers = AtomicInteger()
-    val container = AppContainer(context, publishTrigger = PublishTrigger { triggers.incrementAndGet() }) { FakeCipher() }
+    val prepares = AtomicInteger()
+
+    /** Why the device cannot decode a file; null, as on a working device, unless a test says otherwise. */
+    var decodeProblem: (File, String) -> String? = { _, _ -> null }
+    val container = AppContainer(
+        context,
+        publishTrigger = PublishTrigger { triggers.incrementAndGet() },
+        prepareTrigger = PrepareTrigger { prepares.incrementAndGet() },
+        mediaDecodeCheck = MediaDecodeCheck { file, mime -> decodeProblem(file, mime) },
+    ) { FakeCipher() }
     val exits = AtomicInteger()
     val postsOpened = AtomicInteger()
     val settingsOpened = AtomicInteger()

@@ -21,6 +21,7 @@
     <string name="share_problem_poll">Опрос нарушает ограничение сервера</string>
     <string name="share_problem_empty">Публиковать нечего</string>
     <string name="share_problem_no_target">Выберите хотя бы один аккаунт</string>
+    <string name="share_problem_unreadable">Это устройство не может прочитать файл в посте</string>
     <string name="share_resolve_in_composer">Исправить можно в редакторе.</string>
     <string name="share_shortcut_long">Опубликовать в %1$s</string>
 </resources>

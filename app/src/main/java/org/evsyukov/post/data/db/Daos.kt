@@ -257,6 +257,10 @@ interface AttachmentDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun putVariant(variant: VariantEntity): Long
+
+    /** A queued post was edited: its variants belong to the old text and go (media.md A4). */
+    @Query("DELETE FROM variants WHERE attachmentId IN (SELECT id FROM attachments WHERE postId = :postId)")
+    suspend fun deleteVariantsOfPost(postId: Long): Int
 }
 
 @Dao
@@ -283,6 +287,23 @@ interface DeliveryDao {
         """,
     )
     suspend fun start(id: Long, at: Long, planJson: String): Int
+
+    /**
+     * Stores the plan frozen when the post was queued (media.md A4), unless the delivery started meanwhile or
+     * already has one, or the post changed after [postUpdatedAt]: then the plan is frozen at the first attempt.
+     */
+    @Query(
+        """
+        UPDATE deliveries SET planJson = :planJson
+        WHERE id = :id AND state = 'WAITING' AND planJson IS NULL
+            AND (SELECT updatedAt FROM posts WHERE posts.id = deliveries.postId) = :postUpdatedAt
+        """,
+    )
+    suspend fun freezePlan(id: Long, postUpdatedAt: Long, planJson: String): Int
+
+    /** A queued post was edited: its deliveries get their plans frozen again from the new content (A4). */
+    @Query("UPDATE deliveries SET planJson = NULL WHERE postId = :postId")
+    suspend fun clearPlans(postId: Long): Int
 
     @Query("UPDATE deliveries SET progressJson = :progressJson WHERE id = :id")
     suspend fun updateProgress(id: Long, progressJson: String): Int

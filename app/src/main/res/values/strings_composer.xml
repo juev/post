@@ -41,6 +41,7 @@
     <string name="composer_many_parts">A long thread: %1$d.</string>
     <string name="composer_blocker_no_target">Choose at least one account.</string>
     <string name="composer_blocker_empty">Write something to send.</string>
+    <string name="composer_blocker_unreadable">This device cannot read a file in the post. Remove it or replace it.</string>
     <string name="composer_formatting_removed">None of the selected accounts keeps formatting: it will be removed on publishing.</string>
     <string name="composer_part_number">Part %1$d of %2$d</string>
     <string name="composer_preview_cw">CW: %1$s</string>

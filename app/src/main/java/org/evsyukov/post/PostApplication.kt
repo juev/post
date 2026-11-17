@@ -47,6 +47,8 @@ class PostApplication : Application(), AppContainerHost, LimitsRefresherHost, Pu
         LimitsRefreshWorker.schedule(WorkManager.getInstance(this))
         // Posts due while the process was gone, and deliveries it left sending, go out now (R27, R30).
         container.publishTrigger.publishNow()
+        // A4: the media of posts queued before the process died is prepared before its time comes.
+        container.prepareTrigger.prepareNow()
         // M1, M4: the alarm follows the queue, and a periodic check restores it.
         container.startQueueHooks()
         ScheduleCheckWorker.schedule(WorkManager.getInstance(this))

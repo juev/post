@@ -7,6 +7,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import org.evsyukov.post.core.media.Conversion
+import org.evsyukov.post.core.media.makesVariant
 import org.evsyukov.post.data.db.AttachmentEntity
 import org.evsyukov.post.data.db.PostDatabase
 import org.evsyukov.post.data.db.VariantEntity
@@ -83,7 +84,7 @@ class MediaPreparer(
                 require(request.attachmentId in attachments) { "attachment ${request.attachmentId} is not of post $postId" }
             }
             val jobs = requests
-                .filter { it.conversion.makesVariant() }
+                .filter { it.conversion.makesVariant }
                 .map { it.attachmentId to it.conversion }
                 .distinct()
             val made = HashMap<Pair<Long, Conversion>, VariantEntity>()
@@ -169,8 +170,6 @@ class MediaPreparer(
         private const val GIF = "image/gif"
 
         private fun variantDir(postId: Long) = "variants/$postId"
-
-        private fun Conversion.makesVariant() = this is Conversion.ConvertImage || this is Conversion.TranscodeVideo
 
         /**
          * The key a variant of [conversion] is stored under: its kind and a hash of all its targets, so

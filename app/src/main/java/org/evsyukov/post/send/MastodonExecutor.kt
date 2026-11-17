@@ -92,7 +92,7 @@ class MastodonExecutor(
             // uploadMedia refuses a file it cannot read or a focus out of range: retrying cannot fix it.
             DeliveryOutcome.Failed(e.message ?: "the file cannot be uploaded")
         } catch (e: FileNotFoundException) {
-            DeliveryOutcome.Failed("an attachment file is missing")
+            DeliveryOutcome.Failed(Publisher.MISSING_FILE)
         } catch (e: ConversionException) {
             DeliveryOutcome.Failed(conversionMessage(e))
         } catch (e: MediaFailed) {

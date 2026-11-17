@@ -120,6 +120,13 @@ interface PostsRepository {
      */
     suspend fun startDelivery(id: Long, plan: DeliveryPlan): Delivery?
 
+    /**
+     * Stores the plan of a waiting delivery frozen when the post was queued (R30, media.md A4). Returns false,
+     * and changes nothing, when the delivery started meanwhile or already has a plan, or when the post
+     * changed after [postUpdatedAt].
+     */
+    suspend fun freezePlan(id: Long, postUpdatedAt: Instant, plan: DeliveryPlan): Boolean
+
     /** Stores what has been published so far (R30). */
     suspend fun saveProgress(id: Long, progress: DeliveryProgress)
 
@@ -253,7 +260,12 @@ class RoomPostsRepository(
                 historyId = draft.historyId,
                 updatedAt = now,
             )
-            if (post.state != PostState.DRAFT) syncDeliveries(post.id, draft.targets, now)
+            if (post.state != PostState.DRAFT) {
+                // A4: the variants and plans of a queued post were made for its old text; the edit drops them and
+                // the preparation builds them again.
+                clearPreparedMedia(post.id, removedFiles)
+                syncDeliveries(post.id, draft.targets, now)
+            }
             post.id
         }
         removedFiles += saveAttachments(postId, draft.attachments, now)
@@ -379,6 +391,9 @@ class RoomPostsRepository(
             delivery.toDelivery()
         }
     }
+
+    override suspend fun freezePlan(id: Long, postUpdatedAt: Instant, plan: DeliveryPlan): Boolean =
+        deliveries.freezePlan(id, postUpdatedAt.toEpochMilli(), DbJson.encodeToString(DeliveryPlan.serializer(), plan)) > 0
 
     override suspend fun saveProgress(id: Long, progress: DeliveryProgress) {
         if (deliveries.updateProgress(id, encodeProgress(progress)) == 0) throw DeliveryNotFound(id)
@@ -545,6 +560,16 @@ class RoomPostsRepository(
             )
         }
         db.refreshPostState(postId, now)
+    }
+
+    /**
+     * Drops the variants of a queued post and forgets the plans of its deliveries (media.md A4); the files of
+     * the variants go to [removedFiles] and are deleted once the transaction commits.
+     */
+    private suspend fun clearPreparedMedia(postId: Long, removedFiles: MutableList<String>) {
+        removedFiles += attachments.variantPathsOfPost(postId)
+        attachments.deleteVariantsOfPost(postId)
+        deliveries.clearPlans(postId)
     }
 
     /** Saves [input] in its order and returns the files of the attachments that were left out. */

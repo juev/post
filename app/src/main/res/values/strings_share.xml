@@ -26,6 +26,7 @@
     <string name="share_problem_poll">The poll breaks a server limit</string>
     <string name="share_problem_empty">There is nothing to post</string>
     <string name="share_problem_no_target">Choose at least one account</string>
+    <string name="share_problem_unreadable">This device cannot read a file in the post</string>
     <string name="share_resolve_in_composer">Open in composer to fix it.</string>
     <!-- The long label of the Direct Share shortcut (R23). %1$s names the default targets. -->
     <string name="share_shortcut_long">Post to %1$s</string>

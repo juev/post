@@ -394,6 +394,7 @@ private fun problemText(blocker: Blocker, accounts: List<Account>): String? = wh
     is Blocker.Poll -> stringResource(R.string.share_problem_poll)
     is Blocker.AltMissing -> stringResource(R.string.share_problem_alt_missing)
     is Blocker.AltTooLong -> stringResource(R.string.share_problem_alt_too_long)
+    is Blocker.MediaUnreadable -> stringResource(R.string.share_problem_unreadable)
 }
 
 /**

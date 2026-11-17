@@ -9,7 +9,7 @@ Decisions of 2026-11-15: the user attaches files once. The app adapts each file 
 - A1. An attachment is one original file copied into app storage when it is added (R9), with its alt text and, for images, a focus point. A copy or a variant that no saved post and no open composer or Share sheet refers to is deleted at app start and once a day once it is older than 24 hours: such files are left when the process dies while a draft has unsaved attachments. A composer or Share sheet that comes back after process death drops an unsaved attachment whose copy is gone and says so.
 - A2. For each target account the app builds a plan: which attachments go to which thread part, and which variant of each file is uploaded. A variant is the original or a converted copy.
 - A3. The plan is rebuilt whenever attachments, targets or account limits change. The composer shows its result per network: nothing when every file goes as it is, a note when files are converted, a conflict when a choice is needed.
-- A4. Variants are prepared when the post is saved for sending or queued, not at send time, so a failed conversion shows up while the user is still in the composer. They are deleted together with the original after all deliveries succeed.
+- A4. When the post is queued, the app first probes every file the plans convert: an image is decoded at a token size with `ImageDecoder`, and a video's video and audio tracks are read with `MediaExtractor`, with a decoder looked up for each in `MediaCodecList`. A file this device cannot decode blocks queuing with an error in the composer or the Share sheet. The plan of each delivery is frozen at that moment, and the full conversion starts at once in a foreground worker with progress and Cancel (A7); the composer closes as soon as the post is queued. A conversion that fails shows up as a failed delivery and a notification right after, not at send time. An edit of a queued post drops its prepared variants and its plans, and the preparation builds them again from the new text. Variants are deleted together with the original after all deliveries succeed.
 
 ## Adaptation without a choice
 
@@ -40,5 +40,6 @@ Decisions of 2026-11-15: the user attaches files once. The app adapts each file 
 
 - Six images to one Mastodon and one Bluesky account: Bluesky gets a gallery of six; Mastodon asks; with "move to a reply" it gets four images and a reply with two.
 - A 20 MB HEIC photo: Mastodon gets a JPEG under 16 MB, Bluesky a JPEG under 2 MB and 4000 px; neither keeps GPS data.
+- A HEIC photo this device cannot decode: Send in the composer, or in the Share sheet, stops with the unreadable-file error and nothing is queued (A4).
 - A 300 MB MOV to Mastodon: transcoded to MP4 under 99 MB; progress shows in a notification; cancelling keeps the draft.
 - An MP3 to Mastodon and Bluesky: Mastodon gets audio; Bluesky shows a conflict until the user picks "send without the file" or removes the account.

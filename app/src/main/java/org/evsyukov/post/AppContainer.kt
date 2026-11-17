@@ -38,9 +38,12 @@ import org.evsyukov.post.oauth.MastodonSignInFlow
 import org.evsyukov.post.oauth.PendingSignInStore
 import org.evsyukov.post.media.convert.DeviceMediaConverter
 import org.evsyukov.post.media.prepare.MediaPreparer
+import org.evsyukov.post.media.probe.DeviceMediaDecodeCheck
+import org.evsyukov.post.media.probe.MediaDecodeCheck
 import org.evsyukov.post.send.AndroidSendNotifier
 import org.evsyukov.post.send.MastodonExecutor
 import org.evsyukov.post.send.PlanFreezer
+import org.evsyukov.post.send.PrepareScheduler
 import org.evsyukov.post.send.PublishScheduler
 import org.evsyukov.post.send.PublishedActions
 import org.evsyukov.post.send.Publisher
@@ -71,6 +74,10 @@ class AppContainer(
     context: Context,
     /** Starts publishing of due posts; null uses WorkManager ([PublishScheduler]), tests record the calls. */
     publishTrigger: PublishTrigger? = null,
+    /** Starts preparing the media of queued posts; null uses WorkManager ([PrepareScheduler]). */
+    prepareTrigger: PrepareTrigger? = null,
+    /** Whether this device can decode a file the sender converts (media.md A4); tests answer for themselves. */
+    val mediaDecodeCheck: MediaDecodeCheck = DeviceMediaDecodeCheck(),
     // Tests on the JVM pass a stand-in: Robolectric has no Android Keystore. It stays the last parameter,
     // so `AppContainer(context) { FakeCipher() }` keeps meaning the cipher.
     private val cipher: () -> TokenCipher = { KeystoreTokenCipher() },
@@ -153,6 +160,19 @@ class AppContainer(
 
     /** Starts publishing of due posts (R21); the composer calls it after saving the post (R27). */
     val publishTrigger: PublishTrigger = publishTrigger ?: PublishTrigger { publishScheduler.publishNow() }
+
+    /** Prepares the media of queued posts through WorkManager: no network needed, expedited (media.md A4). */
+    val prepareScheduler: PrepareScheduler by lazy { PrepareScheduler(WorkManager.getInstance(this.context), scope) }
+
+    /** Starts preparing the media of a post just queued (A4); the composer and the Share sheet call it. */
+    val prepareTrigger: PrepareTrigger = prepareTrigger ?: PrepareTrigger {
+        try {
+            prepareScheduler.prepareNow()
+        } catch (e: Exception) {
+            // No WorkManager, as in a test process: nothing to start, and the sender prepares at send time.
+            android.util.Log.w("PostSender", "cannot start preparing media", e)
+        }
+    }
 
     /** Variants of attachments for upload (media.md A2, A4). */
     val mediaPreparer: MediaPreparer by lazy { MediaPreparer(database, this.context.filesDir, DeviceMediaConverter(this.context)) }
@@ -253,4 +273,12 @@ class AppContainer(
  */
 fun interface PublishTrigger {
     fun publishNow()
+}
+
+/**
+ * Starts preparing the media of queued posts (media.md A4): freezes their plans and converts the files
+ * right after the post is queued, so a failed conversion shows up then, not at send time.
+ */
+fun interface PrepareTrigger {
+    fun prepareNow()
 }

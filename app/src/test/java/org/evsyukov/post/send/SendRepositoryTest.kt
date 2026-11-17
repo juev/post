@@ -5,6 +5,7 @@ import com.google.common.truth.Truth.assertThat
 import org.evsyukov.post.data.db.DeliveryState
 import org.evsyukov.post.data.db.PostState
 import org.evsyukov.post.data.posts.DeliveryPlan
+import org.evsyukov.post.data.posts.DraftInput
 import org.evsyukov.post.data.posts.DeliveryProgress
 import org.evsyukov.post.data.posts.PartProgress
 import org.evsyukov.post.data.posts.PlannedPart
@@ -13,6 +14,7 @@ import org.evsyukov.post.data.posts.PublishedPart
 import org.junit.After
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.io.File
 
 /** The repository calls the sender adds (R5, R29, media.md A7). */
 @RunWith(AndroidJUnit4::class)
@@ -21,6 +23,30 @@ class SendRepositoryTest {
 
     @After
     fun tearDown() = f.close()
+
+    /** A4: an edit of a queued post drops the variants and plans prepared for its old text. */
+    @Test
+    fun editingAQueuedPostDropsItsPreparedVariantsAndPlans() {
+        val alice = f.mastodon()
+        val id = f.queue("Photo", listOf(alice), attachments = listOf(f.image()))
+        blocking { f.publisher.prepareQueued() }
+
+        val prepared = f.post(id)!!
+        assertThat(prepared.deliveries.single().plan).isNotNull()
+        val variants = blocking { f.db.attachmentDao().variantPathsOfPost(id) }
+        assertThat(variants).hasSize(1)
+        assertThat(File(f.filesDir, variants.single()).exists()).isTrue()
+
+        blocking {
+            f.posts.saveDraft(DraftInput(id = id, text = "Photo, edited", targets = listOf(alice), attachments = prepared.attachments))
+        }
+
+        val edited = f.post(id)!!
+        assertThat(edited.state).isEqualTo(PostState.QUEUED)
+        assertThat(edited.deliveries.single().plan).isNull()
+        assertThat(blocking { f.db.attachmentDao().variantPathsOfPost(id) }).isEmpty()
+        assertThat(File(f.filesDir, variants.single()).exists()).isFalse()
+    }
 
     @Test
     fun aPostWithAPublishedCopyCannotGoBackToTheDrafts() {

@@ -34,6 +34,8 @@ data class SendProgress(
     val transcodingPostId: Long? = null,
     /** 0..100 while converting, null otherwise. */
     val percent: Int? = null,
+    /** The media of queued posts is being prepared and nothing is uploaded yet (A4). */
+    val preparing: Boolean = false,
 )
 
 /** The foreground of a run that uploads large files or converts video (R32, scheduling.md M2, M5). */
@@ -103,6 +105,8 @@ class AndroidSendNotifier(context: Context) : SendNotifier {
             builder.setContentText(context.getString(R.string.send_progress_preparing, percent))
                 .setProgress(100, percent, false)
                 .addAction(0, context.getString(R.string.send_cancel), cancelIntent(postId))
+        } else if (progress.preparing) {
+            builder.setContentText(context.getString(R.string.send_progress_preparing_media)).setProgress(0, 0, true)
         } else {
             builder.setContentText(context.getString(R.string.send_progress_uploading)).setProgress(0, 0, true)
         }

@@ -11,6 +11,7 @@
 
     <string name="send_progress_title">Отправка постов</string>
     <string name="send_progress_preparing">Конвертация видео… %1$d%%</string>
+    <string name="send_progress_preparing_media">Подготовка медиа…</string>
     <string name="send_progress_uploading">Загрузка медиа</string>
     <string name="send_cancel">Отмена</string>
 
