@@ -49,6 +49,16 @@ class FakePds(private val servers: FakeServers, val host: String = "pds.example"
     /** Whether `applyWrites` answers with `results`. */
     var withResults = true
 
+    /**
+     * When on, blobs live as on the reference PDS (atproto `8ed6d3d48b`, `packages/pds/src/actor-store/blob/transactor.ts`):
+     * a record embedding a blob the PDS does not hold is refused with 400 `BlobNotFound`, and a blob goes once
+     * a delete leaves no record referring to it.
+     */
+    var keepsBlobs = false
+
+    /** The CIDs of the blobs the PDS holds: uploads, and any a test adds (a video service blob). */
+    val storedBlobs: MutableSet<String> = ConcurrentHashMap.newKeySet()
+
     init {
         servers.route("POST", "$host/xrpc/com.atproto.repo.applyWrites") { request ->
             if (!authorized(request)) return@route expired()
@@ -64,7 +74,11 @@ class FakePds(private val servers: FakeServers, val host: String = "pds.example"
                 if (keys.any { !records.containsKey(it) }) {
                     return@route FakeServers.json("""{"error":"InvalidRequest","message":"Could not find record"}""", 400)
                 }
-                keys.forEach { records.remove(it) }
+                val dropped = keys.mapNotNull { records.remove(it) }.flatMap { blobCids(it.value) }
+                if (keepsBlobs) {
+                    val referenced = records.values.flatMap { blobCids(it.value) }.toSet()
+                    storedBlobs -= dropped.filter { it !in referenced }.toSet()
+                }
                 deleteCommits += keys
                 return@route FakeServers.json("""{"commit":{"cid":"bafycommit","rev":"rev"},"results":[]}""")
             }
@@ -79,6 +93,11 @@ class FakePds(private val servers: FakeServers, val host: String = "pds.example"
             }
             if (creates.any { records.containsKey(key(it.collection, it.rkey)) }) {
                 return@route FakeServers.json("""{"error":"InternalServerError","message":"Internal Server Error"}""", 500)
+            }
+            if (keepsBlobs) {
+                creates.flatMap { blobCids(it.value) }.firstOrNull { it !in storedBlobs }?.let {
+                    return@route FakeServers.json("""{"error":"BlobNotFound","message":"Could not find blob: $it"}""", 400)
+                }
             }
             creates.forEach { records[key(it.collection, it.rkey)] = it }
             commits += creates
@@ -101,7 +120,9 @@ class FakePds(private val servers: FakeServers, val host: String = "pds.example"
             blobs += request
             val mime = request.headers["Content-Type"]!!.substringBefore(';')
             val size = request.headers["Content-Length"]!!.toLong()
-            FakeServers.json("""{"blob":${blobJson("bafkblob${blobs.size}", mime, size)}}""")
+            val cid = "bafkblob${blobs.size}"
+            storedBlobs += cid
+            FakeServers.json("""{"blob":${blobJson(cid, mime, size)}}""")
         }
         servers.route("POST", "$host/xrpc/com.atproto.server.refreshSession") { request ->
             refreshAnswer?.let { return@route it }
@@ -133,6 +154,17 @@ class FakePds(private val servers: FakeServers, val host: String = "pds.example"
     private fun expired() = FakeServers.json("""{"error":"ExpiredToken","message":"Token has expired"}""", 400)
 
     private fun key(collection: String, rkey: String) = "$collection/$rkey"
+
+    /** The CIDs of every blob [value] embeds, at any depth. */
+    private fun blobCids(value: kotlinx.serialization.json.JsonElement): List<String> = when (value) {
+        is JsonObject -> if (value["\$type"]?.jsonPrimitive?.content == "blob") {
+            listOfNotNull(value["ref"]?.jsonObject?.get("\$link")?.jsonPrimitive?.content)
+        } else {
+            value.values.flatMap { blobCids(it) }
+        }
+        is JsonArray -> value.flatMap { blobCids(it) }
+        else -> emptyList()
+    }
 
     companion object {
         fun blobJson(cid: String, mime: String, size: Long) =

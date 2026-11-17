@@ -68,6 +68,7 @@ import org.evsyukov.post.send.DeliveryOutcome
 import org.evsyukov.post.send.MastodonExecutor
 import org.evsyukov.post.send.Publisher
 import org.evsyukov.post.send.UploadFile
+import org.evsyukov.post.send.keptMediaOf
 import java.io.File
 import java.io.FileNotFoundException
 import java.io.IOException
@@ -88,6 +89,10 @@ import java.time.Instant
  * (N17). Images go through `uploadBlob` (N19), video and GIF through the video service (N20, N21); blobs
  * older than [BLOB_LIFETIME] are uploaded again (N26). A part without media gets a link card for its first
  * link when the options keep it (R14); a card that cannot be built is left out.
+ *
+ * "Delete and post again" (N32) posts the new thread first, embedding the files the edit keeps by the blob
+ * references history holds, and deletes the old thread once the new one is up. A new thread the server refuses
+ * is deleted again, so the old one stays the only copy.
  *
  * Errors map to outcomes (R5, R29): an expired token is refreshed by [AccountSessions]; rejected
  * credentials → [DeliveryOutcome.NeedsSignIn]; 429 → retry at `RateLimit-Reset`; 5xx, 408 and network
@@ -111,21 +116,40 @@ class BlueskyExecutor(
 
     override suspend fun publish(job: DeliveryJob): DeliveryOutcome {
         val run = Run(job)
-        return try {
-            sessions.bluesky(job.account.id) { auth ->
-                when (job.post.kind) {
-                    PostKind.NEW -> run.publishAll(auth)
-                    // N32: Bluesky has no edit here; an edit target is "delete and post again".
-                    PostKind.EDIT -> {
-                        run.removeOld(auth, job.previous ?: return@bluesky DeliveryOutcome.Failed(Publisher.NO_RECORD))
-                        run.publishAll(auth)
-                    }
-                    PostKind.DELETE -> {
-                        run.removeOld(auth, job.previous ?: return@bluesky DeliveryOutcome.Failed(Publisher.NO_RECORD))
-                        DeliveryOutcome.Sent(run.current)
-                    }
+        val outcome = guarded(job) { auth ->
+            when (job.post.kind) {
+                PostKind.NEW -> run.publishAll(auth)
+                // N32: Bluesky has no edit here; an edit target is "delete and post again". The new thread goes up
+                // first, so its records embed the blobs the old one still holds, and the old one goes after it.
+                PostKind.EDIT -> {
+                    val previous = job.previous ?: return@guarded DeliveryOutcome.Failed(Publisher.NO_RECORD)
+                    run.publishAll(auth)
+                    run.removeOld(auth, previous)
+                    DeliveryOutcome.Sent(run.current)
+                }
+                PostKind.DELETE -> {
+                    run.removeOld(auth, job.previous ?: return@guarded DeliveryOutcome.Failed(Publisher.NO_RECORD))
+                    DeliveryOutcome.Sent(run.current)
                 }
             }
+        }
+        // N32: a new thread the server refuses does not stay half posted next to the old one, which stays as it was.
+        if (job.post.kind == PostKind.EDIT && outcome is DeliveryOutcome.Failed && !run.current.oldRemoved && run.startedNew) {
+            try {
+                sessions.bluesky(job.account.id) { auth -> run.withdrawNew(auth) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                // The parts stay in the progress: a retry goes on with them, and the failure keeps its own message.
+            }
+        }
+        return outcome
+    }
+
+    /** Runs [block] with the account's session and maps what it throws to an outcome (R5, R29). */
+    private suspend fun guarded(job: DeliveryJob, block: suspend (BlueskyAuth) -> DeliveryOutcome): DeliveryOutcome {
+        return try {
+            sessions.bluesky(job.account.id) { auth -> block(auth) }
         } catch (e: CancellationException) {
             throw e
         } catch (_: NeedsSignInException) {
@@ -181,6 +205,9 @@ class BlueskyExecutor(
 
         val current: DeliveryProgress get() = progress
 
+        /** Whether a part of the new thread got a record key, so it may be on the server. */
+        val startedNew: Boolean get() = progress.parts.any { it.key != null }
+
         /**
          * N33, R39: deletes every part of the published thread with its threadgate and postgates, in one
          * `applyWrites` while they fit its limit. Records already gone are left out, so a retry, or a part
@@ -188,9 +215,25 @@ class BlueskyExecutor(
          */
         suspend fun removeOld(auth: BlueskyAuth, previous: HistoryItem) {
             if (progress.oldRemoved) return
+            deleteThread(auth, previous.parts.mapNotNull { it.uri?.substringAfterLast('/') })
+            progress = progress.copy(deleted = previous.parts.mapNotNull { it.uri }, oldRemoved = true)
+            job.saveProgress(progress)
+        }
+
+        /**
+         * N32: deletes the parts of the new thread that may be on the server, with their gates, and forgets
+         * them, so the old thread is the only copy again and a retry starts the new one over.
+         */
+        suspend fun withdrawNew(auth: BlueskyAuth) {
+            deleteThread(auth, progress.parts.sortedBy { it.index }.mapNotNull { it.key })
+            progress = progress.copy(parts = emptyList())
+            job.saveProgress(progress)
+        }
+
+        /** The posts at [keys] (thread order), the threadgate at the first and every postgate, those still there. */
+        private suspend fun deleteThread(auth: BlueskyAuth, keys: List<String>) {
             val client = BlueskyClient(auth.pds, http, JSON, clock::millis)
             val did = auth.did
-            val keys = previous.parts.mapNotNull { it.uri?.substringAfterLast('/') }
             val candidates = buildList {
                 keys.reversed().forEach { add(WriteOp.Delete(Collections.POST, it)) }
                 keys.firstOrNull()?.let { add(WriteOp.Delete(Collections.THREADGATE, it)) }
@@ -198,8 +241,6 @@ class BlueskyExecutor(
             }
             val writes = candidates.filter { client.getRecord(did, it.collection, it.rkey) != null }
             writes.chunked(BlueskyClient.MAX_WRITES).forEach { client.applyWrites(auth.accessJwt, did, it) }
-            progress = progress.copy(deleted = previous.parts.mapNotNull { it.uri }, oldRemoved = true)
-            job.saveProgress(progress)
         }
 
         suspend fun publishAll(auth: BlueskyAuth): DeliveryOutcome {
@@ -231,7 +272,8 @@ class BlueskyExecutor(
                 state = state.copy(key = it)
                 save(state)
             }
-            val embed = if (part.attachmentIds.isNotEmpty()) mediaEmbed(client, auth, index, part) else linkCard(client, auth, part)
+            val hasMedia = part.attachmentIds.isNotEmpty() || kept(index).isNotEmpty()
+            val embed = if (hasMedia) mediaEmbed(client, auth, index, part) else linkCard(client, auth, part)
             state = partProgress(index)
             val createdAt = nextCreatedAt()
             val uri = atUri(did, Collections.POST, rkey)
@@ -242,7 +284,7 @@ class BlueskyExecutor(
                 reply = reply,
                 embed = embed,
                 langs = options.langs.take(MAX_LANGS).ifEmpty { null },
-                labels = if (part.attachmentIds.isNotEmpty()) SelfLabels.of(options.labels) else null,
+                labels = if (hasMedia) SelfLabels.of(options.labels) else null,
             )
             val writes = mutableListOf<WriteOp>(record.create(rkey))
             val rules = options.replyRules
@@ -258,8 +300,20 @@ class BlueskyExecutor(
 
         private suspend fun published(state: PartProgress, part: PlannedPart, did: String, rkey: String, uri: String, cid: String?): StrongRef {
             if (cid == null) throw IOException("the server gave the post without its CID")
-            val media = part.attachmentIds.mapNotNull { id ->
-                state.uploaded[id]?.let { blobOf(it).cid }?.let { PublishedMedia(it, attachment(id)?.alt.orEmpty()) }
+            // R38: the full blob reference, so "delete and post again" can embed the same blob (N32).
+            val media = kept(state.index) + part.attachmentIds.mapNotNull { id ->
+                val json = state.uploaded[id] ?: return@mapNotNull null
+                val blobCid = blobOf(json).cid ?: return@mapNotNull null
+                val attachment = attachment(id)
+                val aspect = attachment?.let(::aspectOf)
+                PublishedMedia(
+                    id = blobCid,
+                    alt = attachment?.alt.orEmpty(),
+                    blob = json,
+                    width = aspect?.width,
+                    height = aspect?.height,
+                    gif = attachment?.kind == MediaKind.GIF,
+                )
             }
             val published = PublishedPart(uri = uri, cid = cid, url = postUrl(did, rkey), media = media)
             save(state.copy(key = rkey, published = published, videoJobs = emptyMap()))
@@ -323,28 +377,45 @@ class BlueskyExecutor(
             return ExternalEmbed(External(card.uri, card.title, card.description, thumb))
         }
 
+        /**
+         * The files the part embeds: those an edit keeps from the old thread's part at [index] first (N32), by
+         * their blob references, then the new attachments, uploaded. A video, kept or new, makes the embed.
+         */
         private suspend fun mediaEmbed(client: BlueskyClient, auth: BlueskyAuth, index: Int, part: PlannedPart): Embed {
+            val kept = kept(index).map { media ->
+                Shown(blobOf(media.blob!!), media.alt, aspectOf(media.width, media.height), media.gif)
+            }
             val items = part.attachmentIds.map { id -> id to (attachment(id) ?: throw FileNotFoundException("no attachment $id")) }
+            kept.firstOrNull { it.blob.mimeType?.startsWith("video/") == true }?.let { return videoEmbed(it) }
             val video = items.firstOrNull { (_, a) -> a.kind == MediaKind.VIDEO || a.kind == MediaKind.GIF }
             if (video != null) {
                 val (id, attachment) = video
                 val blob = blob(index, id) { uploadVideo(client, auth, index, id) }
-                return VideoEmbed(
-                    video = blob,
-                    alt = attachment.alt.takeIf { it.isNotBlank() },
-                    aspectRatio = aspectOf(attachment),
-                    presentation = VideoPresentation.GIF.takeIf { attachment.kind == MediaKind.GIF },
-                )
+                return videoEmbed(Shown(blob, attachment.alt, aspectOf(attachment), attachment.kind == MediaKind.GIF))
             }
-            val blobs = items.map { (id, attachment) ->
-                attachment to blob(index, id) { client.uploadBlob(auth.accessJwt, file(id).file, file(id).mime) }
+            val images = kept + items.map { (id, attachment) ->
+                Shown(blob(index, id) { client.uploadBlob(auth.accessJwt, file(id).file, file(id).mime) }, attachment.alt, aspectOf(attachment), false)
             }
-            return if (blobs.size <= ImagesEmbed.MAX_IMAGES) {
-                ImagesEmbed(blobs.map { (a, blob) -> EmbedImage(blob, a.alt, aspectOf(a)) })
+            return if (images.size <= ImagesEmbed.MAX_IMAGES) {
+                ImagesEmbed(images.map { EmbedImage(it.blob, it.alt, it.aspect) })
             } else {
-                GalleryEmbed(blobs.map { (a, blob) -> GalleryImage(blob, a.alt, aspectOf(a) ?: AspectRatio(1, 1)) })
+                GalleryEmbed(images.map { GalleryImage(it.blob, it.alt, it.aspect ?: AspectRatio(1, 1)) })
             }
         }
+
+        private fun videoEmbed(video: Shown) = VideoEmbed(
+            video = video.blob,
+            alt = video.alt.takeIf { it.isNotBlank() },
+            aspectRatio = video.aspect,
+            presentation = VideoPresentation.GIF.takeIf { video.gif },
+        )
+
+        /**
+         * N32: the files an edit keeps from part [index] of the old thread, with their edited alt text. A file
+         * recorded without its blob reference, by a version before it was kept, cannot be embedded and is left out.
+         */
+        private fun kept(index: Int): List<PublishedMedia> =
+            if (job.post.kind != PostKind.EDIT) emptyList() else keptMediaOf(job.post.options.keptMedia, job.previous, index).filter { it.blob != null }
 
         /** The stored blob of [attachmentId] while it is fresh (N26), or a new upload. */
         private suspend fun blob(index: Int, attachmentId: Long, upload: suspend () -> BlobRef): BlobRef {
@@ -424,6 +495,9 @@ class BlueskyExecutor(
     /** The video service refused the upload (daily quota) or could not process the video. */
     private class VideoRejected(message: String) : Exception(message)
 
+    /** A file as a post embeds it. */
+    private class Shown(val blob: BlobRef, val alt: String, val aspect: AspectRatio?, val gif: Boolean)
+
     companion object {
         private val JSON = Json { ignoreUnknownKeys = true }
 
@@ -457,9 +531,10 @@ class BlueskyExecutor(
             ReplyRule.FOLLOWING -> ThreadgateRule.Following
         }
 
-        private fun aspectOf(attachment: Attachment): AspectRatio? {
-            val width = attachment.width ?: return null
-            val height = attachment.height ?: return null
+        private fun aspectOf(attachment: Attachment): AspectRatio? = aspectOf(attachment.width, attachment.height)
+
+        private fun aspectOf(width: Int?, height: Int?): AspectRatio? {
+            if (width == null || height == null) return null
             return if (width >= 1 && height >= 1) AspectRatio(width, height) else null
         }
     }

@@ -71,11 +71,21 @@ fun EditMarkLabel(mark: EditMark, tag: String) {
 }
 
 /**
+ * The Bluesky accounts whose copy of [record] has files recorded without their blob reference, by a version
+ * before history kept it: "Delete and post again" cannot embed those files (N32).
+ */
+fun filesNotPostedAgain(record: HistoryRecord): Set<Long> = record.items
+    .filter { item -> item.network == Network.BLUESKY && item.parts.any { part -> part.media.any { it.blob == null } } }
+    .map { it.accountId }
+    .toSet()
+
+/**
  * N32: for each Bluesky account holding the post, "Leave unchanged" (the default) or "Delete and post again",
- * with the warning that likes, reposts and replies are lost.
+ * with the warning that likes, reposts and replies are lost, and for an account in [filesLost] that its files are
+ * not posted again.
  */
 @Composable
-fun BlueskyEditChoices(accounts: List<Account>, targets: List<Long>, onToggle: (Long) -> Unit) {
+fun BlueskyEditChoices(accounts: List<Account>, targets: List<Long>, onToggle: (Long) -> Unit, filesLost: Set<Long> = emptySet()) {
     if (accounts.isEmpty()) return
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         for (account in accounts) {
@@ -97,6 +107,14 @@ fun BlueskyEditChoices(accounts: List<Account>, targets: List<Long>, onToggle: (
             }
             if (repost) {
                 Text(stringResource(R.string.edit_bluesky_warning), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                if (account.id in filesLost) {
+                    Text(
+                        stringResource(R.string.edit_bluesky_files_lost),
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.testTag(ComposerTags.blueskyFilesLost(account.id)),
+                    )
+                }
             }
         }
     }

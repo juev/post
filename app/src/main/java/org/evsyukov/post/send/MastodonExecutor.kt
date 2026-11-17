@@ -188,29 +188,14 @@ class MastodonExecutor(
                 before.quoteApprovalPolicy != now.quoteApprovalPolicy || before.poll != now.poll
         }
 
-        private fun keptOf(index: Int, published: PublishedPart): List<PublishedMedia> {
-            val all = job.post.options.keptMedia
-            // The edits name a file by its place among all files of the post, the same in every Mastodon copy
-            // whatever its split; older edits name it by part and index of the copy the composer listed.
-            val byOrdinal = all.filter { it.ordinal != null }.associateBy { it.ordinal }
-            val byPlace = all.filter { it.ordinal == null && it.part == index }.associateBy { it.index }
-            val before = job.previous?.parts.orEmpty().take(index).sumOf { it.media.size }
-            return published.media.mapIndexedNotNull { position, media ->
-                val edit = byOrdinal[before + position] ?: byPlace[position]
-                when {
-                    edit == null -> media
-                    edit.removed -> null
-                    else -> media.copy(alt = edit.alt)
-                }
-            }
-        }
+        private fun keptOf(index: Int): List<PublishedMedia> = keptMediaOf(job.post.options.keptMedia, job.previous, index)
 
         private fun changed(index: Int, part: PlannedPart, published: PublishedPart, optionsChanged: Boolean): Boolean =
             optionsChanged || published.text != part.text || published.spoilerText.orEmpty() != part.spoilerText.orEmpty() ||
-                part.attachmentIds.isNotEmpty() || keptOf(index, published) != published.media
+                part.attachmentIds.isNotEmpty() || keptOf(index) != published.media
 
         private suspend fun editPart(index: Int, part: PlannedPart, published: PublishedPart): PublishedPart {
-            val kept = keptOf(index, published)
+            val kept = keptOf(index)
             val uploaded = uploadAll(index, part)
             val options = job.plan.mastodon
             val params = StatusEditParams(

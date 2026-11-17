@@ -59,6 +59,7 @@
     <string name="edit_bluesky_leave">Leave unchanged</string>
     <string name="edit_bluesky_repost">Delete and post again</string>
     <string name="edit_bluesky_warning">Bluesky cannot edit a post. Posting again loses its likes, reposts and replies.</string>
+    <string name="edit_bluesky_files_lost">Its images and video were published by an earlier version of Post and are not posted again.</string>
     <string name="edit_poll_warning">Changing the poll options resets its votes.</string>
     <string name="edit_visibility_locked">The visibility of a published post cannot change.</string>
     <string name="edit_kept_media">Published media</string>
