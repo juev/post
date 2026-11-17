@@ -91,7 +91,7 @@ Opens from any row of Queue or Sent. Shows the full text by thread part, attachm
 
 ### Editing a published post
 
-The composer opens in edit mode: the top bar says "Editing", the targets are the accounts that hold the post, and Send becomes Save. Mastodon visibility is locked. For each Bluesky target a row offers "Leave unchanged" or "Delete and post again" (networks.md, N32). The thread preview marks which parts will be edited, added or deleted.
+The composer opens in edit mode: the top bar says "Editing", the targets are the accounts that hold the post, and Send becomes Save. Mastodon visibility is locked. For each Bluesky target, and each Mastodon target whose server cannot edit, a row offers "Leave unchanged" or "Delete and post again" (networks.md, N31, N32). The thread preview marks which parts will be edited, added or deleted.
 
 ## Schedule
 
