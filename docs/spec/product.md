@@ -41,7 +41,7 @@ Android 13 (API 33) and newer. Kotlin, Jetpack Compose, Room, WorkManager, as in
 - R2. Each account shows its avatar, display name, handle and network. The user sets a short label for it, shown in the target picker.
 - R3. Accounts belong to a network type through a single interface (publish, upload media, read limits, verify credentials). Adding a third network does not change the queue, composer or share flow.
 - R4. Sign-in follows the network's method from networks.md: OAuth for Mastodon and an app password for Bluesky; Bluesky OAuth is not planned for now (networks.md, N14). Tokens are stored encrypted with a key in Android Keystore. They are never logged and never sent to any host other than the account's server.
-- R5. When a server rejects the credentials, the account is marked "needs sign-in", its deliveries stop with that reason, and a notification asks to sign in again. Signing in again resumes them. Signing a Mastodon account in again must bring back the same account, the same account id on the same server: another account is rejected with a message naming both, its token is revoked, and adding it goes through the ordinary sign-in.
+- R5. When a server rejects the credentials, the account is marked "needs sign-in", its deliveries stop with that reason, and a notification asks to sign in again. Signing in again resumes them. Signing an account in again must bring back the same account: for Mastodon the same account id on the same server, for Bluesky the same DID (on any PDS). Another account is rejected with a message naming both, and adding it goes through the ordinary sign-in. Mastodon revokes the token of the other account; Bluesky rejects it before the password is sent.
 
 ### Composer
 

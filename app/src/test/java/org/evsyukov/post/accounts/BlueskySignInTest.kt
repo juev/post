@@ -10,6 +10,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import org.evsyukov.post.core.media.Network
 import org.evsyukov.post.data.FakeCipher
 import org.evsyukov.post.data.MutableClock
+import org.evsyukov.post.data.accounts.NewAccount
 import org.evsyukov.post.data.accounts.RoomAccountsRepository
 import org.evsyukov.post.data.containsBytes
 import org.evsyukov.post.data.db.AccountState
@@ -217,6 +218,37 @@ class BlueskySignInTest {
         assertThat(accounts.observe().first()).hasSize(1)
         assertThat(accounts.readSecret(first)).isEqualTo(BlueskySecret("access-2", "refresh-2"))
         assertThat(accounts.get(first)!!.state).isEqualTo(AccountState.OK)
+    }
+
+    @Test
+    fun signingInAgainWithTheAccountAcceptsItsOwnDid() = runBlocking<Unit> {
+        val first = (signIn().signIn(handle, password) as BlueskySignIn.Result.Done).accountId
+        accounts.setState(first, AccountState.NEEDS_SIGN_IN)
+        session("access-2", "refresh-2")
+
+        val second = (signIn().signIn(handle, password, accountId = first) as BlueskySignIn.Result.Done).accountId
+
+        assertThat(second).isEqualTo(first)
+        assertThat(accounts.get(first)!!.state).isEqualTo(AccountState.OK)
+    }
+
+    @Test
+    fun signingInAgainAsAnotherDidIsRejectedBeforeThePassword() = runBlocking<Unit> {
+        // R5: Bob's account needs sign-in, and the user types Alice's handle in the Sign in again form.
+        val bob = accounts.add(
+            NewAccount(Network.BLUESKY, "https://$pds", "bob.example.com", "did:plc:bobbobbobbobbobbobbobbob", "Bob", null),
+            BlueskySecret("old-access", "old-refresh"),
+        )
+        accounts.setState(bob, AccountState.NEEDS_SIGN_IN)
+
+        val e = assertThrows(SignInException::class.java) { runBlocking { signIn().signIn(handle, password, accountId = bob) } }
+
+        assertThat(e.problem).isEqualTo(SignInProblem.WRONG_ACCOUNT)
+        assertThat(e.mismatch).isEqualTo(AccountMismatch(signedIn = handle, expected = "bob.example.com"))
+        assertThat(servers.requests("$pds/xrpc/com.atproto.server.createSession")).isEmpty()
+        assertThat(accounts.observe().first().map { it.id }).containsExactly(bob)
+        assertThat(accounts.get(bob)!!.state).isEqualTo(AccountState.NEEDS_SIGN_IN)
+        assertThat(accounts.readSecret(bob)).isEqualTo(BlueskySecret("old-access", "old-refresh"))
     }
 
     @Test

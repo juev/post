@@ -188,6 +188,17 @@ class AccountsScreensTest {
     // ---- Add Bluesky account ----
 
     @Test
+    fun signingInAgainAsAnotherBlueskyAccountSaysWhoSignedIn() {
+        val failed = BlueskyFormState.Failed(SignInProblem.WRONG_ACCOUNT, codeAsked = false, AccountMismatch(signedIn = "bob.bsky.social", expected = "alice.bsky.social"))
+        compose.setContent {
+            PostTheme { AddBlueskyContent("bob.bsky.social", {}, "abcd-efgh-ijkl-mnop", {}, "", {}, failed, true, {}, {}) }
+        }
+
+        compose.onNodeWithText("You signed in as @bob.bsky.social, not @alice.bsky.social.").assertIsDisplayed()
+        compose.onNodeWithText(string(R.string.try_again)).assertIsDisplayed().assertIsEnabled()
+    }
+
+    @Test
     fun theBlueskyFormChecksTheHandleMasksThePasswordAndWarnsWithoutBlocking() {
         var handle by mutableStateOf("")
         var password by mutableStateOf("")
