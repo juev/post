@@ -44,6 +44,8 @@ import org.evsyukov.post.data.posts.PostNotFound
 import org.evsyukov.post.data.posts.PostOptions
 import org.evsyukov.post.data.posts.Schedule
 import org.evsyukov.post.data.settings.Settings
+import org.evsyukov.post.translate.TranslationFailure
+import org.evsyukov.post.translate.TranslationResult
 import java.time.Instant
 import java.util.Locale
 
@@ -678,6 +680,60 @@ class ComposerModel(
 
     fun chooseLanguage(code: String) {
         language = code
+    }
+
+    /** A translation is running: the toolbar shows progress, and another press waits for it. */
+    var translating by mutableStateOf(false)
+        private set
+
+    /** The outcome of the translate action (screens.md, Composer). */
+    sealed interface TranslateResult {
+        /** The draft was translated; the snackbar offers Undo with the text and language from before. */
+        data class Translated(val previousText: String, val previousLanguage: String) : TranslateResult
+
+        /** The draft is written in the target language already. */
+        data object AlreadyInLanguage : TranslateResult
+
+        /** There is no text to translate, or no target language is chosen. */
+        data object NothingToTranslate : TranslateResult
+
+        data object AlreadyTranslating : TranslateResult
+
+        data class Failed(val reason: TranslationFailure) : TranslateResult
+    }
+
+    /**
+     * Translates the whole draft into the target language of the settings (screens.md, Composer), in one edit
+     * through [apply]: markup, links, mentions and break markers stay, and the post's language becomes the
+     * target, so both networks advertise it and the thread split uses its locale (R13). Everything else,
+     * attachments, targets, poll and the content warning, stays as it is.
+     */
+    suspend fun translate(): TranslateResult {
+        val target = settings.value?.translateTo ?: return TranslateResult.NothingToTranslate
+        if (translating) return TranslateResult.AlreadyTranslating
+        val source = text.text.toString()
+        if (source.isBlank()) return TranslateResult.NothingToTranslate
+        if (language.equals(target, ignoreCase = true)) return TranslateResult.AlreadyInLanguage
+        translating = true
+        try {
+            return when (val result = container.translator.translate(source, language, target)) {
+                is TranslationResult.Translated -> {
+                    val previous = language
+                    apply(EditResult(result.text, result.text.length))
+                    language = target
+                    TranslateResult.Translated(source, previous)
+                }
+                is TranslationResult.Failed -> TranslateResult.Failed(result.reason)
+            }
+        } finally {
+            translating = false
+        }
+    }
+
+    /** The snackbar's Undo: the text and the language from before a translation (screens.md, Composer). */
+    fun undoTranslation(previousText: String, previousLanguage: String) {
+        apply(EditResult(previousText, previousText.length))
+        language = previousLanguage
     }
 
     fun toggleTarget(id: Long) {

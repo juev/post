@@ -33,8 +33,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -66,6 +68,8 @@ import org.evsyukov.post.accounts.canEdit
 import org.evsyukov.post.core.markdown.HighlightSpan
 import org.evsyukov.post.core.markdown.highlight
 import org.evsyukov.post.data.posts.Schedule
+import org.evsyukov.post.translate.TranslationFailure
+import org.evsyukov.post.ui.common.languageDisplayName
 import org.evsyukov.post.ui.schedule.SendLaterSheet
 import org.evsyukov.post.ui.schedule.rememberSendLaterOptions
 import org.evsyukov.post.ui.LocalAppContainer
@@ -97,6 +101,7 @@ object ComposerTags {
     const val LINK = "composer-link"
     const val CW = "composer-cw"
     const val LANGUAGE = "composer-language"
+    const val TRANSLATE = "composer-translate"
     const val OVERFLOW = "composer-overflow"
     const val MENU_POLL = "composer-menu-poll"
     const val MENU_BREAK = "composer-menu-break"
@@ -446,6 +451,8 @@ private fun ComposerContent(
                 hasTargets = model.targets.isNotEmpty(),
                 onClick = { sheet = Sheet.Details },
             )
+            val translateTarget = settings?.translateTo
+            val translateTargetName = translateTarget?.let { languageDisplayName(it) }.orEmpty()
             ComposerToolbar(
                 canSend = blockers.isEmpty(),
                 spoilerShown = model.spoilerShown,
@@ -466,6 +473,33 @@ private fun ComposerContent(
                 onLink = { linkDialog = true },
                 onSpoiler = { model.showSpoiler(!model.spoilerShown) },
                 onLanguage = { languageDialog = true },
+                showTranslate = translateTarget != null,
+                translating = model.translating,
+                onTranslate = {
+                    scope.launch {
+                        when (val result = model.translate()) {
+                            is ComposerModel.TranslateResult.Translated -> {
+                                // The text is replaced in one edit and the composer has no undo stack: the
+                                // snackbar offers the text and language from before (screens.md, Composer).
+                                val answer = snackbar.showSnackbar(
+                                    message = resources.getString(R.string.composer_translated, translateTargetName),
+                                    actionLabel = resources.getString(R.string.posts_undo),
+                                    duration = SnackbarDuration.Long,
+                                )
+                                if (answer == SnackbarResult.ActionPerformed) {
+                                    model.undoTranslation(result.previousText, result.previousLanguage)
+                                }
+                            }
+                            ComposerModel.TranslateResult.AlreadyInLanguage ->
+                                snackbar.showSnackbar(resources.getString(R.string.composer_translate_same, translateTargetName))
+                            ComposerModel.TranslateResult.NothingToTranslate ->
+                                snackbar.showSnackbar(resources.getString(R.string.composer_translate_nothing))
+                            ComposerModel.TranslateResult.AlreadyTranslating -> Unit
+                            is ComposerModel.TranslateResult.Failed ->
+                                snackbar.showSnackbar(resources.getString(translationFailureText(result.reason)))
+                        }
+                    }
+                },
                 onPoll = { if (model.poll == null) model.addPoll() else model.changePoll(null) },
                 onBreak = { model.apply(MarkdownEdits.insertBreak(model.text.text.toString(), model.selection().max)) },
                 onPreview = { sheet = Sheet.Preview },
@@ -674,3 +708,11 @@ private fun ComposerContent(
 
 /** Whether [text] has markup that a plain-text account loses (F6); a manual break is not formatting. */
 fun hasFormatting(text: String): Boolean = highlight(text).any { it.kind != HighlightSpan.Kind.BREAK_MARKER }
+
+/** What the composer says when a translation did not happen. */
+private fun translationFailureText(reason: TranslationFailure): Int = when (reason) {
+    TranslationFailure.MODEL_UNAVAILABLE -> R.string.composer_translate_model
+    TranslationFailure.UNSUPPORTED_LANGUAGE -> R.string.composer_translate_unsupported
+    TranslationFailure.MARKUP_BROKEN -> R.string.composer_translate_markup
+    TranslationFailure.ENGINE -> R.string.composer_translate_failed
+}

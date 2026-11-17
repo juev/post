@@ -16,6 +16,15 @@
     <string name="composer_list">Список</string>
     <string name="composer_link">Ссылка</string>
     <string name="composer_language_description">Язык: %1$s</string>
+    <string name="composer_translate">Перевести</string>
+    <string name="composer_translating">Переводится…</string>
+    <string name="composer_translated">Переведено на %1$s</string>
+    <string name="composer_translate_same">Пост уже на языке %1$s.</string>
+    <string name="composer_translate_nothing">Нечего переводить.</string>
+    <string name="composer_translate_model">Не удалось загрузить модель перевода. Черновик не изменён.</string>
+    <string name="composer_translate_unsupported">Эту пару языков нельзя перевести.</string>
+    <string name="composer_translate_markup">Перевод изменил разметку, поэтому черновик не изменён.</string>
+    <string name="composer_translate_failed">Перевод не удался. Черновик не изменён.</string>
     <string name="composer_more">Ещё действия</string>
     <string name="composer_add_poll">Добавить опрос</string>
     <string name="composer_remove_poll">Убрать опрос</string>

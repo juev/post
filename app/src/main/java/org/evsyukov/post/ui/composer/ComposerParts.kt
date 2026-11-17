@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -32,7 +33,9 @@ import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.MoreHoriz
 import androidx.compose.material.icons.outlined.ReportProblem
 import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.material.icons.outlined.Translate
 import androidx.compose.material3.Card
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilledIconButton
@@ -222,6 +225,10 @@ fun ComposerToolbar(
     onLink: () -> Unit,
     onSpoiler: () -> Unit,
     onLanguage: () -> Unit,
+    /** A translation target is set in the settings: the toolbar offers the translate action. */
+    showTranslate: Boolean = false,
+    translating: Boolean = false,
+    onTranslate: () -> Unit = {},
     onPoll: () -> Unit,
     onBreak: () -> Unit,
     onPreview: () -> Unit,
@@ -270,6 +277,19 @@ fun ComposerToolbar(
                     modifier = Modifier.semantics { contentDescription = languageLabel }.testTag(ComposerTags.LANGUAGE),
                 ) {
                     Text(language.uppercase(Locale.ROOT), style = MaterialTheme.typography.labelLarge)
+                }
+                if (showTranslate) {
+                    if (translating) {
+                        val label = stringResource(R.string.composer_translating)
+                        Box(
+                            Modifier.size(48.dp).semantics { contentDescription = label }.testTag(ComposerTags.TRANSLATE),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                        }
+                    } else {
+                        ToolButton(Icons.Outlined.Translate, R.string.composer_translate, ComposerTags.TRANSLATE, onTranslate)
+                    }
                 }
                 Box {
                     IconButton(onClick = { menu = true }, modifier = Modifier.testTag(ComposerTags.OVERFLOW)) {

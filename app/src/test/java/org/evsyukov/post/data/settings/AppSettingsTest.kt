@@ -63,6 +63,7 @@ class AppSettingsTest {
         assertThat(settings.videoQuality).isEqualTo(VideoQuality.STANDARD)
         assertThat(settings.keepImageMetadata).isFalse() // A6: metadata removed unless kept
         assertThat(settings.notificationPermissionAsked).isFalse()
+        assertThat(settings.translateTo).isNull() // R13: translation is off by default
         assertThat(settings.lastLimitsRefresh).isNull()
         assertThat(settings.defaultFixes()).isEmpty()
         assertThat(settings).isEqualTo(Settings())
@@ -94,6 +95,7 @@ class AppSettingsTest {
             videoQuality = VideoQuality.HIGH,
             keepImageMetadata = true,
             notificationPermissionAsked = true,
+            translateTo = "de",
             lastLimitsRefresh = Instant.parse("2026-11-16T07:00:00Z"),
         )
         open().apply {
@@ -110,6 +112,7 @@ class AppSettingsTest {
             setVideoQuality(changed.videoQuality)
             setKeepImageMetadata(changed.keepImageMetadata)
             setNotificationPermissionAsked(changed.notificationPermissionAsked)
+            setTranslateTo(changed.translateTo)
             setLastLimitsRefresh(changed.lastLimitsRefresh!!)
         }
         closeAll()

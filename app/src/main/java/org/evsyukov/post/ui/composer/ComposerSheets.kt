@@ -46,7 +46,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
@@ -69,13 +68,14 @@ import org.evsyukov.post.data.accounts.Account
 import org.evsyukov.post.data.accounts.QuotePolicy
 import org.evsyukov.post.data.accounts.ReplyRule
 import org.evsyukov.post.data.posts.AccountPostOptions
+import org.evsyukov.post.ui.common.languageDisplayName
+import org.evsyukov.post.ui.common.offeredLanguages
 import org.evsyukov.post.ui.settings.accounts.networkName
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
 import java.time.ZoneOffset
-import java.util.Locale
 
 /** The name of a profile in the sheets: its network, with the accounts when the network has several profiles. */
 @Composable
@@ -490,23 +490,17 @@ fun LinkDialog(onInsert: (String) -> Unit, onDismiss: () -> Unit) {
     )
 }
 
-/** The languages the picker offers besides the device's and the current one. */
-private val COMMON_LANGUAGES = listOf("en", "ru", "uk", "de", "fr", "es", "it", "pt", "pl", "nl", "tr", "ja", "zh", "ko")
-
 /** One language for both networks (R13). */
 @Composable
 fun LanguageDialog(current: String, onPick: (String) -> Unit, onDismiss: () -> Unit) {
-    val uiLocale = LocalConfiguration.current.locales[0]
-    val device = uiLocale.language
-    val codes = (listOf(current, device) + COMMON_LANGUAGES).filter { it.isNotBlank() }.distinct()
+    val codes = offeredLanguages(current)
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.language)) },
         text = {
             LazyColumn(Modifier.selectableGroup()) {
                 items(codes) { code ->
-                    val name = Locale.forLanguageTag(code).getDisplayName(uiLocale).replaceFirstChar { it.titlecase(uiLocale) }
-                    Choice("$name ($code)", code == current, ComposerTags.language(code)) { onPick(code) }
+                    Choice("${languageDisplayName(code)} ($code)", code == current, ComposerTags.language(code)) { onPick(code) }
                 }
             }
         },

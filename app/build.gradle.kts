@@ -139,6 +139,8 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.okhttp)
     implementation(libs.jsoup)
+    // On-device translation of the draft (screens.md, Composer); see docs/privacy.md for its metrics.
+    implementation(libs.mlkit.translate)
     implementation(libs.coil.compose)
     implementation(libs.coil.network.okhttp)
 

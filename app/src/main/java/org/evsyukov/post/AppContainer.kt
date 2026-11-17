@@ -62,6 +62,9 @@ import kotlinx.coroutines.launch
 import org.evsyukov.post.data.db.PostState
 import java.time.ZoneId
 import org.evsyukov.post.text.AndroidTextSegmenter
+import org.evsyukov.post.translate.MlKitTranslationEngine
+import org.evsyukov.post.translate.PostTranslator
+import org.evsyukov.post.translate.TranslationEngine
 import java.io.File
 import java.util.concurrent.TimeUnit
 
@@ -78,6 +81,8 @@ class AppContainer(
     prepareTrigger: PrepareTrigger? = null,
     /** Whether this device can decode a file the sender converts (media.md A4); tests answer for themselves. */
     val mediaDecodeCheck: MediaDecodeCheck = DeviceMediaDecodeCheck(),
+    /** Translates the draft; null uses ML Kit on the device, tests pass an engine that answers at once. */
+    translationEngine: TranslationEngine? = null,
     // Tests on the JVM pass a stand-in: Robolectric has no Android Keystore. It stays the last parameter,
     // so `AppContainer(context) { FakeCipher() }` keeps meaning the cipher.
     private val cipher: () -> TokenCipher = { KeystoreTokenCipher() },
@@ -103,6 +108,11 @@ class AppContainer(
 
     /** Grapheme, word and sentence boundaries by the platform ICU, for counters and thread splits. */
     val textSegmenter: TextSegmenter = AndroidTextSegmenter()
+
+    /** Translation of the draft text (screens.md, Composer). ML Kit builds its client on first use. */
+    val translationEngine: TranslationEngine = translationEngine ?: MlKitTranslationEngine()
+
+    val translator: PostTranslator by lazy { PostTranslator(this.translationEngine) }
 
     val database: PostDatabase by lazy { PostDatabase.open(this.context) }
 

@@ -94,12 +94,15 @@ class ComposerScreenshots {
         )
         created += listOf(denis, work, sky)
         container.settings.setDefaultTargets(listOf(denis, sky))
+        // The toolbar shows its translate action once a target language is set (screens.md, Composer).
+        container.settings.setTranslateTo("de")
     }
 
     @After
     fun cleanUp() = runBlocking {
         for (id in created) container.accounts.remove(id)
         container.settings.setDefaultTargets(emptyList())
+        container.settings.setTranslateTo(null)
         for (post in container.posts.observeDrafts().first()) container.posts.delete(post.id)
     }
 

@@ -1,22 +1,31 @@
 package org.evsyukov.post.ui.settings
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -32,6 +41,8 @@ import org.evsyukov.post.data.settings.ShareAction
 import org.evsyukov.post.data.settings.TooManyFilesDefault
 import org.evsyukov.post.data.settings.UnsupportedTypeDefault
 import org.evsyukov.post.ui.LocalAppContainer
+import org.evsyukov.post.ui.common.languageDisplayName
+import org.evsyukov.post.ui.common.offeredLanguages
 import org.evsyukov.post.ui.common.BackTopBar
 import org.evsyukov.post.ui.settings.accounts.networkName
 
@@ -44,10 +55,13 @@ object DefaultsTags {
     const val TOO_MANY_FILES = "defaults-too-many-files"
     const val UNSUPPORTED_TYPE = "defaults-unsupported-type"
     const val BLUESKY_LINKS = "defaults-bluesky-links"
+    const val TRANSLATE = "defaults-translate"
+    const val TRANSLATE_OFF = "defaults-translate-off"
 
     fun target(id: Long) = "defaults-target-$id"
     fun moveUp(id: Long) = "defaults-target-up-$id"
     fun moveDown(id: Long) = "defaults-target-down-$id"
+    fun translateTarget(code: String) = "defaults-translate-$code"
 }
 
 /**
@@ -66,6 +80,7 @@ fun DefaultsSettingsScreen(onBack: () -> Unit) {
 /** Defaults without their data source; nothing shows until [settings] and [accounts] are read. */
 @Composable
 fun DefaultsSettingsContent(settings: Settings?, accounts: List<Account>?, onBack: () -> Unit, onEdit: (SettingsEdit) -> Unit) {
+    var translatePicker by remember { mutableStateOf(false) }
     Scaffold(
         modifier = Modifier.testTag(DefaultsTags.SCREEN),
         topBar = { BackTopBar(title = stringResource(R.string.settings_defaults), onBack = onBack) },
@@ -166,9 +181,70 @@ fun DefaultsSettingsContent(settings: Settings?, accounts: List<Account>?, onBac
                     DefaultsTags.BLUESKY_LINKS,
                 ) { value -> onEdit { setBlueskyLinkMode(value) } }
             }
+            item { SettingsHeader(stringResource(R.string.defaults_translate)) }
+            item { SettingsNote(stringResource(R.string.defaults_translate_summary)) }
+            item {
+                ListItem(
+                    modifier = Modifier.clickable { translatePicker = true }.testTag(DefaultsTags.TRANSLATE),
+                    headlineContent = { Text(stringResource(R.string.defaults_translate)) },
+                    trailingContent = {
+                        Text(
+                            settings.translateTo?.let { languageDisplayName(it) } ?: stringResource(R.string.translate_off),
+                        )
+                    },
+                )
+            }
             item { androidx.compose.foundation.layout.Spacer(Modifier.padding(12.dp)) }
         }
     }
+    if (translatePicker) {
+        TranslateTargetDialog(
+            current = settings?.translateTo,
+            onPick = { code ->
+                translatePicker = false
+                onEdit { setTranslateTo(code) }
+            },
+            onDismiss = { translatePicker = false },
+        )
+    }
+}
+
+/**
+ * The language the composer translates into (R13): "Off" or one of [offeredLanguages]. Off is the default,
+ * so a new install has no translate action in the composer.
+ */
+@Composable
+private fun TranslateTargetDialog(current: String?, onPick: (String?) -> Unit, onDismiss: () -> Unit) {
+    val codes = offeredLanguages(current)
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.defaults_translate)) },
+        text = {
+            LazyColumn(Modifier.selectableGroup()) {
+                item {
+                    ListItem(
+                        modifier = Modifier
+                            .selectable(selected = current == null, role = Role.RadioButton, onClick = { onPick(null) })
+                            .testTag(DefaultsTags.TRANSLATE_OFF),
+                        leadingContent = { RadioButton(selected = current == null, onClick = null) },
+                        headlineContent = { Text(stringResource(R.string.translate_off)) },
+                    )
+                }
+                items(codes) { code ->
+                    ListItem(
+                        modifier = Modifier
+                            .selectable(selected = code == current, role = Role.RadioButton, onClick = { onPick(code) })
+                            .testTag(DefaultsTags.translateTarget(code)),
+                        leadingContent = { RadioButton(selected = code == current, onClick = null) },
+                        headlineContent = { Text(languageDisplayName(code)) },
+                        supportingContent = { Text(code) },
+                    )
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
+    )
 }
 
 /** An account as a default target: the row toggles it; a selected one also moves up and down (R16). */

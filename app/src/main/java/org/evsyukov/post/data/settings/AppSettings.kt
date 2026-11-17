@@ -66,6 +66,7 @@ enum class VideoQuality { STANDARD, HIGH }
  * defaults are those of the spec for a new install.
  *
  * @property defaultTargets accounts preselected in a new draft and used by Send now from Share (R16).
+ * @property translateTo the language the composer translates into (R13); null leaves translation off.
  * @property lastLimitsRefresh when the account limits were last read from the servers (N1).
  */
 data class Settings(
@@ -82,6 +83,7 @@ data class Settings(
     val videoQuality: VideoQuality = VideoQuality.STANDARD,
     val keepImageMetadata: Boolean = false,
     val notificationPermissionAsked: Boolean = false,
+    val translateTo: String? = null,
     val lastLimitsRefresh: Instant? = null,
 ) {
     /** The default fixes as the media planner takes them (A12); "ask" chooses nothing. */
@@ -133,6 +135,11 @@ class AppSettings(scope: CoroutineScope, produceFile: () -> File) {
     suspend fun setVideoQuality(value: VideoQuality) = edit { it[VIDEO_QUALITY] = value.name }
     suspend fun setKeepImageMetadata(value: Boolean) = edit { it[KEEP_IMAGE_METADATA] = value }
     suspend fun setNotificationPermissionAsked(value: Boolean) = edit { it[NOTIFICATION_PERMISSION_ASKED] = value }
+
+    /** The language the composer translates into; null turns translation off (R13). */
+    suspend fun setTranslateTo(value: String?) = edit {
+        if (value == null) it.remove(TRANSLATE_TO) else it[TRANSLATE_TO] = value
+    }
     suspend fun setLastLimitsRefresh(value: Instant) = edit { it[LAST_LIMITS_REFRESH] = value.toEpochMilli() }
 
     private suspend fun edit(change: (MutablePreferences) -> Unit) {
@@ -159,6 +166,7 @@ class AppSettings(scope: CoroutineScope, produceFile: () -> File) {
         private val VIDEO_QUALITY = stringPreferencesKey("video_quality")
         private val KEEP_IMAGE_METADATA = booleanPreferencesKey("keep_image_metadata")
         private val NOTIFICATION_PERMISSION_ASKED = booleanPreferencesKey("notification_permission_asked")
+        private val TRANSLATE_TO = stringPreferencesKey("translate_to")
         private val LAST_LIMITS_REFRESH = longPreferencesKey("last_limits_refresh")
 
         private val idsSerializer = ListSerializer(Long.serializer())
@@ -190,6 +198,7 @@ class AppSettings(scope: CoroutineScope, produceFile: () -> File) {
                 videoQuality = enumOr(VIDEO_QUALITY, defaults.videoQuality),
                 keepImageMetadata = this[KEEP_IMAGE_METADATA] ?: defaults.keepImageMetadata,
                 notificationPermissionAsked = this[NOTIFICATION_PERMISSION_ASKED] ?: defaults.notificationPermissionAsked,
+                translateTo = this[TRANSLATE_TO]?.ifBlank { null } ?: defaults.translateTo,
                 lastLimitsRefresh = this[LAST_LIMITS_REFRESH]?.let(Instant::ofEpochMilli),
             )
         }
