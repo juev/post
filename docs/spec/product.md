@@ -57,13 +57,14 @@ Android 13 (API 33) and newer. Kotlin, Jetpack Compose, Room, WorkManager, as in
   - Mastodon 4.5+: who may quote this post (`quote_approval_policy`: anyone, followers, nobody).
   - Bluesky: language(s), content labels for media (adult content values from networks.md), who can reply (threadgate), whether others may quote this post (postgate).
   - Common: language is entered once and passed to both networks.
+  - Translation: when Settings sets a language to translate into, the composer translates the whole draft into it in one edit, keeping markup and manual breaks, and sets the post's language to the target. The content warning text is left as typed. The engine is on-device ML Kit behind the network-style interface of R3; its model is downloaded per language, and Google receives ML Kit's usage metrics (R34).
 - R14. Links: the app does not fetch link previews in the first version for Mastodon (the server builds them). For Bluesky, the app builds a link card from the first link when the post has no media: it fetches the page's title, description and image itself. The user can remove the card.
 - R15. Leaving the composer with unsaved changes asks whether to keep the draft. Drafts are saved locally and listed on the Drafts tab of Posts.
 
 ### Defaults
 
 - R16. Settings hold default targets: a set of accounts preselected in a new draft and used by "send now" from Share without opening the composer (R20).
-- R17. Settings hold default options per account: visibility, language, content warning, reply settings for Bluesky, sensitive flag. A new draft takes them; the composer can change them for one post.
+- R17. Settings hold default options per account: visibility, language, content warning, reply settings for Bluesky, sensitive flag. A new draft takes them; the composer can change them for one post. Settings also hold the language the composer translates into, off by default (R13).
 - R18. Settings hold the default action of the Share menu: open the composer, send now, or send later.
 
 ### Share menu
@@ -95,12 +96,13 @@ Detailed rules are in [scheduling.md](scheduling.md).
 ### General
 
 - R33. Material 3 with dynamic color and a dark theme. Every control has a screen reader label.
-- R34. The app sends no analytics. It talks only to:
+- R34. The app sends no analytics of its own. It talks only to:
   - the account servers (Mastodon instances, Bluesky PDSes);
   - for avatars (R2): the image addresses the account servers return, often a separate media host such as `cdn.bsky.app`;
   - for Bluesky sign-in and mentions: `public.api.bsky.app` to resolve handles and read the signed-in account's public profile, `plc.directory` or the `did:web` domain for DID documents, and the handle's domain for `/.well-known/atproto-did`;
   - for Bluesky video: `video.bsky.app`;
-  - for Bluesky link cards: the linked page and its preview image.
+  - for Bluesky link cards: the linked page and its preview image;
+  - for translation: Google, through ML Kit, which downloads the language model of the target language and sends Google metrics about its own use: device and app versions, the language pair, text sizes and error codes. The draft text stays on the device.
 - R35. Interface languages: English and Russian.
 
 ### Editing and deleting published posts
