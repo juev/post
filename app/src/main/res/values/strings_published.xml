@@ -56,6 +56,9 @@
     <string name="edit_not_available">This post is no longer in history and cannot be edited</string>
     <!-- %1$s is the Bluesky account handle. -->
     <string name="edit_bluesky_account">Bluesky: %1$s</string>
+    <!-- %1$s is the Mastodon account handle. -->
+    <string name="edit_mastodon_account">Mastodon: %1$s</string>
+    <string name="edit_mastodon_warning">This server cannot edit posts. Posting again loses its likes, reposts and replies.</string>
     <string name="edit_bluesky_leave">Leave unchanged</string>
     <string name="edit_bluesky_repost">Delete and post again</string>
     <string name="edit_bluesky_warning">Bluesky cannot edit a post. Posting again loses its likes, reposts and replies.</string>

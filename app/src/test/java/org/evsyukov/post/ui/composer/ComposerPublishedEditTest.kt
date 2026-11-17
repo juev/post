@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.evsyukov.post.R
 import org.evsyukov.post.core.markdown.MANUAL_BREAK
+import org.evsyukov.post.core.mastodon.MastodonCapabilities
 import org.evsyukov.post.core.mastodon.Visibility
 import org.evsyukov.post.core.media.Network
 import org.evsyukov.post.data.db.PostKind
@@ -118,6 +119,8 @@ class ComposerPublishedEditTest {
         assertThat(h.model.targets).doesNotContain(other)
         // N32: Bluesky is left unchanged by default; Send becomes Save and there is no Send later.
         assertThat(exists(ComposerTags.blueskyLeave(sky))).isTrue()
+        // This server edits in place, so its copy is a target and gets no repost choice.
+        assertThat(exists(ComposerTags.mastodonLeave(alice))).isFalse()
         assertThat(exists(ComposerTags.SEND_LATER)).isFalse()
         compose.onNodeWithContentDescription(string(R.string.edit_save)).assertExists()
     }
@@ -133,6 +136,41 @@ class ComposerPublishedEditTest {
         compose.onNodeWithText(string(R.string.edit_bluesky_warning)).assertExists()
         h.click(ComposerTags.blueskyLeave(sky))
         assertThat(h.model.targets).doesNotContain(sky)
+    }
+
+    @Test
+    fun aMastodonServerThatCannotEditIsLeftUnchangedAndGetsTheRepostChoice() {
+        val old = h.mastodon("old", capabilities = MastodonCapabilities(supportsEdit = false))
+        val id = record("one", listOf(mastodonItem(old, PublishedPart(id = "o1", text = "one"))))
+        show(editHistoryId = id)
+
+        // N31: like a Bluesky copy, it starts unchanged and is deleted and posted again only when chosen.
+        assertThat(h.model.targets).doesNotContain(old)
+        assertThat(exists(ComposerTags.target(old))).isFalse()
+        assertThat(exists(ComposerTags.mastodonLeave(old))).isTrue()
+        h.click(ComposerTags.mastodonRepost(old))
+        assertThat(h.model.targets).contains(old)
+        compose.onNodeWithText(string(R.string.edit_mastodon_warning)).assertExists()
+        h.click(ComposerTags.mastodonLeave(old))
+        assertThat(h.model.targets).doesNotContain(old)
+    }
+
+    @Test
+    fun aMastodonCopyThatCannotBeEditedIsMarkedAsPostedAgainInThePreview() {
+        val old = h.mastodon("old", capabilities = MastodonCapabilities(supportsEdit = false))
+        val id = record(
+            "one\n$MANUAL_BREAK\ntwo",
+            listOf(mastodonItem(old, PublishedPart(id = "o1", text = "one"), PublishedPart(id = "o2", text = "two"))),
+        )
+        show(editHistoryId = id)
+        h.click(ComposerTags.mastodonRepost(old))
+        settle { h.model.renders?.second?.isNotEmpty() == true }
+
+        val marks = editMarks(h.model.renders!!.second, h.model.editing!!, h.model.keptMedia).single()!!
+
+        // N31: the old thread is deleted and every part of the new one is added.
+        assertThat(marks.parts).containsExactly(EditMark.ADDED, EditMark.ADDED).inOrder()
+        assertThat(marks.deleted).isEqualTo(2)
     }
 
     @Test

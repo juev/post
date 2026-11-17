@@ -46,6 +46,8 @@
     <string name="edit_save">Сохранить</string>
     <string name="edit_not_available">Поста больше нет в истории, изменить его нельзя</string>
     <string name="edit_bluesky_account">Bluesky: %1$s</string>
+    <string name="edit_mastodon_account">Mastodon: %1$s</string>
+    <string name="edit_mastodon_warning">Сервер не умеет изменять посты. При повторной публикации пропадут лайки, репосты и ответы.</string>
     <string name="edit_bluesky_leave">Оставить как есть</string>
     <string name="edit_bluesky_repost">Удалить и опубликовать заново</string>
     <string name="edit_bluesky_warning">Bluesky не умеет изменять посты. При повторной публикации пропадут лайки, репосты и ответы.</string>

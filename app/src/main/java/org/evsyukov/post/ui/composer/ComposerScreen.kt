@@ -62,9 +62,9 @@ import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
 import org.evsyukov.post.R
+import org.evsyukov.post.accounts.canEdit
 import org.evsyukov.post.core.markdown.HighlightSpan
 import org.evsyukov.post.core.markdown.highlight
-import org.evsyukov.post.core.media.Network
 import org.evsyukov.post.data.posts.Schedule
 import org.evsyukov.post.ui.schedule.SendLaterSheet
 import org.evsyukov.post.ui.schedule.rememberSendLaterOptions
@@ -136,6 +136,8 @@ object ComposerTags {
     fun blueskyLeave(id: Long) = "composer-bluesky-leave-$id"
     fun blueskyRepost(id: Long) = "composer-bluesky-repost-$id"
     fun blueskyFilesLost(id: Long) = "composer-bluesky-files-lost-$id"
+    fun mastodonLeave(id: Long) = "composer-mastodon-leave-$id"
+    fun mastodonRepost(id: Long) = "composer-mastodon-repost-$id"
     fun keptMedia(part: Int, index: Int) = "composer-kept-media-$part-$index"
     fun keptMediaToggle(part: Int, index: Int) = "composer-kept-media-toggle-$part-$index"
     fun breakRemove(index: Int) = "composer-break-remove-$index"
@@ -355,17 +357,19 @@ private fun ComposerContent(
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).imePadding()) {
             val editing = model.editing
-            // R40: an edit lists only the accounts that hold the post; Bluesky ones choose below (N32).
+            // R40: an edit lists only the accounts that hold the post. A copy that cannot be edited in place,
+            // Bluesky or an old Mastodon server, chooses below (N31, N32).
             val holders = model.holders.toSet()
+            val holding = accounts.orEmpty().filter { it.id in holders }
             TargetsRow(
-                accounts = if (editing == null) accounts.orEmpty() else accounts.orEmpty().filter { it.id in holders && it.network == Network.MASTODON },
+                accounts = if (editing == null) accounts.orEmpty() else holding.filter { it.canEdit() },
                 selected = model.targets,
                 onToggle = model::toggleTarget,
                 onOptions = { sheet = Sheet.AccountOptions(it) },
             )
             if (editing != null) {
-                BlueskyEditChoices(
-                    accounts = accounts.orEmpty().filter { it.id in holders && it.network == Network.BLUESKY },
+                RepostEditChoices(
+                    accounts = holding.filter { !it.canEdit() },
                     targets = model.targets,
                     onToggle = model::toggleTarget,
                     filesLost = filesNotPostedAgain(editing),
