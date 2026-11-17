@@ -305,6 +305,16 @@ class MastodonClient(
         return decode(send(Request.Builder().url(url("api/v1/statuses", id)).auth(token).put(payload.toBody()).build(), secrets))
     }
 
+    /**
+     * `GET /api/v1/statuses/:id`; null when the status is gone. An edit tells a status deleted elsewhere
+     * from a server without edit support by this call (networks.md N31): both answer 404 to `PUT`.
+     */
+    suspend fun getStatus(token: String, id: String): Status? {
+        val secrets = listOf(token)
+        val reply = send(get(url("api/v1/statuses", id), token), secrets, accept = { it in 200..299 || it == 404 })
+        return if (reply.code == 404) null else decode(reply)
+    }
+
     /** `DELETE /api/v1/statuses/:id`. A 404 means the status is already gone (product.md R39). */
     suspend fun deleteStatus(token: String, id: String): DeleteResult {
         val reply = send(Request.Builder().url(url("api/v1/statuses", id)).auth(token).delete().build(), listOf(token), ::successOrNotFound)

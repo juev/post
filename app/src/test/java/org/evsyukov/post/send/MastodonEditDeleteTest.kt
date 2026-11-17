@@ -11,6 +11,8 @@ import kotlinx.serialization.json.jsonPrimitive
 import mockwebserver3.MockResponse
 import org.evsyukov.post.accounts.FakeServers
 import org.evsyukov.post.core.markdown.MANUAL_BREAK
+import org.evsyukov.post.core.mastodon.MastodonCapabilities
+import org.evsyukov.post.data.accounts.AccountLimits
 import org.evsyukov.post.data.db.DeliveryState
 import org.evsyukov.post.data.db.PostKind
 import org.evsyukov.post.data.db.PostState
@@ -308,6 +310,151 @@ class MastodonEditDeleteTest {
         assertThat(f.notifier.failures.single().third).isEqualTo(MastodonExecutor.EDIT_UNSUPPORTED)
         assertThat(blocking { f.posts.observeQueue().first() }.map { it.id }).contains(editId)
         assertThat(record(record.id)!!.text).isEqualTo("old text")
+    }
+
+    /** A server older than 3.5: the account knows it cannot edit (N31). */
+    private fun withoutEdit(id: Long) = blocking {
+        f.accounts.updateLimits(id, AccountLimits.Mastodon(MastodonCapabilities(supportsEdit = false)), f.clock.instant())
+    }
+
+    /** A server since 3.5, as sign-in stores it: able to edit (N31). */
+    private fun withEdit(id: Long) = blocking {
+        f.accounts.updateLimits(id, AccountLimits.Mastodon(MastodonCapabilities()), f.clock.instant())
+    }
+
+    /** The stored capability; an account whose limits were never read counts as able to edit, as in the app. */
+    private fun canEdit(id: Long): Boolean = (f.account(id).limits as? AccountLimits.Mastodon)?.capabilities?.supportsEdit ?: true
+
+    @Test
+    fun aServerThatCannotEditDeletesTheThreadFirstAndPostsTheNewOne() {
+        val alice = f.mastodon()
+        withoutEdit(alice)
+        val record = published(thread("one", "two"), listOf(alice))
+
+        val editId = edit(record, thread("one, new", "two, new"), listOf(alice))
+        f.run()
+
+        // N31: the old thread goes first, last part first, as Mastodon's own delete and redraft does; the new
+        // parts are a fresh thread, not replies to the deleted ones.
+        assertThat(calls).containsExactly("DELETE s2", "DELETE s1").inOrder()
+        assertThat(server.statuses.map { it.text }).containsExactly("one", "two", "one, new", "two, new").inOrder()
+        assertThat(server.statuses.drop(2).map { it.inReplyTo }).containsExactly(null, "s3").inOrder()
+        assertThat(f.post(editId)).isNull()
+        val after = record(record.id)!!
+        assertThat(after.items.single().parts.map { it.id }).containsExactly("s3", "s4").inOrder()
+        assertThat(after.items.single().parts.map { it.text }).containsExactly("one, new", "two, new").inOrder()
+    }
+
+    @Test
+    fun aRepostKeepsThePublishedFilesByTheirIdsAndSetsANewAltText() {
+        val alice = f.mastodon()
+        withoutEdit(alice)
+        val record = published("A photo", listOf(alice), withImage = true)
+        assertThat(record.items.single().parts.single().media.single().id).isEqualTo("m1")
+        val updates = CopyOnWriteArrayList<String>()
+        f.servers.route("PUT", "${server.host}/api/v1/media/m1") { request ->
+            updates += request.body
+            FakeServers.json("""{"id":"m1","type":"image","url":"https://${server.host}/media/m1"}""")
+        }
+
+        edit(record, "A photo, new text", listOf(alice), record.options.copy(keptMedia = listOf(KeptMedia(0, 0, "new alt", ordinal = 0))))
+        f.run()
+
+        // N31: a status takes a file only while it belongs to none, so the delete released m1 for the new status.
+        val reposted = server.statuses.last()
+        assertThat(reposted.text).isEqualTo("A photo, new text")
+        assertThat(reposted.mediaIds).containsExactly("m1")
+        assertThat(server.uploads).hasSize(1)
+        assertThat(updates.single()).contains("\"description\":\"new alt\"")
+        assertThat(record(record.id)!!.items.single().parts.single().media.single().alt).isEqualTo("new alt")
+    }
+
+    @Test
+    fun aRepostWaitsForTheServerToReleaseTheKeptMedia() {
+        val alice = f.mastodon()
+        withoutEdit(alice)
+        val record = published("A photo", listOf(alice), withImage = true)
+        // The removal worker detaches the media of the deleted status after the delete answered.
+        server.statusAnswer = { attempt, request ->
+            if (attempt == 2 && "\"m1\"" in request.body) {
+                FakeMastodon.error(422, "Validation failed: Media attachments not found: m1")
+            } else {
+                null
+            }
+        }
+
+        edit(record, "A photo, new text", listOf(alice))
+        f.run()
+
+        assertThat(server.statuses.map { it.text }).containsExactly("A photo", "A photo, new text").inOrder()
+        assertThat(server.statuses.last().mediaIds).containsExactly("m1")
+        assertThat(record(record.id)!!.items.single().parts.single().media.single().id).isEqualTo("m1")
+    }
+
+    @Test
+    fun aRefusalThatNamesNoKeptMediaFailsARepostWithoutWaiting() {
+        val alice = f.mastodon()
+        withoutEdit(alice)
+        val record = published("A photo", listOf(alice), withImage = true)
+        server.statusAnswer = { attempt, _ ->
+            if (attempt == 2) FakeMastodon.error(422, "Validation failed: Text is too long") else null
+        }
+
+        val editId = edit(record, "A photo, new text", listOf(alice))
+        f.run()
+
+        assertThat(f.post(editId)!!.state).isEqualTo(PostState.FAILED)
+        assertThat(f.post(editId)!!.deliveries.single().error).contains("Text is too long")
+        // The old thread was deleted before the new one was refused; the record has nothing left to edit.
+        assertThat(calls).containsExactly("DELETE s1")
+    }
+
+    @Test
+    fun a405MarksTheAccountAsOneThatCannotEdit() {
+        val alice = f.mastodon()
+        withEdit(alice)
+        val record = published("old text", listOf(alice))
+        editAnswer = { FakeMastodon.error(405, "Method Not Allowed") }
+
+        val editId = edit(record, "new text", listOf(alice))
+        f.run()
+
+        assertThat(f.post(editId)!!.deliveries.single().error).isEqualTo(MastodonExecutor.EDIT_UNSUPPORTED)
+        // N31: the answer refines what sign-in read from the version; the next edit offers to post again.
+        assertThat(canEdit(alice)).isFalse()
+    }
+
+    @Test
+    fun a404WithTheStatusStillThereSaysTheServerCannotEdit() {
+        val alice = f.mastodon()
+        withEdit(alice)
+        val record = published("old text", listOf(alice))
+        editAnswer = { FakeMastodon.error(404, "Record not found") }
+        f.servers.route("GET", "${server.host}/api/v1/statuses/s1") {
+            FakeServers.json("""{"id":"s1","uri":"https://${server.host}/users/alice/statuses/s1","created_at":"2026-11-16T08:00:00Z","content":"<p>old text</p>"}""")
+        }
+
+        val editId = edit(record, "new text", listOf(alice))
+        f.run()
+
+        assertThat(f.post(editId)!!.deliveries.single().error).isEqualTo(MastodonExecutor.EDIT_UNSUPPORTED)
+        assertThat(canEdit(alice)).isFalse()
+    }
+
+    @Test
+    fun a404ForAStatusDeletedElsewhereIsNotToldAsAServerWithoutEdit() {
+        val alice = f.mastodon()
+        withEdit(alice)
+        val record = published("old text", listOf(alice))
+        editAnswer = { FakeMastodon.error(404, "Record not found") }
+        f.servers.route("GET", "${server.host}/api/v1/statuses/s1") { FakeMastodon.error(404, "Record not found") }
+
+        val editId = edit(record, "new text", listOf(alice))
+        f.run()
+
+        assertThat(f.post(editId)!!.deliveries.single().error).isEqualTo(MastodonExecutor.STATUS_GONE)
+        // The server may well edit; it is the published status that is gone.
+        assertThat(canEdit(alice)).isTrue()
     }
 
     @Test
