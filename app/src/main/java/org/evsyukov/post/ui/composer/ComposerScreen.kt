@@ -63,6 +63,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import org.evsyukov.post.R
 import org.evsyukov.post.accounts.canEdit
 import org.evsyukov.post.core.markdown.HighlightSpan
@@ -482,11 +483,15 @@ private fun ComposerContent(
                             is ComposerModel.TranslateResult.Translated -> {
                                 // The text is replaced in one edit and the composer has no undo stack: the
                                 // snackbar offers the text and language from before (screens.md, Composer).
-                                val answer = snackbar.showSnackbar(
-                                    message = resources.getString(R.string.composer_translated, translateTargetName),
-                                    actionLabel = resources.getString(R.string.posts_undo),
-                                    duration = SnackbarDuration.Long,
-                                )
+                                // Material3 knows only Short (4 s) and Long (10 s), so the message with Undo is
+                                // shown until the user acts or three seconds pass.
+                                val answer = withTimeoutOrNull(TRANSLATION_MESSAGE_MS) {
+                                    snackbar.showSnackbar(
+                                        message = resources.getString(R.string.composer_translated, translateTargetName),
+                                        actionLabel = resources.getString(R.string.posts_undo),
+                                        duration = SnackbarDuration.Indefinite,
+                                    )
+                                }
                                 if (answer == SnackbarResult.ActionPerformed) {
                                     model.undoTranslation(result.previousText, result.previousLanguage)
                                 }
@@ -711,6 +716,9 @@ private fun ComposerContent(
 
 /** Whether [text] has markup that a plain-text account loses (F6); a manual break is not formatting. */
 fun hasFormatting(text: String): Boolean = highlight(text).any { it.kind != HighlightSpan.Kind.BREAK_MARKER }
+
+/** How long "Translated into …" with its Undo stays on screen. */
+private const val TRANSLATION_MESSAGE_MS = 3_000L
 
 /** What the composer says when a translation did not happen. */
 private fun translationFailureText(reason: TranslationFailure): Int = when (reason) {
