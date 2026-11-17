@@ -13,6 +13,7 @@ Post is an Android app that publishes one message to several Bluesky and Mastodo
 - Several Bluesky and Mastodon accounts. Mastodon here means any server with the Mastodon client API: glitch-soc, GoToSocial, Pleroma, Akkoma, Hometown and others. Limits and accepted formats are read from each server.
 - Targets per post: every account is a chip in the composer, and the default targets from Settings are preselected. Each account has default options (visibility, language, content warning, reply settings, sensitive flag) that one post can change.
 - Network options: Mastodon visibility, content warning, polls and quote policy; Bluesky languages, content labels, who can reply and whether others may quote.
+- Translation on the device: pick a language in Settings and the composer gets a translate action. One press translates the whole draft, keeping Markdown, links and mentions, and sets the post's language to the target; Undo in the snackbar brings the text back.
 - Markdown with live highlighting and a formatting toolbar above the keyboard. Each account gets Markdown or HTML when its server accepts them, and plain text with the markup removed otherwise. On Bluesky, links become link facets.
 - Automatic threads: text over an account's limit is split at paragraph and sentence boundaries into balanced parts, with no short leftover at the end. A preview shows the parts for each network, and you can add manual breaks.
 - Media adaptation: images are converted and downscaled to fit, location data is removed by default, and video is transcoded on the device when a network does not accept it as it is. When something cannot fit (too many files, audio for Bluesky, video mixed with images), the composer shows the conflict for that network and offers fixes, such as moving files to a reply.
@@ -80,7 +81,7 @@ Tokens are stored on the device, encrypted with a key in Android Keystore.
 
 ## Privacy
 
-Post sends no analytics and has no server of its own. It contacts only your accounts' servers, the hosts that serve your accounts' avatars, and the few Bluesky services and pages that sign-in, mentions, video and link cards need. Accounts, drafts, the queue and the history stay on the device and are excluded from Android backup. Details are in [docs/privacy.md](docs/privacy.md).
+Post has no server of its own and sends no analytics of its own. It contacts only your accounts' servers, the hosts that serve your accounts' avatars, the few Bluesky services and pages that sign-in, mentions, video and link cards need, and Google's ML Kit when you translate a draft: ML Kit downloads the language model and sends Google its own usage metrics, while the text stays on the device. Accounts, drafts, the queue and the history stay on the device and are excluded from Android backup. Details are in [docs/privacy.md](docs/privacy.md).
 
 ## Building from source
 
