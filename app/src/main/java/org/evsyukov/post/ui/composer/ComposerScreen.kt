@@ -310,7 +310,8 @@ private fun ComposerContent(
 
     Scaffold(
         modifier = Modifier.testTag(ComposerTags.SCREEN),
-        snackbarHost = { SnackbarHost(snackbar) },
+        // The keyboard covers the bottom of an edge-to-edge window, so messages shown while typing stay under it.
+        snackbarHost = { SnackbarHost(snackbar, modifier = Modifier.imePadding()) },
         topBar = {
             TopAppBar(
                 title = { Text(stringResource(if (model.editing != null || model.editUnavailable) R.string.edit_title else R.string.app_name)) },
