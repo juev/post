@@ -313,6 +313,7 @@ class BlueskyExecutor(
                     width = aspect?.width,
                     height = aspect?.height,
                     gif = attachment?.kind == MediaKind.GIF,
+                    attachmentId = id,
                 )
             }
             val published = PublishedPart(uri = uri, cid = cid, url = postUrl(did, rkey), media = media)

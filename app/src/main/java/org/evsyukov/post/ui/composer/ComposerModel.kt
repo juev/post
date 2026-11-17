@@ -377,12 +377,20 @@ class ComposerModel(
     /** Every published file of [record] by place, with the edits of [edits] applied (N30). */
     private fun keptMediaOf(record: HistoryRecord, edits: List<KeptMedia>): List<KeptMedia> {
         val item = record.items.firstOrNull { it.network == Network.MASTODON } ?: record.items.firstOrNull() ?: return emptyList()
+        val byAttachment = edits.filter { it.attachmentId != null }.associateBy { it.attachmentId }
         val byPlace = edits.associateBy { it.part to it.index }
         var ordinal = 0
         return item.parts.flatMapIndexed { part, published ->
             published.media.mapIndexed { index, media ->
-                // The place among all files names the same file in every Mastodon copy, whatever its split.
-                (byPlace[part to index] ?: KeptMedia(part, index, media.alt)).copy(ordinal = ordinal++)
+                // The attachment names the same file in every copy, whatever files that copy lacks (#27); the
+                // place among all files names the same file in every Mastodon copy, whatever its split.
+                val edit = if (media.attachmentId != null && byAttachment.isNotEmpty()) {
+                    byAttachment[media.attachmentId]
+                } else {
+                    byPlace[part to index]
+                }
+                (edit ?: KeptMedia(part, index, media.alt))
+                    .copy(part = part, index = index, ordinal = ordinal++, attachmentId = media.attachmentId)
             }
         }
     }
