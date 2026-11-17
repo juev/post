@@ -699,6 +699,12 @@ class ComposerModel(
 
         data object AlreadyTranslating : TranslateResult
 
+        /**
+         * The draft changed while the translation ran, so the result is not applied: replacing the text
+         * would throw away what was typed in the meantime.
+         */
+        data object TextChanged : TranslateResult
+
         data class Failed(val reason: TranslationFailure) : TranslateResult
     }
 
@@ -718,6 +724,8 @@ class ComposerModel(
         try {
             return when (val result = container.translator.translate(source, language, target)) {
                 is TranslationResult.Translated -> {
+                    // The engine may take a while, the first time for the model download: text typed meanwhile is kept.
+                    if (text.text.toString() != source) return TranslateResult.TextChanged
                     val previous = language
                     apply(EditResult(result.text, result.text.length))
                     language = target

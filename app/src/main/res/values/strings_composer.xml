@@ -21,6 +21,7 @@
     <string name="composer_translated">Translated into %1$s</string>
     <string name="composer_translate_same">The post is already in %1$s.</string>
     <string name="composer_translate_nothing">Nothing to translate.</string>
+    <string name="composer_translate_changed">The text changed while it was being translated. The translation is not applied.</string>
     <string name="composer_translate_model">The translation model could not be downloaded. The draft is unchanged.</string>
     <string name="composer_translate_unsupported">This language pair cannot be translated.</string>
     <string name="composer_translate_markup">The translation changed the formatting, so the draft is unchanged.</string>
