@@ -177,6 +177,14 @@ interface PostsRepository {
     suspend fun returnToDraft(postId: Long): Boolean
 
     /**
+     * The preparation of the post's media was cancelled before its send (media.md A4, A7): the post goes back
+     * to the drafts with its attachments and its deliveries go. Returns false, and changes nothing, when a
+     * delivery has made an attempt meanwhile: a send that claimed the post goes on, and its attempt prepares
+     * the files itself.
+     */
+    suspend fun returnUnstartedToDraft(postId: Long): Boolean
+
+    /**
      * Records that every delivery of [postId] succeeded (R28, R31): the post becomes SENT, its history
      * changes, and its attachments and variants go with their files. A NEW post gets a history record
      * with [items] unless history is off; an EDIT post replaces text, options and items of its record;
@@ -485,6 +493,20 @@ class RoomPostsRepository(
                 delivery.state == DeliveryState.SENT || delivery.progress.parts.any { it.published != null || it.unknownSince != null }
             }
             if (published) return@withTransaction false
+            deliveries.deleteForPost(postId)
+            posts.updateState(postId, PostState.DRAFT, now)
+            true
+        }
+    }
+
+    override suspend fun returnUnstartedToDraft(postId: Long): Boolean {
+        val now = clock.millis()
+        return db.withTransaction {
+            val post = posts.get(postId) ?: return@withTransaction false
+            if (post.state == PostState.DRAFT) return@withTransaction true
+            // A4: a run claimed the post between the preparation's read and the cancel; the send goes on and
+            // prepares the files itself, so the delivery must not be deleted under it.
+            if (deliveries.forPost(postId).any { it.attempts > 0 }) return@withTransaction false
             deliveries.deleteForPost(postId)
             posts.updateState(postId, PostState.DRAFT, now)
             true

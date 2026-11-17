@@ -13,7 +13,9 @@ import org.evsyukov.post.core.media.MediaKind
 import org.evsyukov.post.data.db.DeliveryState
 import org.evsyukov.post.data.db.PostState
 import org.evsyukov.post.data.posts.Attachment
+import org.evsyukov.post.data.posts.DeliveryPlan
 import org.evsyukov.post.data.posts.DraftInput
+import org.evsyukov.post.data.posts.PlannedPart
 import org.evsyukov.post.data.posts.Schedule
 import org.evsyukov.post.media.convert.ConversionException
 import org.junit.After
@@ -97,6 +99,30 @@ class MediaPreparationTest {
         assertThat(f.post(id)!!.state).isEqualTo(PostState.FAILED)
         assertThat(f.notifier.failures).hasSize(1)
         assertThat(f.servers.seen).isEmpty()
+    }
+
+    @Test
+    fun cancellingThePreparationLeavesAPostWhoseSendStartedInTheQueue() = runBlocking<Unit> {
+        val alice = f.mastodon()
+        val started = CompletableDeferred<Unit>()
+        f.converter.onConvert = { _, _ ->
+            started.complete(Unit)
+            awaitCancellation()
+        }
+        val id = scheduled("Clip", alice, listOf(bigVideo()))
+        val preparation = launch(Dispatchers.IO) { f.publisher.prepareQueued() }
+        withTimeout(10_000) { started.await() }
+        // A publish run claims the post while its media is still being prepared.
+        val delivery = f.post(id)!!.deliveries.single().id
+        f.posts.startDelivery(delivery, DeliveryPlan(listOf(PlannedPart("Clip"))))
+
+        f.publisher.cancelPreparation(id)
+        withTimeout(10_000) { preparation.join() }
+
+        // A4: the cancel stops the conversion, but the delivery the run holds is not deleted under it.
+        val post = f.post(id)!!
+        assertThat(post.state).isNotEqualTo(PostState.DRAFT)
+        assertThat(post.deliveries.map { it.id }).containsExactly(delivery)
     }
 
     @Test

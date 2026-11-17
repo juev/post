@@ -83,7 +83,12 @@ class Publisher(
     private val preparation = Mutex()
 
     private val lock = Any()
-    private var preparing: Pair<Long, kotlinx.coroutines.Job>? = null
+
+    /**
+     * The conversions running now, by post: the preparation of the queue and a send of the post itself may
+     * convert the same files at the same time, and Cancel stops both (A7).
+     */
+    private val preparing = mutableListOf<Pair<Long, kotlinx.coroutines.Job>>()
     private var cancelledPost: Long? = null
 
     /** Sends every due post; returns when they are all tried. */
@@ -172,8 +177,9 @@ class Publisher(
                 // A7: the preparation shows its progress and can be cancelled until the post sends.
                 prepareFiles(post, account.network, plan, foreground, after = SendProgress(preparing = true))
             } catch (_: PreparationCancelled) {
-                // A7: the user stopped the conversion; nothing went out, so the post goes back with its files.
-                if (!posts.returnToDraft(post.id)) Log.w(TAG, "post ${post.id} cannot return to the drafts")
+                // A7: the user stopped the conversion; the post goes back with its files unless a run claimed it
+                // meanwhile and is sending it, in which case that run prepares the files itself.
+                if (!posts.returnUnstartedToDraft(post.id)) Log.w(TAG, "post ${post.id} has started sending")
                 return
             } catch (e: ConversionException) {
                 failPreparation(post, account, delivery.id, MastodonExecutor.conversionMessage(e))
@@ -204,12 +210,13 @@ class Publisher(
      * the post goes back to the drafts with its files.
      */
     fun cancelPreparation(postId: Long) {
-        synchronized(lock) {
-            val current = preparing ?: return
-            if (current.first != postId) return
-            cancelledPost = postId
-            current.second.cancel()
+        val running = synchronized(lock) {
+            val jobs = preparing.filter { it.first == postId }.map { it.second }
+            if (jobs.isNotEmpty()) cancelledPost = postId
+            jobs
         }
+        // Outside the lock: a cancelled job may resume and take it again in its own cleanup.
+        running.forEach { it.cancel() }
     }
 
     /** R5: [accountId] signed in again; its deliveries stopped for sign-in wait again and sending starts. */
@@ -397,7 +404,7 @@ class Publisher(
                 null
             }
             val work = async { preparer.prepare(post.id, requests) { percent.value = it } }
-            synchronized(lock) { preparing = post.id to work }
+            synchronized(lock) { preparing += post.id to work }
             try {
                 work.await()
             } catch (e: CancellationException) {
@@ -410,8 +417,10 @@ class Publisher(
             } finally {
                 shown?.cancel()
                 synchronized(lock) {
-                    preparing = null
-                    cancelledPost = null
+                    preparing.remove(post.id to work)
+                    // The flag stays until every conversion of the post is gone, so none of them mistakes the
+                    // user's cancel for a cancelled scope.
+                    if (preparing.none { it.first == post.id }) cancelledPost = null
                 }
             }
         }

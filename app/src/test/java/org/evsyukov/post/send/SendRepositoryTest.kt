@@ -48,6 +48,29 @@ class SendRepositoryTest {
         assertThat(File(f.filesDir, variants.single()).exists()).isFalse()
     }
 
+    /** A4, A7: a cancelled preparation takes the post back to the drafts only while no delivery has started. */
+    @Test
+    fun aCancelledPreparationReturnsAnUnstartedPostToTheDrafts() {
+        val alice = f.mastodon()
+        val id = f.queue("Hello", listOf(alice))
+
+        assertThat(blocking { f.posts.returnUnstartedToDraft(id) }).isTrue()
+        assertThat(f.post(id)!!.state).isEqualTo(PostState.DRAFT)
+        assertThat(f.post(id)!!.deliveries).isEmpty()
+    }
+
+    @Test
+    fun aCancelledPreparationLeavesAPostWhoseDeliveryStarted() {
+        val alice = f.mastodon()
+        val id = f.queue("Hello", listOf(alice))
+        val delivery = f.post(id)!!.deliveries.single().id
+        blocking { f.posts.startDelivery(delivery, DeliveryPlan(listOf(PlannedPart("Hello")))) }
+
+        assertThat(blocking { f.posts.returnUnstartedToDraft(id) }).isFalse()
+        assertThat(f.post(id)!!.state).isNotEqualTo(PostState.DRAFT)
+        assertThat(f.post(id)!!.deliveries).hasSize(1)
+    }
+
     @Test
     fun aPostWithAPublishedCopyCannotGoBackToTheDrafts() {
         val alice = f.mastodon(host = "a.example")
