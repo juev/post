@@ -26,7 +26,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import org.evsyukov.post.R
-import org.evsyukov.post.accounts.canEdit
 import org.evsyukov.post.core.media.Network
 import org.evsyukov.post.data.accounts.Account
 import org.evsyukov.post.data.history.HistoryRecord
@@ -45,10 +44,18 @@ data class EditMarks(val parts: List<EditMark>, val deleted: Int)
  * an old Mastodon, is deleted and posted again, so every part is added. Null for a render no account of which
  * holds the post.
  */
-fun editMarks(renders: List<ProfileRender>, record: HistoryRecord, kept: List<KeptMedia>): List<EditMarks?> = renders.map { render ->
+fun editMarks(
+    renders: List<ProfileRender>,
+    record: HistoryRecord,
+    kept: List<KeptMedia>,
+    reposted: Set<Long> = emptySet(),
+): List<EditMarks?> = renders.map { render ->
     val item = record.items.firstOrNull { item -> render.accounts.any { it.id == item.accountId } } ?: return@map null
     val parts = render.render.parts
-    if (render.accounts.none { it.canEdit() }) return@map EditMarks(parts.map { EditMark.ADDED }, item.parts.size)
+    // N31, N32: a Bluesky copy, and a Mastodon copy the user chose to post again, is deleted and reposted whole.
+    if (render.accounts.all { it.network == Network.BLUESKY || it.id in reposted }) {
+        return@map EditMarks(parts.map { EditMark.ADDED }, item.parts.size)
+    }
     val marks = parts.mapIndexed { index, part ->
         val old = item.parts.getOrNull(index) ?: return@mapIndexed EditMark.ADDED
         val mediaChanged = old.media.withIndex().any { (position, media) ->
@@ -87,12 +94,19 @@ fun filesNotPostedAgain(record: HistoryRecord): Set<Long> = record.items
  * account in [filesLost] that its files are not posted again.
  */
 @Composable
-fun RepostEditChoices(accounts: List<Account>, targets: List<Long>, onToggle: (Long) -> Unit, filesLost: Set<Long> = emptySet()) {
+fun RepostEditChoices(
+    accounts: List<Account>,
+    targets: List<Long>,
+    reposted: Set<Long> = emptySet(),
+    onToggle: (Long) -> Unit,
+    filesLost: Set<Long> = emptySet(),
+) {
     if (accounts.isEmpty()) return
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         for (account in accounts) {
-            val repost = account.id in targets
             val bluesky = account.network == Network.BLUESKY
+            // A Bluesky copy is a target only for a repost (N32); a Mastodon one only through this choice (N31).
+            val repost = if (bluesky) account.id in targets else account.id in reposted
             val label = if (bluesky) R.string.edit_bluesky_account else R.string.edit_mastodon_account
             Text(stringResource(label, account.handle), style = MaterialTheme.typography.labelLarge)
             Row(Modifier.selectableGroup(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {

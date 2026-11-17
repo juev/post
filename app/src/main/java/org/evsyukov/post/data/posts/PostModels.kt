@@ -106,6 +106,12 @@ data class PostOptions(
     val poll: PollDraft? = null,
     val chosenFixes: Map<Network, Map<ConflictKind, FixKind>> = emptyMap(),
     val keptMedia: List<KeptMedia> = emptyList(),
+    /**
+     * The copies the user chose to delete and post again (networks.md N31): a published copy on a server
+     * that cannot edit. A copy outside this set is edited in place, and the executor never turns an edit
+     * into a repost on its own, so a retry after the server answered 405 still changes nothing.
+     */
+    val repostAccounts: Set<Long> = emptySet(),
 ) {
     /** The options [account] gets for this post: its own entry, or its defaults (R17). */
     fun forAccount(account: Account): AccountPostOptions = accounts[account.id] ?: AccountPostOptions.from(account.defaults)

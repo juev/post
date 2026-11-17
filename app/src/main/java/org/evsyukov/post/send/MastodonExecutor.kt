@@ -5,7 +5,6 @@ import kotlinx.coroutines.delay
 import okhttp3.OkHttpClient
 import org.evsyukov.post.accounts.AccountSessions
 import org.evsyukov.post.accounts.NeedsSignInException
-import org.evsyukov.post.accounts.canEdit
 import org.evsyukov.post.core.mastodon.MastodonClient
 import org.evsyukov.post.core.mastodon.MastodonException
 import org.evsyukov.post.core.mastodon.MediaAttribute
@@ -73,10 +72,11 @@ class MastodonExecutor(
         return try {
             when (job.post.kind) {
                 PostKind.NEW -> run.publishAll()
-                // N31: a server that cannot edit gets delete and post again.
+                // N31: a copy the user chose to delete and post again on a server that cannot edit. The choice
+                // is kept with the post, so a retry after the server answered 405 does not turn the edit into it.
                 PostKind.EDIT -> {
                     val previous = job.previous ?: return DeliveryOutcome.Failed(Publisher.NO_RECORD)
-                    if (job.account.canEdit()) run.editAll(previous) else run.repost(previous)
+                    if (job.account.id in job.post.options.repostAccounts) run.repost(previous) else run.editAll(previous)
                 }
                 PostKind.DELETE -> run.deleteAll(job.previous ?: return DeliveryOutcome.Failed(Publisher.NO_RECORD))
             }
@@ -228,9 +228,9 @@ class MastodonExecutor(
             optionsChanged || published.text != part.text || published.spoilerText.orEmpty() != part.spoilerText.orEmpty() ||
                 part.attachmentIds.isNotEmpty() || keptOf(index) != published.media
 
-        /** N31: the files the edit keeps in part [index] when the account deletes and posts again. */
+        /** N31: the files the edit keeps in part [index] when the copy is deleted and posted again by choice. */
         private fun keptReposted(index: Int): List<PublishedMedia> =
-            if (job.post.kind == PostKind.EDIT && !job.account.canEdit()) keptOf(index) else emptyList()
+            if (job.post.kind == PostKind.EDIT && job.account.id in job.post.options.repostAccounts) keptOf(index) else emptyList()
 
         /** N31: the kept files of part [index] whose alt text was changed in the composer. */
         private fun keptRelabelled(index: Int): List<PublishedMedia> {
