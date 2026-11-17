@@ -102,7 +102,7 @@ Detailed rules are in [scheduling.md](scheduling.md).
   - for Bluesky sign-in and mentions: `public.api.bsky.app` to resolve handles and read the signed-in account's public profile, `plc.directory` or the `did:web` domain for DID documents, and the handle's domain for `/.well-known/atproto-did`;
   - for Bluesky video: `video.bsky.app`;
   - for Bluesky link cards: the linked page and its preview image;
-  - for translation: Google, through ML Kit, which downloads the language model of the target language and sends Google metrics about its own use: device and app versions, the language pair, text sizes and error codes. The draft text stays on the device.
+  - for translation: Google, through ML Kit, which downloads the language model of the target language and sends Google metrics about its own use: device and app information, device or other identifiers, the language pair, text sizes, performance metrics and error codes. The draft text stays on the device.
 - R35. Interface languages: English and Russian.
 
 ### Editing and deleting published posts
