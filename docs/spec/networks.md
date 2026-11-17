@@ -51,7 +51,7 @@ Instances and forks change the limits: glitch-soc and Hometown read the text lim
 - N6a. The Mastodon network type covers every server with the Mastodon client API: glitch-soc, Hometown, GoToSocial, Pleroma, Akkoma and others. Their differences in limits and formats are read from the server (N1, formatting.md F1).
 - N6b. A GIF larger than 1280×720 pixels (921 600 in total) is rejected with 422, whatever the configured image limits say (`GIF_MATRIX_LIMIT` in `app/models/concerns/attachmentable.rb`, `main` read 2026-11-15). `/api/v2/instance` does not report this limit, so Post applies it to every Mastodon account.
 - N7. Media go to `POST /api/v2/media` with `description` and `focus`. Images return 200. Video and audio return 202 and are polled with `GET /api/v1/media/:id` until 200 (ready) or 422 (failed). A status with unprocessed media is rejected, so Post waits for all of them.
-- N8. Media upload is limited to 30 requests per 30 minutes. Uploaded media that are not attached to a status within a day are deleted by the server, so Post uploads media at send time, not at queue time.
+- N8. Media upload is limited to 30 requests per 30 minutes. Uploaded media that are not attached to a status within a day are deleted by the server, so Post uploads media at send time, not at queue time; only the conversion of its files runs earlier (media.md A4).
 - N9. The status goes to `POST /api/v1/statuses` with `status`, `media_ids[]`, `spoiler_text`, `sensitive`, `visibility`, `language`, `poll[...]`, `in_reply_to_id` for thread parts, and `Idempotency-Key`.
 - N10. A thread is a chain of statuses, each with `in_reply_to_id` of the previous part and the same visibility, passed explicitly.
 

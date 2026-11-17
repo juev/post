@@ -24,6 +24,7 @@ import org.evsyukov.post.data.accounts.Account
 import org.evsyukov.post.data.accounts.AccountsRepository
 import org.evsyukov.post.data.db.DeliveryState
 import org.evsyukov.post.data.db.PostKind
+import org.evsyukov.post.data.db.PostState
 import org.evsyukov.post.data.history.HistoryItem
 import org.evsyukov.post.data.history.HistoryRecord
 import org.evsyukov.post.data.posts.Delivery
@@ -32,6 +33,7 @@ import org.evsyukov.post.data.posts.FilesDirAttachmentFiles
 import org.evsyukov.post.data.posts.Post
 import org.evsyukov.post.data.posts.PostsRepository
 import org.evsyukov.post.data.settings.Settings
+import org.evsyukov.post.media.convert.ConversionException
 import org.evsyukov.post.media.prepare.MediaPreparer
 import org.evsyukov.post.media.prepare.VariantRequest
 import java.io.File
@@ -77,6 +79,9 @@ class Publisher(
     private val files = FilesDirAttachmentFiles(filesDir)
     private val mutex = Mutex()
 
+    /** One preparation of the queue at a time, so two runs do not convert the same files side by side. */
+    private val preparation = Mutex()
+
     private val lock = Any()
     private var preparing: Pair<Long, kotlinx.coroutines.Job>? = null
     private var cancelledPost: Long? = null
@@ -119,6 +124,68 @@ class Publisher(
                 afterRun()
             }
         }
+    }
+
+    /**
+     * Freezes the plans and prepares the files of the posts in the queue that have not started (media.md A4):
+     * queuing starts this at once, so a conversion failure shows up right after the composer closes, not at
+     * send time. While a video is converted [foreground] shows progress and offers Cancel, which puts the post
+     * back to the drafts with its files (A7). A file that cannot be prepared fails the deliveries that need it
+     * and is reported, as a send failure would be.
+     */
+    suspend fun prepareQueued(foreground: SendForeground = SendForeground {}) = preparation.withLock {
+        val settings = settings()
+        for (post in posts.observeQueue().first()) {
+            if (post.attachments.isEmpty() || post.started) continue
+            if (post.state != PostState.QUEUED && post.state != PostState.HELD) continue
+            try {
+                preparePost(post, settings, foreground)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // One post that cannot be prepared, such as one deleted meanwhile, does not hold up the others.
+                Log.w(TAG, "the media of post ${post.id} were not prepared: ${e.javaClass.simpleName}")
+            }
+        }
+    }
+
+    /** Freezes the plan of every waiting delivery of [post] and converts the files it uploads. */
+    private suspend fun preparePost(post: Post, settings: Settings, foreground: SendForeground) {
+        val targets = post.targets.mapNotNull { accounts.get(it) }
+        for (delivery in post.deliveries) {
+            if (delivery.state != DeliveryState.WAITING) continue
+            val account = accounts.get(delivery.accountId) ?: continue
+            // R37: an edit or a deletion without its history record cannot act on the server.
+            val previous = publishedCopy(post, account, delivery)
+            if (previous == null && post.kind != PostKind.NEW) continue
+            val plan = delivery.plan ?: when (
+                val frozen = freezer.freeze(post, account, targets.filter { it.network == account.network }, settings, previous)
+            ) {
+                is FreezeResult.Ready -> frozen.plan
+                is FreezeResult.Blocked -> {
+                    if (posts.failUnstarted(delivery.id, frozen.message)) notifier.deliveryFailed(account, post.id, frozen.message)
+                    continue
+                }
+            }
+            if (delivery.plan == null && !posts.freezePlan(delivery.id, post.updatedAt, plan)) continue
+            try {
+                // A7: the preparation shows its progress and can be cancelled until the post sends.
+                prepareFiles(post, account.network, plan, foreground, after = SendProgress(preparing = true))
+            } catch (_: PreparationCancelled) {
+                // A7: the user stopped the conversion; nothing went out, so the post goes back with its files.
+                if (!posts.returnToDraft(post.id)) Log.w(TAG, "post ${post.id} cannot return to the drafts")
+                return
+            } catch (e: ConversionException) {
+                failPreparation(post, account, delivery.id, MastodonExecutor.conversionMessage(e))
+            } catch (_: FileNotFoundException) {
+                failPreparation(post, account, delivery.id, MISSING_FILE)
+            }
+        }
+    }
+
+    /** The files of a queued post cannot be prepared: the delivery fails now, as it would at send time (R29). */
+    private suspend fun failPreparation(post: Post, account: Account, deliveryId: Long, message: String) {
+        if (posts.failUnstarted(deliveryId, message)) notifier.deliveryFailed(account, post.id, message)
     }
 
     /** The posts due at [now] and the posts already sending, in queue order, as the database has them now. */
@@ -172,17 +239,8 @@ class Publisher(
             }
             val account = accounts.get(delivery.accountId) ?: continue
             val executor = executors[account.network] ?: continue
-            val previous: HistoryItem? = if (post.kind == PostKind.NEW) {
-                null
-            } else {
-                val item = post.historyId?.let { history(it) }?.items?.firstOrNull { it.accountId == account.id }
-                if (item == null) {
-                    // R37: without the record the app has no ids to act on.
-                    if (posts.failUnstarted(delivery.id, NO_RECORD)) notifier.deliveryFailed(account, post.id, NO_RECORD)
-                    continue
-                }
-                item
-            }
+            val previous = publishedCopy(post, account, delivery)
+            if (previous == null && post.kind != PostKind.NEW) continue
             val plan = delivery.plan ?: if (post.kind == PostKind.DELETE) {
                 DeliveryPlan(parts = emptyList())
             } else {
@@ -206,6 +264,17 @@ class Publisher(
         }
         val fresh = posts.get(post.id) ?: return
         if (fresh.deliveries.isNotEmpty() && fresh.deliveries.all { it.state == DeliveryState.SENT }) complete(fresh, settings)
+    }
+
+    /**
+     * R37: the copy [account] published, for an edit or a deletion to act on; null for a new post. Without the
+     * record the app has no ids to act on, so the delivery fails and the user is told.
+     */
+    private suspend fun publishedCopy(post: Post, account: Account, delivery: Delivery): HistoryItem? {
+        if (post.kind == PostKind.NEW) return null
+        val item = post.historyId?.let { history(it) }?.items?.firstOrNull { it.accountId == account.id }
+        if (item == null && posts.failUnstarted(delivery.id, NO_RECORD)) notifier.deliveryFailed(account, post.id, NO_RECORD)
+        return item
     }
 
     private suspend fun attempt(
@@ -295,8 +364,18 @@ class Publisher(
         if (settings.successNotifications && post.kind == PostKind.NEW) notifier.posted(post.id, post.deliveries.size)
     }
 
-    /** Prepares the variants of [plan] (media.md A4); a video conversion shows its progress and can be cancelled. */
-    private suspend fun prepareFiles(post: Post, network: Network, plan: DeliveryPlan, foreground: SendForeground): Map<Long, UploadFile> {
+    /**
+     * Prepares the variants of [plan] (media.md A4); a video conversion shows its progress and can be cancelled.
+     * [after] is what [foreground] shows once the conversion is done: a run goes on to upload, a preparation of
+     * the queue waits for the next file.
+     */
+    private suspend fun prepareFiles(
+        post: Post,
+        network: Network,
+        plan: DeliveryPlan,
+        foreground: SendForeground,
+        after: SendProgress = SendProgress(),
+    ): Map<Long, UploadFile> {
         val requests = plan.conversions.map { (id, conversion) -> VariantRequest(id, network.name, conversion) }
         if (requests.isEmpty()) return emptyMap()
         val transcodes = requests.any { it.conversion is Conversion.TranscodeVideo }
@@ -336,7 +415,7 @@ class Publisher(
                 }
             }
         }
-        if (transcodes) showForeground(foreground, SendProgress())
+        if (transcodes) showForeground(foreground, after)
         return prepared.associate { media ->
             val file = files.resolve(media.path) ?: throw FileNotFoundException("attachment ${media.attachmentId} is outside the files directory")
             media.attachmentId to UploadFile(file, media.mime)
@@ -368,6 +447,9 @@ class Publisher(
 
         /** The error of a delivery whose preparation was cancelled after part of the post was published. */
         const val CANCELLED = "cancelled"
+
+        /** The original file of an attachment is gone, so the post cannot be prepared (R9). */
+        const val MISSING_FILE = "an attachment file is missing"
 
         /** A file of this size or more makes the run go to the foreground (R32). */
         const val LARGE_FILE_BYTES = 8L * 1024 * 1024

@@ -132,6 +132,12 @@ sealed interface Blocker {
 
     /** Picked files are still being copied (R9); sending now would leave them out of the post. */
     data object Importing : Blocker
+
+    /**
+     * The media plan converts [ids] and this device cannot decode them (media.md A4). The probe runs when
+     * Send is tapped, so the post cannot be queued until the files are removed or replaced.
+     */
+    data class MediaUnreadable(val ids: List<Long>) : Blocker
 }
 
 /**
@@ -169,6 +175,15 @@ fun blockers(
             .takeIf { it.isNotEmpty() }?.let { add(Blocker.AltTooLong(it, limit)) }
     }
 }
+
+/**
+ * The blocker for the files the last probe found unreadable (media.md A4), while [attachments] still hold
+ * them: a file removed or replaced stops blocking the send.
+ */
+fun unreadableBlocker(unreadable: List<Long>, attachments: List<Attachment>): List<Blocker> =
+    attachments.map { it.id }.filter { it in unreadable }.takeIf { it.isNotEmpty() }
+        ?.let { listOf(Blocker.MediaUnreadable(it)) }
+        .orEmpty()
 
 /** The fragment of [source] a [TextIssue.TooLongToSplit] names, shortened for the details sheet. */
 fun tooLongFragment(source: String, issue: TextIssue.TooLongToSplit, max: Int = 80): String {

@@ -193,6 +193,13 @@ sealed interface Conversion {
 }
 
 /**
+ * Whether the conversion writes a new file: the variants the app prepares in app storage (A2, A4).
+ * The other two upload the original.
+ */
+val Conversion.makesVariant: Boolean
+    get() = this is Conversion.ConvertImage || this is Conversion.TranscodeVideo
+
+/**
  * The media plan of one network (A2, A3).
  *
  * Every attachment ends up in exactly one place: in a part of [partsByPiece], in [excluded] because

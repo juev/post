@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
@@ -35,6 +36,8 @@ import org.evsyukov.post.ui.composer.blockers
 import org.evsyukov.post.ui.composer.pieceCount
 import org.evsyukov.post.ui.composer.planMedia
 import org.evsyukov.post.ui.composer.renderTargets
+import org.evsyukov.post.ui.composer.undecodableAttachments
+import org.evsyukov.post.ui.composer.unreadableBlocker
 import java.time.Clock
 import java.time.LocalDateTime
 import java.time.ZoneId
@@ -81,6 +84,12 @@ class ShareModel(
     /** An action runs; another tap does nothing. */
     var busy by mutableStateOf(false)
         private set
+
+    /**
+     * The files the last send found unreadable on this device (media.md A4); the sheet shows the problem
+     * until they are removed or replaced or a send finds them readable.
+     */
+    private var unreadable by mutableStateOf<List<Long>>(emptyList())
 
     /** The post went into the database (queued or as a draft); its files belong to it from now on. */
     private var handedOver = false
@@ -155,7 +164,8 @@ class ShareModel(
         val media = planMedia(files, pieceCount(current), selected, settings, emptyMap(), hasPoll = false)
         val input = RenderInput(current, spoilerText(selected), language(selected), ids, files)
         val renders = renderTargets(input, accounts, settings, container.textSegmenter, media)
-        val blocked = blockers(ids, current, renders, null, PollLimits.of(selected), files, media, settings.requireAltText, importing)
+        val blocked = blockers(ids, current, renders, null, PollLimits.of(selected), files, media, settings.requireAltText, importing) +
+            unreadableBlocker(unreadable, files)
         return Check(renders, media, blocked)
     }
 
@@ -208,11 +218,18 @@ class ShareModel(
         val settings = settings.filterNotNull().first()
         val check = check(list, settings)
         if (check.blockers.isNotEmpty()) return@act Outcome.Blocked(check.blockers)
+        // A4: a file this device cannot decode is caught here, while the sheet is on screen, not at send time.
+        val problems = withContext(Dispatchers.IO) {
+            undecodableAttachments(check.media, attachments, container.mediaDecodeCheck, container.attachmentImporter::file)
+        }
+        unreadable = problems
+        if (problems.isNotEmpty()) return@act Outcome.Blocked(listOf(Blocker.MediaUnreadable(problems)))
         val byId = list.associateBy { it.id }
         val selected = targets.orEmpty().mapNotNull { byId[it] }
         val time = schedule ?: Schedule.Now(clock.instant())
         container.posts.saveAndQueue(draftInput(selected), time)
         handedOver = true
+        container.prepareTrigger.prepareNow()
         container.publishTrigger.publishNow()
         Outcome.Queued(selected.size, time)
     }

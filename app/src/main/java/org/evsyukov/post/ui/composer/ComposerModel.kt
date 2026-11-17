@@ -121,6 +121,12 @@ class ComposerModel(
     var missingFiles by mutableStateOf(0)
         private set
 
+    /**
+     * The files the last send found unreadable (media.md A4); the details sheet shows them until they are
+     * removed or replaced or a send finds them readable.
+     */
+    private var unreadable by mutableStateOf<List<Long>>(emptyList())
+
     private var nextNewId = -1L
 
     /**
@@ -243,7 +249,7 @@ class ComposerModel(
     fun currentBlockers(): List<Blocker> = blockers(
         liveTargets(), text.text.toString(), renders?.second.orEmpty(), poll, pollLimits(),
         attachments, currentMedia(), settings.value?.requireAltText == true, importing > 0,
-    )
+    ) + unreadableBlocker(unreadable, attachments)
 
     /** The targets that still exist: an account removed while selected is dropped. */
     private fun liveTargets(): List<Long> {
@@ -255,6 +261,8 @@ class ComposerModel(
 
     private suspend fun load(id: Long?) {
         draftGeneration++
+        // A4: what the last send found unreadable belongs to the draft that is going away.
+        unreadable = emptyList()
         val accounts = accounts.filterNotNull().first()
         val settings = settings.filterNotNull().first()
         val post = id?.let { container.posts.get(it) }
@@ -425,6 +433,7 @@ class ComposerModel(
         poll = null
         attachments = emptyList()
         chosenFixes = emptyMap()
+        unreadable = emptyList()
     }
 
     private fun defaultLanguage(selected: List<Account>): String =
@@ -498,11 +507,15 @@ class ComposerModel(
         if (editingQueued) {
             // Q2, R11: editing a queued post re-runs the limit checks; it stays in the queue only as it can be
             // sent. A running import is not a limit: the files still copying stay unsaved.
-            val blocked = blockersNow(importing = false).second
+            val blocked = checkNow(importing = false).blockers
             if (blocked.isNotEmpty()) return DraftSave(draftId ?: 0L, keptAsNew = false, blocked = blocked)
         }
         var id = 0L
-        if (saveOrDetach { id = writeDraft() }) return DraftSave(id, keptAsNew = false)
+        if (saveOrDetach { id = writeDraft() }) {
+            // A4: saving a queued post drops its prepared media; the post stays queued, so it is prepared again now.
+            if (editingQueued) container.prepareTrigger.prepareNow()
+            return DraftSave(id, keptAsNew = false)
+        }
         return DraftSave(writeDraft(), keptAsNew = true)
     }
 
@@ -739,50 +752,64 @@ class ComposerModel(
     }
 
     /**
-     * Sends the draft at [schedule], Send now when null: counts the text again for the selected accounts, and
-     * when nothing blocks, saves the post as queued with its targets and options in one transaction (R27),
-     * then wakes the sender and starts a new empty draft. A send that starts while another runs does nothing,
-     * so a double tap cannot queue the same post twice.
+     * Sends the draft at [schedule], Send now when null: counts the text again for the selected accounts, checks
+     * that this device can decode the files the plans convert (media.md A4), and when nothing blocks, saves the
+     * post as queued with its targets and options in one transaction (R27), then starts preparing its media,
+     * wakes the sender and starts a new empty draft. A send that starts while another runs does nothing, so a
+     * double tap cannot queue the same post twice.
      */
     suspend fun send(schedule: Schedule?): SendResult {
         if (sending) return SendResult.AlreadySending
         sending = true
         try {
-            val (input, blocked) = blockersNow(importing = importing > 0)
-            if (blocked.isNotEmpty()) return SendResult.Blocked(blocked)
+            val check = checkNow(importing = importing > 0)
+            if (check.blockers.isNotEmpty()) return SendResult.Blocked(check.blockers)
+            val problems = withContext(Dispatchers.IO) {
+                undecodableAttachments(check.media, attachments, container.mediaDecodeCheck, container.attachmentImporter::file)
+            }
+            unreadable = problems
+            if (problems.isNotEmpty()) return SendResult.Blocked(listOf(Blocker.MediaUnreadable(problems)))
             if (editUnavailable) return SendResult.NoLongerEditable
             if (editing != null && !editingQueued) {
                 // R41: the edit is saved locally first and goes through the queue with retries.
                 if (!saveOrDetach { container.posts.saveAndQueue(draftInput(), Schedule.Now(Instant.now())) }) return SendResult.NoLongerEditable
+                container.prepareTrigger.prepareNow()
                 container.publishTrigger.publishNow()
                 startNew()
                 return SendResult.Saved
             }
             if (editingQueued && schedule == null) {
-                // Q2: the limits were checked again above; saving keeps the post's time and queue place.
+                // Q2: the limits were checked again above; saving keeps the post's time and queue place. The save
+                // drops the variants and plans of the old text, so its media is prepared again (A4).
                 if (!saveOrDetach { container.posts.saveDraft(draftInput()) }) return SendResult.NoLongerEditable
+                container.prepareTrigger.prepareNow()
                 startNew()
                 return SendResult.Saved
             }
             val time = schedule ?: Schedule.Now(Instant.now())
             if (!saveOrDetach { container.posts.saveAndQueue(draftInput(), time) }) return SendResult.NoLongerEditable
+            container.prepareTrigger.prepareNow()
             container.publishTrigger.publishNow()
             startNew()
-            return SendResult.Queued(input.targets.size, time)
+            return SendResult.Queued(check.input.targets.size, time)
         } finally {
             sending = false
         }
     }
 
+    /** What a check of the draft found: what it was counted for, the media plans, and what blocks sending now. */
+    private data class Check(val input: RenderInput, val media: List<NetworkMedia>, val blockers: List<Blocker>)
+
     /** Counts the text again for the selected accounts and returns what blocks sending it now. */
-    private suspend fun blockersNow(importing: Boolean): Pair<RenderInput, List<Blocker>> {
+    private suspend fun checkNow(importing: Boolean): Check {
         val input = renderInput().copy(targets = liveTargets())
         val list = accounts.filterNotNull().first()
         val settings = settings.filterNotNull().first()
         val fresh = render(input, list, settings)
         renders = input to fresh
         val media = mediaOf(input, list, settings)
-        return input to blockers(input.targets, input.text, fresh, poll, pollLimits(), attachments, media, settings.requireAltText, importing)
+        val blocked = blockers(input.targets, input.text, fresh, poll, pollLimits(), attachments, media, settings.requireAltText, importing)
+        return Check(input, media, blocked)
     }
 
     /** Runs [save]; false, with the composer let go of the post ([detach]), when the post can no longer be changed. */

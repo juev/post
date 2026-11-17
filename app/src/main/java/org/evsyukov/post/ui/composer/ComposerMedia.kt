@@ -8,9 +8,12 @@ import org.evsyukov.post.core.media.MediaPlan
 import org.evsyukov.post.core.media.MediaPlanner
 import org.evsyukov.post.core.media.Network
 import org.evsyukov.post.core.media.NetworkMediaRules
+import org.evsyukov.post.core.media.makesVariant
 import org.evsyukov.post.data.accounts.Account
 import org.evsyukov.post.data.posts.Attachment
 import org.evsyukov.post.data.settings.Settings
+import org.evsyukov.post.media.probe.MediaDecodeCheck
+import java.io.File
 
 /** The fixes chosen for media conflicts, per network and conflict kind (`PostOptions.chosenFixes`). */
 typealias ChosenFixes = Map<Network, Map<ConflictKind, FixKind>>
@@ -79,6 +82,23 @@ fun planMedia(
         )
         NetworkMedia(network, accounts, rules, plan)
     }
+}
+
+/**
+ * The attachments of [media] that the sender will convert and this device cannot decode (media.md A4):
+ * the probe that runs before the post is queued. [file] resolves an attachment's stored path. The probe
+ * touches the files, so the caller runs it off the main thread.
+ */
+fun undecodableAttachments(
+    media: List<NetworkMedia>,
+    attachments: List<Attachment>,
+    check: MediaDecodeCheck,
+    file: (String) -> File,
+): List<Long> {
+    val converted = media.flatMap { network -> network.plan.conversions.filterValues { it.makesVariant }.keys }.toSet()
+    return attachments.filter { it.id in converted }
+        .filter { check.problem(file(it.path), it.mime) != null }
+        .map { it.id }
 }
 
 /** The ids of attachments in a conflict of any network that still waits for the user (the strip's warning badge). */

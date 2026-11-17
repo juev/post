@@ -12,6 +12,7 @@
 
     <string name="send_progress_title">Sending posts</string>
     <string name="send_progress_preparing">Converting video… %1$d%%</string>
+    <string name="send_progress_preparing_media">Preparing media…</string>
     <string name="send_progress_uploading">Uploading media</string>
     <string name="send_cancel">Cancel</string>
 

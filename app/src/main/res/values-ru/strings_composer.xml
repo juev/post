@@ -43,6 +43,7 @@
     <string name="composer_many_parts">Длинный тред: %1$d.</string>
     <string name="composer_blocker_no_target">Выберите хотя бы один аккаунт.</string>
     <string name="composer_blocker_empty">Напишите что-нибудь.</string>
+    <string name="composer_blocker_unreadable">Это устройство не может прочитать файл в посте. Уберите его или замените.</string>
     <string name="composer_formatting_removed">Ни один из выбранных аккаунтов не сохраняет форматирование: при публикации оно будет удалено.</string>
     <string name="composer_part_number">Часть %1$d из %2$d</string>
     <string name="composer_preview_cw">Предупреждение: %1$s</string>

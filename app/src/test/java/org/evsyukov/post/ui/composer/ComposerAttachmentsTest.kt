@@ -433,6 +433,25 @@ class ComposerAttachmentsTest {
         return result.get() as T
     }
 
+    /** A4: a file the plans convert and this device cannot decode stops the send before anything is queued. */
+    @Test
+    fun aFileThisDeviceCannotDecodeBlocksTheSend() {
+        val sky = h.bluesky("sky")
+        h.defaultTargets(sky)
+        h.show()
+        h.type("Photo")
+        add(uris("alpha.png"))
+        h.decodeProblem = { _, mime -> if (mime == "image/png") "the image cannot be decoded" else null }
+
+        val ids = h.model.attachments.map { it.id }
+        assertThat(onModel { h.model.send(null) })
+            .isEqualTo(ComposerModel.SendResult.Blocked(listOf(Blocker.MediaUnreadable(ids))))
+        assertThat(h.model.currentBlockers()).containsExactly(Blocker.MediaUnreadable(ids))
+        assertThat(queued()).isEmpty()
+        assertThat(h.triggers.get()).isEqualTo(0)
+        assertThat(h.prepares.get()).isEqualTo(0)
+    }
+
     @Test
     fun sendWaitsWhileAFileIsCopiedAndThenTheFileGoesWithThePost() {
         val sky = h.bluesky("sky")
@@ -460,6 +479,9 @@ class ComposerAttachmentsTest {
         assertThat(post.attachments).hasSize(1)
         assertThat(File(h.context.filesDir, post.attachments.single().path).isFile).isTrue()
         assertThat(h.model.attachments).isEmpty()
+        // A4: queuing starts the preparation of the files at once.
+        assertThat(h.prepares.get()).isEqualTo(1)
+        assertThat(h.triggers.get()).isEqualTo(1)
     }
 
     @Test

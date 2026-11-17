@@ -197,8 +197,26 @@ class ShareActivityTest {
         assertThat(post.targets).containsExactly(me, work)
         assertThat(post.schedule).isInstanceOf(Schedule.Now::class.java)
         assertThat(app.triggers.get()).isEqualTo(1)
+        assertThat(app.prepares.get()).isEqualTo(1)
         assertThat(ShadowToast.getTextOfLatestToast()).isEqualTo(app.resources.getQuantityString(R.plurals.composer_sending_to, 2, 2))
         runBlocking { assertThat(container.settings.current().defaultTargets).containsExactly(me, sky) }
+    }
+
+    /** A4: a shared file this device cannot decode stops the send; the sheet stays with the problem. */
+    @Test
+    fun aSharedFileThisDeviceCannotDecodeStopsTheSend() {
+        defaults(mastodon("me"))
+        app.decodeProblem = { _, _ -> "the image cannot be decoded" }
+        share(sendIntent("image/png", "A photo", source("alpha.png")))
+
+        click(ShareTags.SEND)
+        compose.waitUntil(TIMEOUT) { exists(ShareTags.PROBLEMS) }
+
+        assertThat(isFinished()).isFalse()
+        assertThat(queue()).isEmpty()
+        assertThat(app.triggers.get()).isEqualTo(0)
+        assertThat(app.prepares.get()).isEqualTo(0)
+        compose.onNodeWithTag(ShareTags.problem(0)).assert(hasText(string(R.string.share_problem_unreadable)))
     }
 
     /** R32: the first send asks for notifications, as the composer does; the sheet closes after the answer. */

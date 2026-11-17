@@ -159,7 +159,7 @@ class BlueskyExecutor(
         } catch (e: XrpcException) {
             outcomeOf(e, job)
         } catch (_: FileNotFoundException) {
-            DeliveryOutcome.Failed("an attachment file is missing")
+            DeliveryOutcome.Failed(Publisher.MISSING_FILE)
         } catch (e: IOException) {
             DeliveryOutcome.Retry(clock.instant().plus(MastodonExecutor.backoff(job.attempt)), e.message ?: "network error")
         } catch (e: VideoRejected) {
