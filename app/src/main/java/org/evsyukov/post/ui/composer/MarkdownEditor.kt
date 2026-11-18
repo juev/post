@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.input.OutputTransformation
 import androidx.compose.foundation.text.input.TextFieldBuffer
 import androidx.compose.foundation.text.input.TextFieldState
@@ -35,6 +36,7 @@ import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -132,6 +134,7 @@ fun MarkdownEditor(state: TextFieldState, onRemoveBreak: (TextRange) -> Unit, mo
     Box(modifier) {
         BasicTextField(
             state = state,
+            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
             outputTransformation = transformation,
             textStyle = MaterialTheme.typography.bodyLarge.copy(color = scheme.onSurface),
             cursorBrush = SolidColor(scheme.primary),
