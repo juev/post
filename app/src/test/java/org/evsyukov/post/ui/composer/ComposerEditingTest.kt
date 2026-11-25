@@ -3,10 +3,15 @@ package org.evsyukov.post.ui.composer
 import android.content.ClipData
 import android.content.ClipboardManager
 import androidx.activity.ComponentActivity
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.click
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTouchInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.google.common.truth.Truth.assertThat
 import org.evsyukov.post.R
@@ -33,6 +38,13 @@ class ComposerEditingTest {
 
     @After
     fun tearDown() = h.close()
+
+    @Test
+    fun tappingTheEmptyTextAreaFocusesTheEditor() {
+        compose.onRoot().performTouchInput { click(Offset(width / 2f, height / 2f)) }
+
+        h.editor().assertIsFocused()
+    }
 
     @Test
     fun eachWrappingButtonWrapsTheSelection() {

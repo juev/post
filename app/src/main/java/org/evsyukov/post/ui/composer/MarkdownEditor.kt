@@ -24,6 +24,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
@@ -115,7 +117,12 @@ fun breakLines(text: String): List<TextRange> =
  * is drawn as a thin rule across the field with a remove button at its right edge (T13).
  */
 @Composable
-fun MarkdownEditor(state: TextFieldState, onRemoveBreak: (TextRange) -> Unit, modifier: Modifier = Modifier) {
+fun MarkdownEditor(
+    state: TextFieldState,
+    onRemoveBreak: (TextRange) -> Unit,
+    focusRequester: FocusRequester = remember { FocusRequester() },
+    modifier: Modifier = Modifier,
+) {
     val scheme = MaterialTheme.colorScheme
     val colors = HighlightColors(
         syntax = scheme.onSurface.copy(alpha = 0.45f),
@@ -141,6 +148,7 @@ fun MarkdownEditor(state: TextFieldState, onRemoveBreak: (TextRange) -> Unit, mo
             onTextLayout = { result -> layout = result },
             modifier = Modifier
                 .fillMaxWidth()
+                .focusRequester(focusRequester)
                 .testTag(ComposerTags.EDITOR)
                 .drawBehind {
                     val result = layout?.invoke() ?: return@drawBehind

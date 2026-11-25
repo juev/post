@@ -6,6 +6,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.consumeWindowInsets
@@ -50,6 +51,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.testTag
@@ -217,6 +220,7 @@ private fun ComposerContent(
     val resources = LocalResources.current
     val scope = rememberCoroutineScope()
     val snackbar = remember { SnackbarHostState() }
+    val editorFocus = remember { FocusRequester() }
     val accounts by model.accounts.collectAsStateWithLifecycle()
     val settings by model.settings.collectAsStateWithLifecycle()
     val queueCount by model.queueCount.collectAsStateWithLifecycle()
@@ -396,6 +400,7 @@ private fun ComposerContent(
                     .weight(1f)
                     .fillMaxWidth()
                     .verticalScroll(rememberScrollState())
+                    .pointerInput(editorFocus) { detectTapGestures { editorFocus.requestFocus() } }
                     .padding(horizontal = 16.dp, vertical = 8.dp),
             ) {
                 if (model.spoilerShown) {
@@ -409,6 +414,7 @@ private fun ComposerContent(
                 // The field appears once the draft or the defaults are in place, so nothing typed is overwritten.
                 if (model.loaded) MarkdownEditor(
                     state = model.text,
+                    focusRequester = editorFocus,
                     onRemoveBreak = { range ->
                         model.apply(MarkdownEdits.removeBreak(model.text.text.toString(), range.start, range.end))
                     },
